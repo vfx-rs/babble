@@ -5,6 +5,7 @@ pub enum Error {
     InvalidCursor,
     InvalidType,
     InvalidTemplateArgumentKind,
+    TypeUnexposed,
 }
 
 impl std::fmt::Display for Error {

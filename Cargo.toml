@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 clang-sys = { path = "../clang-sys", features=["clang_13_0"] }
+env_logger = "0.9.0"
+log = "0.4.17"

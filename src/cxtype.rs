@@ -5,11 +5,12 @@ use std::fmt::{Debug, Display};
 
 use clang_sys::*;
 
-use crate::{CXStringEx};
+use crate::{CXStringEx, Cursor, cursor::cursor};
 
 use super::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+#[derive(Clone)]
 pub struct Type {
     inner: CXType,
 }
@@ -42,6 +43,37 @@ impl Type {
             clang_isConstQualifiedType(self.inner) != 0
         }
     }
+
+    pub fn type_declaration(&self) -> Result<Cursor> {
+        unsafe {
+            cursor(clang_getTypeDeclaration(self.inner))
+        }
+    }
+
+    pub fn is_builtin(&self) -> bool {
+        (self.kind() as u32) > 1 && (self.kind() as u32) < 25
+    }
+
+    pub fn is_pointer(&self) -> bool {
+        self.kind() == TypeKind::Pointer || self.kind() == TypeKind::LValueReference || self.kind() == TypeKind::RValueReference
+    }
+
+    pub fn pointee_type(&self) -> Result<Type> {
+        unsafe {
+            to_type(clang_getPointeeType(self.inner))
+        }
+    }
+
+    /// Retrieve the type named by the qualified-id.
+    /// 
+    /// *Errors
+    /// If a non-elaborated type is passed in
+    pub fn named_type(&self) -> Result<Type> {
+        unsafe {
+            to_type(clang_Type_getNamedType(self.inner))
+        }
+    }
+
 }
 
 impl Display for Type {
@@ -73,7 +105,8 @@ impl TypeKind {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[repr(u32)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TypeKind {
    Unexposed = 1,
    Void = 2,
@@ -443,4 +476,3 @@ impl From<clang_sys::CXTypeKind> for TypeKind {
         }
     }
  }
-  

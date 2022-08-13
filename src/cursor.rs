@@ -1,4 +1,4 @@
-use crate::token::SourceLocation;
+use crate::{token::SourceLocation, template_argument::TemplateArgumentKind};
 
 use super::cursor_kind::CursorKind;
 use super::string::CXStringEx;
@@ -8,14 +8,23 @@ use clang_sys::{
     clang_getCursorDisplayName, clang_getCursorKind, clang_getCursorLocation,
     clang_getCursorReferenced, clang_getCursorUSR, clang_getNullCursor, clang_isCursorDefinition,
     clang_isInvalid, clang_visitChildren, CXChildVisitResult, CXChildVisit_Break,
-    CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor, clang_Cursor_getNumTemplateArguments, clang_getCursorPrettyPrinted, clang_getCursorPrintingPolicy, clang_getCursorType, clang_getCursorResultType, clang_Cursor_getNumArguments, clang_Cursor_getArgument, clang_CXXMethod_isConst, clang_CXXMethod_isStatic, clang_CXXMethod_isDefaulted, clang_CXXMethod_isVirtual, clang_CXXMethod_isPureVirtual, clang_CXXRecord_isAbstract,
+    CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor, clang_Cursor_getNumTemplateArguments, clang_getCursorPrettyPrinted, clang_getCursorPrintingPolicy, clang_getCursorType, clang_getCursorResultType, clang_Cursor_getNumArguments, clang_Cursor_getArgument, clang_CXXMethod_isConst, clang_CXXMethod_isStatic, clang_CXXMethod_isDefaulted, clang_CXXMethod_isVirtual, clang_CXXMethod_isPureVirtual, clang_CXXRecord_isAbstract, clang_getCursorSpelling, clang_Cursor_getTemplateArgumentKind, clang_Cursor_getTemplateArgumentType, clang_Cursor_getTemplateArgumentValue, clang_Cursor_getTemplateArgumentUnsignedValue, clang_getCanonicalCursor,
 };
-use std::{fmt::Debug, os::raw::c_void};
+use std::{fmt::{Debug, Display}, os::raw::{c_void, c_longlong, c_ulonglong}};
 
 use crate::cxtype::{Type, to_type};
 
 use super::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
+
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct USR(pub String);
+
+impl Display for USR {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[derive(Copy, Clone)]
 pub struct Cursor {
@@ -67,8 +76,12 @@ impl Cursor {
         unsafe { clang_getCursorDisplayName(self.inner).to_string() }
     }
 
-    pub fn usr(&self) -> String {
-        unsafe { clang_getCursorUSR(self.inner).to_string() }
+    pub fn spelling(&self) -> String {
+        unsafe { clang_getCursorSpelling(self.inner).to_string() }
+    }
+
+    pub fn usr(&self) -> USR {
+        unsafe { USR(clang_getCursorUSR(self.inner).to_string()) }
     }
 
     pub fn is_definition(&self) -> bool {
@@ -153,6 +166,30 @@ impl Cursor {
         }
     }
 
+    pub fn template_argument_kind(&self, i: u32) -> Result<TemplateArgumentKind> {
+        unsafe {
+            clang_Cursor_getTemplateArgumentKind(self.inner, i).try_into()
+        }
+    }
+
+    pub fn template_argument_type(&self, i: u32) -> Result<Type> {
+        unsafe {
+            to_type(clang_Cursor_getTemplateArgumentType(self.inner, i))
+        }
+    }
+
+    pub fn template_argument_value(&self, i: u32) -> c_longlong {
+        unsafe {
+            clang_Cursor_getTemplateArgumentValue(self.inner, i)
+        }
+    }
+
+    pub fn template_argument_unsigned_value(&self, i: u32) -> c_ulonglong {
+        unsafe {
+            clang_Cursor_getTemplateArgumentUnsignedValue(self.inner, i)
+        }
+    }
+
     pub fn ty(&self) -> Result<Type> {
         unsafe {
             to_type(clang_getCursorType(self.inner))
@@ -222,6 +259,12 @@ impl Cursor {
     pub fn cxx_record_is_abstract(&self) -> bool {
         unsafe {
             clang_CXXRecord_isAbstract(self.inner) != 0
+        }
+    }
+
+    pub fn canonical(&self) -> Result<Cursor> {
+        unsafe {
+            cursor(clang_getCanonicalCursor(self.inner))
         }
     }
 

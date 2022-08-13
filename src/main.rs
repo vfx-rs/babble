@@ -1,6 +1,11 @@
 pub(crate) use clang_sys::clang_createIndex;
 pub(crate) use clang_sys::{self, clang_disposeIndex, clang_parseTranslationUnit, CXIndex};
+use cursor::USR;
+use std::collections::HashMap;
 use std::ffi::CString;
+use std::fmt::Display;
+
+use log::*;
 
 pub mod cursor;
 pub mod template_argument;
@@ -14,6 +19,8 @@ pub mod string;
 pub use string::CXStringEx;
 
 use crate::cursor_kind::CursorKind;
+use crate::diagnostic::Severity;
+use crate::template_argument::TemplateArgumentKind;
 pub mod token;
 
 pub mod cxtype;
@@ -24,40 +31,368 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 use cxtype::{Type, TypeKind};
 
-struct QualType {
-    name: String,
-    kind: TypeKind,
-    is_const: bool,
-    pointee: Option<Box<QualType>>,
-    type_ref: String,
-}
-
-enum ParameterType {
+pub enum TypeRef {
+    Builtin(TypeKind),
+    Ref(USR),
+    Pointer(Box<QualType>),
+    LValueReference(Box<QualType>),
+    RValueReference(Box<QualType>),
     TemplateTypeParameter(String),
-    QualType(QualType),
+    TemplateNonTypeParameter(String),
+    Unknown(TypeKind),
 }
 
-struct Parameter {
+pub struct QualType {
     name: String,
-    ty: ParameterType,
+    is_const: bool,
+    type_ref: TypeRef,
+}
+
+impl QualType {
+    pub fn unknown(tk: TypeKind) -> Self {
+        QualType {
+            name: "UNKNOWN".to_string(),
+            is_const: false,
+            type_ref: TypeRef::Unknown(tk),
+        }
+    }
+}
+
+impl Display for QualType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_const {
+            write!(f, "const ")?;
+        }
+
+        match &self.type_ref {
+            TypeRef::Builtin(tk) => {
+                write!(f, "{}", tk.spelling())
+            }
+            TypeRef::Pointer(pointee) => write!(f, "{}*", *pointee),
+            TypeRef::LValueReference(pointee) => write!(f, "{}&", *pointee),
+            TypeRef::RValueReference(pointee) => {
+                write!(f, "{}&&", *pointee)
+            }
+            TypeRef::Ref(usr) => {
+                write!(f, "{}", usr)
+            }
+            TypeRef::TemplateTypeParameter(t) => {
+                write!(f, "{}", t)
+            }
+            TypeRef::TemplateNonTypeParameter(t) => {
+                write!(f, "{}", t)
+            }
+            TypeRef::Unknown(tk) => {
+                write!(f, "UNKNOWN({})", tk.spelling())
+            }
+        }
+    }
+}
+
+pub struct Argument {
+    name: String,
+    qual_type: QualType,
+}
+
+impl Display for Argument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.name, self.qual_type)
+    }
+}
+
+pub struct Function {
+    usr: USR,
+    name: String,
+    result: QualType,
+    arguments: Vec<Argument>,
+}
+
+impl Function {
+    pub fn new(usr: USR, name: String, result: QualType, arguments: Vec<Argument>) -> Self {
+        Function {
+            usr,
+            name,
+            result,
+            arguments,
+        }
+    }
 }
 
 struct Method {
-    name: String,
-    result: Option<ParameterType>,
-    parameters: Vec<Parameter>,
+    function: Function,
     is_const: bool,
+    is_static: bool,
+    is_virtual: bool,
+    is_pure_virtual: bool,
+}
+
+impl Method {
+    pub fn new(
+        usr: USR,
+        name: String,
+        result: QualType,
+        arguments: Vec<Argument>,
+        is_const: bool,
+        is_static: bool,
+        is_virtual: bool,
+        is_pure_virtual: bool,
+    ) -> Self {
+        Method {
+            function: Function::new(usr, name, result, arguments),
+            is_const,
+            is_static,
+            is_virtual,
+            is_pure_virtual,
+        }
+    }
+
+    pub fn pretty_print(&self, depth: usize) {
+        let indent = format!("{:width$}", "", width = depth * 2);
+
+        let mut s = String::new();
+        if self.is_static {
+            s += " static"
+        };
+        if self.is_virtual {
+            s += " virtual"
+        };
+
+        s += " ";
+        s += &self.function.name;
+
+        let args = self
+            .function
+            .arguments
+            .iter()
+            .map(|p| format!("{p}"))
+            .collect::<Vec<String>>()
+            .join(", ");
+        s += &format!("({})", args);
+
+        if self.is_const {
+            s += " const"
+        };
+
+        s += &format!(" -> {}", self.function.result);
+
+        if self.is_pure_virtual {
+            s += " = 0"
+        };
+
+        s += ";";
+
+        println!("{indent}{s}");
+    }
 }
 
 struct Record {
+    usr: USR,
+    name: String,
     fields: Vec<QualType>,
     methods: Vec<Method>,
+    template_parameters: Vec<String>,
 }
 
-fn target_method(c_method: Cursor, depth: usize) -> Result<Method> {
+impl Record {
+    pub fn pretty_print(&self, depth: usize) {
+        let indent = format!("{:width$}", "", width = depth * 2);
+
+        let template_decl = if self.template_parameters.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "template <typename {}>\n{indent}",
+                self.template_parameters.join(", typename ")
+            )
+        };
+
+        let template = if self.template_parameters.is_empty() {
+            String::new()
+        } else {
+            format!("<{}>", self.template_parameters.join(", "))
+        };
+        println!("{indent}{template_decl}class {}{template} {{", self.name);
+
+        for method in &self.methods {
+            method.pretty_print(depth + 1);
+        }
+
+        println!("{indent}}}");
+    }
+}
+
+pub struct Binding {
+    records: HashMap<USR, Record>,
+}
+
+impl Binding {
+    pub fn new() -> Self {
+        Binding {
+            records: HashMap::new(),
+        }
+    }
+
+    pub fn pretty_print(&self, depth: usize) {
+        let indent = format!("{:width$}", "", width = depth * 2);
+        for (usr, record) in &self.records {
+            record.pretty_print(depth + 1);
+        }
+    }
+}
+
+fn qualtype_from_typeref(c_tr: Cursor) -> Result<QualType> {
+    if let Ok(c_ref) = c_tr.referenced() {
+        let c_ref =
+            if c_ref.kind() == CursorKind::ClassDecl || c_ref.kind() == CursorKind::ClassTemplate {
+                c_ref.canonical().unwrap()
+            } else {
+                c_ref
+            };
+
+        let is_const = if let Ok(ty) = c_tr.ty() {
+            ty.is_const_qualified()
+        } else {
+            false
+        };
+
+        match c_ref.kind() {
+            CursorKind::ClassDecl | CursorKind::ClassTemplate => {
+                let c_ref = c_ref.canonical().unwrap();
+                Ok(QualType {
+                    name: c_ref.spelling(),
+                    is_const,
+                    type_ref: TypeRef::Ref(c_ref.usr()),
+                })
+            }
+            CursorKind::TemplateTypeParameter => Ok(QualType {
+                name: c_ref.spelling(),
+                is_const,
+                type_ref: TypeRef::TemplateTypeParameter(c_ref.spelling()),
+            }),
+            _ => {
+                error!("unhandled type {}", c_tr.display_name());
+                Ok(QualType::unknown(c_ref.ty().unwrap().kind()))
+            }
+        }
+    } else {
+        error!(
+            "could not get referenced type from TypeRef {}",
+            c_tr.display_name()
+        );
+        Ok(QualType::unknown(c_tr.ty().unwrap().kind()))
+    }
+}
+
+fn bind_type(ty: Type, template_parameters: &[String]) -> Result<QualType> {
+    let is_const = ty.is_const_qualified();
+    let name = ty.spelling();
+
+    if ty.is_builtin() {
+        Ok(QualType {
+            name,
+            is_const,
+            type_ref: TypeRef::Builtin(ty.kind()),
+        })
+    } else if let Ok(c_ref) = ty.type_declaration() {
+        println!("type {name} has decl {} {}", c_ref.spelling(), c_ref.usr());
+        Ok(QualType {
+            name,
+            is_const,
+            type_ref: TypeRef::Ref(c_ref.usr()),
+        })
+    } else {
+        match ty.kind() {
+            TypeKind::Pointer => {
+                let pointee = ty.pointee_type()?;
+                let ty_ref = bind_type(pointee, template_parameters)?;
+                Ok(QualType {
+                    name,
+                    is_const,
+                    type_ref: TypeRef::Pointer(Box::new(ty_ref)),
+                })
+            }
+            TypeKind::LValueReference => {
+                let pointee = ty.pointee_type()?;
+                let ty_ref = bind_type(pointee, template_parameters)?;
+                Ok(QualType {
+                    name,
+                    is_const,
+                    type_ref: TypeRef::LValueReference(Box::new(ty_ref)),
+                })
+            }
+            TypeKind::RValueReference => {
+                let pointee = ty.pointee_type()?;
+                let ty_ref = bind_type(pointee, template_parameters)?;
+                Ok(QualType {
+                    name,
+                    is_const,
+                    type_ref: TypeRef::RValueReference(Box::new(ty_ref)),
+                })
+            }
+            TypeKind::Unexposed => {
+                let name = if is_const {
+                    name.strip_prefix("const ").unwrap().to_string()
+                } else {
+                    name
+                };
+                if template_parameters.contains(&name) {
+                    Ok(QualType {
+                        name: name.clone(),
+                        is_const,
+                        type_ref: TypeRef::TemplateTypeParameter(name.clone()),
+                    })
+                } else {
+                    error!(
+                        "Got unexposed for {name} with no matching template parmaeter in {:?}",
+                        template_parameters
+                    );
+                    Err(Error::TypeUnexposed)
+                }
+            }
+            _ => {
+                error!("Unhandled {:?}", ty);
+                Ok(QualType::unknown(ty.kind()))
+            }
+        }
+    }
+}
+
+fn bind_argument(c_arg: Cursor, template_parameters: &[String]) -> Result<Argument> {
+    let children = c_arg.children();
+
+    let ty = c_arg.ty()?;
+
+    let qual_type = if ty.is_builtin() || ty.is_pointer() {
+        bind_type(ty, template_parameters)?
+    } else if !children.is_empty() {
+        match children[0].kind() {
+            CursorKind::TypeRef | CursorKind::TemplateRef => qualtype_from_typeref(children[0])?,
+            _ => {
+                debug!("other kind {:?}", children[0].kind(),);
+                QualType::unknown(children[0].ty().unwrap().kind())
+            }
+        }
+    } else {
+        error!("coulnd't do argument type");
+        QualType::unknown(children[0].ty().unwrap().kind())
+    };
+
+    Ok(Argument {
+        name: c_arg.spelling(),
+        qual_type,
+    })
+}
+
+fn bind_method(
+    c_method: Cursor,
+    depth: usize,
+    class_template_parameters: &Vec<String>,
+) -> Result<Method> {
     let indent = format!("{:width$}", "", width = depth * 2);
 
-    print!(
+    let c_method = c_method.canonical().unwrap();
+
+    debug!(
         "{indent}+ CXXMethod {} {}",
         c_method.display_name(),
         if c_method.cxx_method_is_const() {
@@ -67,74 +402,213 @@ fn target_method(c_method: Cursor, depth: usize) -> Result<Method> {
         }
     );
 
-    if let Ok(ty_result) = c_method.result_ty() {
-        println!(" -> {ty_result:?}");
+    // NOTE (AL) The only reliable way to get at return type and arguments appears to be to inspect the children directly.
+    // This is unfortunately a little vague, but appears to be:
+    // 1. Any TemplateType/NonTypeTemplateParameters (etc. one would assume)
+    // 2. The return type (if it's not a builtin)
+    // 3. The arguments
+    // So we need to traverse the children, pluck off any template parameters,
+    // then the first thing that's *not* a template parameter will be the return type, and everything after that will be an argument
+    // let c_method_template_parameters = c_method.children().iter().filter(|c| c.kind() == CursorKind::TemplateTypeParameter || c.kind() == CursorKind::NonTypeTemplateParameter || c.kind() || CursorKind::TemplateTemplateParameter)
+    let children = c_method.children();
+    debug!("{} children", children.len());
+    debug!("{:?}", children);
+
+    let c_template_parameters: Vec<Cursor> = children
+        .iter()
+        .take_while(|c| {
+            c.kind() == CursorKind::TemplateTypeParameter
+                || c.kind() == CursorKind::NonTypeTemplateParameter
+                || c.kind() == CursorKind::TemplateTemplateParameter
+        })
+        .map(|c| {
+            debug!("Taking {} as template type", c.display_name());
+            c.clone()
+        })
+        .collect();
+
+    let template_parameters = class_template_parameters
+        .iter()
+        .map(|t| t.clone())
+        .chain(c_template_parameters.iter().map(|c| c.display_name()))
+        .collect::<Vec<_>>();
+
+    let mut skip = c_template_parameters.len();
+
+    let ty_result = c_method.result_ty().unwrap();
+    let result = if ty_result.is_builtin() || ty_result.is_pointer() {
+        bind_type(ty_result, &template_parameters)?
     } else {
-        println!("");
+        let c_result = children.iter().skip(skip).next().expect(&format!(
+            "Could not get result cursor from {}",
+            c_method.display_name()
+        ));
+
+        skip += 1;
+
+        if c_result.kind() == CursorKind::TypeRef || c_result.kind() == CursorKind::TemplateRef {
+            qualtype_from_typeref(c_result.clone())?
+        } else {
+            QualType::unknown(ty_result.kind())
+        }
+    };
+
+    let num_arguments = match c_method.num_arguments() {
+        Ok(n) => n as usize,
+        Err(_) => children.len(),
+    };
+    let mut arguments: Vec<Argument> = Vec::with_capacity(num_arguments);
+    for c_arg in children.iter().skip(skip).take(num_arguments) {
+        debug!("{indent}    arg: {}", c_arg.display_name());
+
+        if c_arg.kind() != CursorKind::ParmDecl {
+            break;
+        }
+
+        arguments.push(bind_argument(c_arg.clone(), &template_parameters)?);
+
+        // if let Ok(ty_arg) = c_arg.ty() {
+        //     println!("{indent}      {ty_arg:?}")
+        // }
+
+        // for child in c_arg.children() {
+        //     println!("{indent}        {child:?}");
+        // }
     }
 
-    let parameters: Vec<Parameter> = Vec::new();
+    /*
+    //     bind_type(ty_result)?
+    let qt_result = if let Ok(ty_result) = c_method.result_ty() {
+        match bind_type(ty_result.clone()) {
+            Ok(qt_result) => {
+                println!(" -> {}", qt_result);
+                qt_result
+            }
+            // Err(Error::TypeUnexposed) => {
+            //     // inspect children to get type
+            // }
+            Err(e) => {
+                println!("\nERROR unexpcted error binding result type for {}: {e}", c_method.display_name());
+                // return Err(Error::InvalidType);
+                QualType::unknown(ty_result.kind())
+            }
+        }
+    } else {
+        println!("\nERROR could not get result type for {}", c_method.display_name());
+        // return Err(Error::InvalidType);
+        QualType::unknown(TypeKind::Unexposed)
+    };
+
     if let Ok(num_args) = c_method.num_arguments() {
         for i in 0..num_args {
             let c_arg = c_method.argument(i).unwrap();
-            println!("{indent}    arg: {c_arg:?}");
+            // println!("{indent}    arg: {c_arg:?}");
+
+            parameters.push(Parameter {
+                name: c_arg.spelling(),
+            });
 
             // should always be ParmDecl
             if c_arg.kind() != CursorKind::ParmDecl {
                 unimplemented!();
             }
 
-            if let Ok(ty_arg) = c_arg.ty() {
-                println!("{indent}    {ty_arg:?}")
-            }
+            // if let Ok(ty_arg) = c_arg.ty() {
+            //     println!("{indent}      {ty_arg:?}")
+            // }
 
-            for child in c_arg.children() {
-                println!("{indent}      {child:?}");
+            // for child in c_arg.children() {
+            //     println!("{indent}        {child:?}");
+            // }
+        }
+    }
+    */
+
+    for child in c_method.children() {
+        debug!(
+            "{indent}    - {}: {} {}",
+            child.display_name(),
+            child.kind(),
+            child.usr()
+        );
+        if child.kind() == CursorKind::TypeRef || child.kind() == CursorKind::TemplateRef {
+            if let Ok(c_ref) = child.referenced() {
+                let c_ref = if c_ref.kind() == CursorKind::ClassDecl
+                    || c_ref.kind() == CursorKind::ClassTemplate
+                {
+                    c_ref.canonical().unwrap()
+                } else {
+                    c_ref
+                };
+
+                debug!(
+                    "{indent}      - {}: {} {}",
+                    c_ref.display_name(),
+                    c_ref.kind(),
+                    c_ref.usr()
+                );
             }
         }
     }
 
-    Err(Error::InvalidType)
+    Ok(Method::new(
+        c_method.usr(),
+        c_method.spelling(),
+        result,
+        arguments,
+        c_method.cxx_method_is_const(),
+        c_method.cxx_method_is_static(),
+        c_method.cxx_method_is_virtual(),
+        c_method.cxx_method_is_pure_virtual(),
+    ))
 }
 
-fn target_class_template(class_template: Cursor, depth: usize) -> Record {
+fn bind_class_template(class_template: Cursor, depth: usize) -> Record {
     let indent = format!("{:width$}", "", width = depth * 2);
 
-    println!("{indent}target_class_template({})", class_template.usr());
+    debug!("{indent}bind_class_template({})", class_template.usr());
 
     let mut methods = Vec::new();
     let mut fields = Vec::new();
+    let mut template_parameters = Vec::new();
 
     let members = class_template.children();
     for member in members {
         match member.kind() {
-            CursorKind::CXXMethod => {
-                if let Ok(method) = target_method(member, depth + 1) {
+            CursorKind::TemplateTypeParameter => {
+                let t = member.display_name();
+                template_parameters.push(t);
+            }
+            CursorKind::CXXMethod
+            | CursorKind::Constructor
+            | CursorKind::Destructor
+            | CursorKind::FunctionTemplate => {
+                if let Ok(method) = bind_method(member, depth + 1, &template_parameters) {
                     methods.push(method);
                 }
             }
             _ => {
-                println!("{indent}  {member:?}");
+                debug!("{indent}  {member:?}");
                 for child in member.children() {
-                    println!("{indent}    {child:?}");
+                    debug!("{indent}    {child:?}");
                     match child.kind() {
                         CursorKind::TypeRef => {
                             if let Ok(c) = child.referenced() {
-                                println!("{indent}    -> {c:?}");
+                                debug!("{indent}    -> {c:?}");
                             }
                         }
                         CursorKind::ParmDecl => {
                             if let Ok(ty) = child.ty() {
-                                println!("{indent}      type {ty:?}")
+                                debug!("{indent}      type {ty:?}")
                             }
 
                             for c in child.children() {
-                                println!("{indent}      {c:?}");
+                                debug!("{indent}      {c:?}");
                             }
                         }
                         CursorKind::CompoundStmt => {
                             for stmt in child.children() {
-                                println!("{indent}      {stmt:?}");
+                                debug!("{indent}      {stmt:?}");
                             }
                         }
                         _ => (),
@@ -144,9 +618,196 @@ fn target_class_template(class_template: Cursor, depth: usize) -> Record {
         }
     }
 
-    Record { fields, methods }
+    Record {
+        usr: class_template.usr(),
+        name: class_template.spelling(),
+        fields,
+        methods,
+        template_parameters,
+    }
 }
 
+fn bind_namespace(name: &str, c_tu: Cursor) -> Binding {
+    let ns = c_tu.children_of_kind_with_name(CursorKind::Namespace, name, true);
+
+    let mut binding = Binding::new();
+    for cur in ns {
+        print(cur.clone(), 0, 2, Vec::new(), Vec::new(), &mut binding);
+    }
+
+    binding
+}
+
+fn print(
+    c: Cursor,
+    depth: usize,
+    max_depth: usize,
+    already_visited: Vec<String>,
+    mut namespaces: Vec<String>,
+    binding: &mut Binding,
+) {
+    if depth > max_depth {
+        // println!("");
+        return;
+    }
+    let indent = format!("{:width$}", "", width = depth * 2);
+
+    /*
+    if c.kind() == CursorKind::Namespace {
+        namespaces.push(c.display_name());
+    }
+
+    if c.kind() == CursorKind::ClassTemplate {
+        binding_class_template(c, depth, &namespaces);
+        return;
+    }
+
+    if c.kind() == CursorKind::TypeAliasDecl {
+        binding_type_alias_decl(c, depth, &namespaces);
+        return;
+    }
+    */
+
+    if c.kind() == CursorKind::ClassTemplate {
+        let record = bind_class_template(c, depth + 1);
+        binding.records.insert(record.usr.clone(), record);
+    }
+
+    debug!("{indent}{}: {} {}", c.kind(), c.display_name(), c.usr());
+
+    if let Ok(cr) = c.referenced() {
+        if cr != c && !already_visited.contains(&cr.usr().0) {
+            // print!("{}-> ", indent);
+            let mut v = already_visited.clone();
+            if !cr.usr().0.is_empty() {
+                v.push(cr.usr().0);
+            }
+            print(cr, depth + 1, max_depth, v, Vec::new(), binding);
+        }
+    }
+
+    let children = c.children();
+    if children.len() > 0 {}
+
+    for child in children {
+        let mut v = already_visited.clone();
+        if !child.usr().0.is_empty() {
+            v.push(child.usr().0);
+        }
+        // print!("{}C ", indent);
+        print(child, depth + 1, max_depth, v, namespaces.clone(), binding);
+    }
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug"))
+        .format_timestamp(None)
+        .init();
+
+    let index = Index::new();
+    let tu = index.parse_translation_unit(
+        &std::env::args().into_iter().collect::<Vec<_>>()[1],
+        &[
+            "-std=c++14",
+            "-x",
+            "c++",
+            "-isystem/home/anders/packages/llvm/14.0.0/include/c++/v1/",
+            "-isystem/home/anders/packages/llvm/14.0.0/include/x86_64-unknown-linux-gnu/c++/v1/",
+            "-isystem/usr/include/c++/9",
+            "-isystem/usr/lib/gcc/x86_64-linux-gnu/9/include/", 
+            "-isystem/usr/include/x86_64-linux-gnu",
+            "-isystem/usr/include/linux",
+            "-isystem/usr/local/include",
+            "-isystem/usr/include",
+            "-I/home/anders/packages/openexr/3.1.5/platform-linux/arch-x86_64/cxx11abi-0/cfg-release/include",
+            "-I/home/anders/packages/imath/3.1.5/platform-linux/arch-x86_64/cxx11abi-0/cfg-release/include",
+            "-I/home/anders/packages/imath/3.1.5/platform-linux/arch-x86_64/cxx11abi-0/cfg-release/include/Imath",
+        ],
+    );
+    debug!("{} diagnostics", tu.num_diagnostics());
+    for d in tu.diagnostics() {
+        match d.severity() {
+            Severity::Ignored => debug!("{}", d),
+            Severity::Note => info!("{}", d),
+            Severity::Warning => warn!("{}", d),
+            Severity::Error | Severity::Fatal => error!("{}", d),
+        }
+    }
+    let cur = tu.get_cursor()?;
+
+    let binding = bind_namespace("Imath_3_1", cur);
+
+    debug!("\n\n");
+    binding.pretty_print(0);
+
+    /*
+    let ns_imath = cur
+        .children_of_kind(CursorKind::Namespace, false)
+        .get(0)
+        .unwrap()
+        .clone();
+
+    let type_alias_decls = ns_imath.children_of_kind(CursorKind::TypeAliasDecl, false);
+    */
+
+    Ok(())
+}
+
+pub struct Index {
+    inner: CXIndex,
+}
+
+impl Index {
+    pub fn new() -> Index {
+        let inner = unsafe { clang_createIndex(0, 0) };
+        Index { inner }
+    }
+
+    pub fn parse_translation_unit(&self, filename: &str, args: &[&str]) -> TranslationUnit {
+        let cfilename = CString::new(filename).unwrap();
+
+        let cargs: Vec<_> = args.iter().map(|a| CString::new(*a).unwrap()).collect();
+        let cstrargs: Vec<_> = cargs.iter().map(|a| a.as_ptr()).collect();
+
+        let tu = unsafe {
+            clang_parseTranslationUnit(
+                self.inner,
+                cfilename.as_ptr(),
+                cstrargs.as_ptr(),
+                cstrargs.len() as i32,
+                std::ptr::null_mut(),
+                0,
+                0,
+            )
+        };
+
+        if tu.is_null() {
+            panic!("translation unit {filename} failed to parse")
+        }
+
+        TranslationUnit { inner: tu }
+    }
+}
+
+impl Drop for Index {
+    fn drop(&mut self) {
+        unsafe {
+            clang_disposeIndex(self.inner);
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn get_test_filename(base: &str) -> String {
+    std::path::PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
+        .join("testdata")
+        .join(base)
+        .as_os_str()
+        .to_string_lossy()
+        .to_string()
+}
+
+/*
 /// Handle a ClassTemplate in the binding namespace
 fn binding_class_template(c_class_template: Cursor, depth: usize, namespaces: &Vec<String>) {
     let indent = format!("{:width$}", "", width = depth * 2);
@@ -258,152 +919,4 @@ fn binding_type_alias_decl(c_type_alias_decl: Cursor, depth: usize, namespaces: 
         println!("{}ERROR could not get type from TypeAliasDecl", indent)
     }
 }
-
-fn print(c: Cursor, depth: usize, already_visited: Vec<String>, mut namespaces: Vec<String>) {
-    if depth > 13 {
-        // println!("");
-        return;
-    }
-    let indent = format!("{:width$}", "", width = depth * 2);
-
-    if c.kind() == CursorKind::Namespace {
-        namespaces.push(c.display_name());
-    }
-
-    if c.kind() == CursorKind::ClassTemplate {
-        binding_class_template(c, depth, &namespaces);
-        return;
-    }
-
-    if c.kind() == CursorKind::TypeAliasDecl {
-        binding_type_alias_decl(c, depth, &namespaces);
-        return;
-    }
-
-    // println!("{}: {} {}", c.kind(), c.display_name(), c.usr());
-
-    if let Ok(cr) = c.referenced() {
-        if cr != c && !already_visited.contains(&cr.usr()) {
-            // print!("{}-> ", indent);
-            let mut v = already_visited.clone();
-            if !cr.usr().is_empty() {
-                v.push(cr.usr());
-            }
-            print(cr, depth + 1, v, Vec::new());
-        }
-    }
-
-    let children = c.children();
-    if children.len() > 0 {}
-
-    for child in children {
-        let mut v = already_visited.clone();
-        if !child.usr().is_empty() {
-            v.push(child.usr());
-        }
-        // print!("{}C ", indent);
-        print(child, depth + 1, v, namespaces.clone());
-    }
-}
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let index = Index::new();
-    let tu = index.parse_translation_unit(
-        &std::env::args().into_iter().collect::<Vec<_>>()[1],
-        &[
-            "-std=c++14",
-            "-x",
-            "c++",
-            "-isystem/home/anders/packages/llvm/14.0.0/include/c++/v1/",
-            "-isystem/home/anders/packages/llvm/14.0.0/include/x86_64-unknown-linux-gnu/c++/v1/",
-            "-isystem/usr/include/c++/9",
-            "-isystem/usr/lib/gcc/x86_64-linux-gnu/9/include/", 
-            "-isystem/usr/include/x86_64-linux-gnu",
-            "-isystem/usr/include/linux",
-            "-isystem/usr/local/include",
-            "-isystem/usr/include",
-            "-I/home/anders/packages/openexr/3.1.5/platform-linux/arch-x86_64/cxx11abi-0/cfg-release/include",
-            "-I/home/anders/packages/imath/3.1.5/platform-linux/arch-x86_64/cxx11abi-0/cfg-release/include",
-            "-I/home/anders/packages/imath/3.1.5/platform-linux/arch-x86_64/cxx11abi-0/cfg-release/include/Imath",
-        ],
-    );
-    println!("{} diagnostics", tu.num_diagnostics());
-    for d in tu.diagnostics() {
-        println!("{}", d);
-    }
-    let cur = tu.get_cursor()?;
-
-    let cur = cur
-        .children_of_kind_with_name(CursorKind::Namespace, "cppmm_bind", true)
-        .get(0)
-        .unwrap()
-        .clone();
-
-    print(cur.clone(), 0, Vec::new(), Vec::new());
-
-    /*
-    let ns_imath = cur
-        .children_of_kind(CursorKind::Namespace, false)
-        .get(0)
-        .unwrap()
-        .clone();
-
-    let type_alias_decls = ns_imath.children_of_kind(CursorKind::TypeAliasDecl, false);
-    */
-
-    Ok(())
-}
-
-pub struct Index {
-    inner: CXIndex,
-}
-
-impl Index {
-    pub fn new() -> Index {
-        let inner = unsafe { clang_createIndex(0, 0) };
-        Index { inner }
-    }
-
-    pub fn parse_translation_unit(&self, filename: &str, args: &[&str]) -> TranslationUnit {
-        let cfilename = CString::new(filename).unwrap();
-
-        let cargs: Vec<_> = args.iter().map(|a| CString::new(*a).unwrap()).collect();
-        let cstrargs: Vec<_> = cargs.iter().map(|a| a.as_ptr()).collect();
-
-        let tu = unsafe {
-            clang_parseTranslationUnit(
-                self.inner,
-                cfilename.as_ptr(),
-                cstrargs.as_ptr(),
-                cstrargs.len() as i32,
-                std::ptr::null_mut(),
-                0,
-                0,
-            )
-        };
-
-        if tu.is_null() {
-            panic!("translation unit {filename} failed to parse")
-        }
-
-        TranslationUnit { inner: tu }
-    }
-}
-
-impl Drop for Index {
-    fn drop(&mut self) {
-        unsafe {
-            clang_disposeIndex(self.inner);
-        }
-    }
-}
-
-#[cfg(test)]
-pub(crate) fn get_test_filename(base: &str) -> String {
-    std::path::PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
-        .join("testdata")
-        .join(base)
-        .as_os_str()
-        .to_string_lossy()
-        .to_string()
-}
+*/

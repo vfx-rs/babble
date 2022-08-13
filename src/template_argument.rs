@@ -8,6 +8,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 use std::convert::TryFrom;
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TemplateArgumentKind {
     Null,
     Type,
