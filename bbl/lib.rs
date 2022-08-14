@@ -1,5 +1,5 @@
 use cursor::USR;
-use std::collections::HashMap;
+use hashbrown::HashMap;
 
 use std::fmt::Display;
 use std::path::Path;
@@ -105,6 +105,42 @@ impl QualType {
             type_ref: TypeRef::Unknown(tk),
         }
     }
+
+    pub fn format(&self, ast: &Ast) -> String {
+        let result = String::new();
+
+        let result = if self.is_const {
+            format!("{result}const ")
+        } else {
+            result
+        };
+
+        let result = match &self.type_ref {
+            TypeRef::Builtin(tk) => {
+                format!("{result}{}", tk.spelling())
+            }
+            TypeRef::Pointer(pointee) => format!("{result}{}*", pointee.format(ast)),
+            TypeRef::LValueReference(pointee) => format!("{result}{}&", pointee.format(ast)),
+            TypeRef::RValueReference(pointee) => {
+                format!("{result}{}&&", pointee.format(ast))
+            }
+            TypeRef::Ref(usr) => {
+                let name = ast.records.get(usr).map(|r| format!("{r}")).unwrap_or(usr.0.clone());
+                format!("{result}{}", name)
+            }
+            TypeRef::TemplateTypeParameter(t) => {
+                format!("{result}{}", t)
+            }
+            TypeRef::TemplateNonTypeParameter(t) => {
+                format!("{result}{}", t)
+            }
+            TypeRef::Unknown(tk) => {
+                format!("{result}UNKNOWN({})", tk.spelling())
+            }
+        };
+
+        result
+    }
 }
 
 impl Display for QualType {
@@ -146,6 +182,12 @@ pub struct Argument {
 impl Display for Argument {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: {}", self.name, self.qual_type)
+    }
+}
+
+impl Argument {
+    fn format(&self, binding: &Ast) -> String {
+        format!("{}: {}", self.name, self.qual_type.format(binding))
     }
 }
 
@@ -195,7 +237,7 @@ impl Method {
         }
     }
 
-    pub fn pretty_print(&self, depth: usize) {
+    pub fn pretty_print(&self, depth: usize, binding: &Ast) {
         let indent = format!("{:width$}", "", width = depth * 2);
 
         let mut s = String::new();
@@ -213,7 +255,7 @@ impl Method {
             .function
             .arguments
             .iter()
-            .map(|p| format!("{p}"))
+            .map(|p| p.format(binding))
             .collect::<Vec<String>>()
             .join(", ");
         s += &format!("({})", args);
@@ -222,7 +264,7 @@ impl Method {
             s += " const"
         };
 
-        s += &format!(" -> {}", self.function.result);
+        s += &format!(" -> {}", self.function.result.format(binding));
 
         if self.is_pure_virtual {
             s += " = 0"
@@ -243,7 +285,7 @@ struct Record {
 }
 
 impl Record {
-    pub fn pretty_print(&self, depth: usize) {
+    pub fn pretty_print(&self, depth: usize, binding: &Ast) {
         let indent = format!("{:width$}", "", width = depth * 2);
 
         let template_decl = if self.template_parameters.is_empty() {
@@ -263,27 +305,39 @@ impl Record {
         println!("{indent}{template_decl}class {}{template} {{", self.name);
 
         for method in &self.methods {
-            method.pretty_print(depth + 1);
+            method.pretty_print(depth + 1, binding);
         }
 
         println!("{indent}}}");
     }
 }
 
-pub struct Binding {
+impl Display for Record {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)?;
+        if !self.template_parameters.is_empty() {
+            write!(f, "<{}>", self.template_parameters.join(", "))?;
+        }
+
+        Ok(())
+    }
+}
+
+pub struct Ast {
     records: HashMap<USR, Record>,
 }
 
-impl Binding {
+impl Ast {
     pub fn new() -> Self {
-        Binding {
+        Ast {
             records: HashMap::new(),
         }
     }
 
     pub fn pretty_print(&self, depth: usize) {
-        for (_usr, record) in &self.records {
-            record.pretty_print(depth + 1);
+        for (usr, record) in &self.records {
+            print!("{usr}: ");
+            record.pretty_print(depth + 1, self);
         }
     }
 }
@@ -675,10 +729,10 @@ fn bind_class_template(class_template: Cursor, depth: usize) -> Record {
     }
 }
 
-pub fn bind_namespace(name: &str, c_tu: Cursor) -> Binding {
+pub fn ast_from_namespace(name: &str, c_tu: Cursor) -> Ast {
     let ns = c_tu.children_of_kind_with_name(CursorKind::Namespace, name, true);
 
-    let mut binding = Binding::new();
+    let mut binding = Ast::new();
     for cur in ns {
         print(cur.clone(), 0, 2, Vec::new(), Vec::new(), &mut binding);
     }
@@ -692,7 +746,7 @@ fn print(
     max_depth: usize,
     already_visited: Vec<String>,
     mut namespaces: Vec<String>,
-    binding: &mut Binding,
+    binding: &mut Ast,
 ) {
     if depth > max_depth {
         // println!("");

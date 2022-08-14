@@ -28,6 +28,19 @@ impl Type {
         unsafe { to_type(clang_Type_getTemplateArgumentAsType(self.inner, i)) }
     }
 
+    pub fn template_argument_types(&self) -> Option<Vec<Option<Type>>> {
+        let n = self.num_template_arguments();
+        if n < 0 {
+            None
+        } else {
+            let mut result = Vec::new();
+            for i in 0..n {
+                result.push(self.template_argument_as_type(i as u32).ok());
+            }
+            Some(result)
+        }
+    }
+
     pub fn spelling(&self) -> String {
         unsafe { clang_getTypeSpelling(self.inner).to_string() }
     }
@@ -89,6 +102,12 @@ impl TypeKind {
             let cx: CXTypeKind = (*self).into();
             clang_getTypeKindSpelling(cx).to_string()
         }
+    }
+}
+
+impl Display for TypeKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
