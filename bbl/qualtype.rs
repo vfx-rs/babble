@@ -1,7 +1,16 @@
 use log::*;
 use std::fmt::Display;
 
-use crate::{error::Error, ty::{TypeKind, Type}, cursor::USR, ast::AST, Cursor, cursor_kind::CursorKind};
+use crate::{
+    ast::AST,
+    class_template::specialize_template_parameter,
+    cursor::USR,
+    cursor_kind::CursorKind,
+    error::Error,
+    template_argument::{TemplateParameterDecl, TemplateType},
+    ty::{Type, TypeKind},
+    Cursor,
+};
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub enum TypeRef {
@@ -30,7 +39,12 @@ impl QualType {
         }
     }
 
-    pub fn format(&self, ast: &AST) -> String {
+    pub fn format(
+        &self,
+        ast: &AST,
+        class_template_parameters: &[TemplateParameterDecl],
+        class_template_args: Option<&[Option<TemplateType>]>,
+    ) -> String {
         let result = String::new();
 
         let result = if self.is_const {
@@ -43,10 +57,19 @@ impl QualType {
             TypeRef::Builtin(tk) => {
                 format!("{result}{}", tk.spelling())
             }
-            TypeRef::Pointer(pointee) => format!("{result}{}*", pointee.format(ast)),
-            TypeRef::LValueReference(pointee) => format!("{result}{}&", pointee.format(ast)),
+            TypeRef::Pointer(pointee) => format!(
+                "{result}{}*",
+                pointee.format(ast, class_template_parameters, class_template_args)
+            ),
+            TypeRef::LValueReference(pointee) => format!(
+                "{result}{}&",
+                pointee.format(ast, class_template_parameters, class_template_args)
+            ),
             TypeRef::RValueReference(pointee) => {
-                format!("{result}{}&&", pointee.format(ast))
+                format!(
+                    "{result}{}&&",
+                    pointee.format(ast, class_template_parameters, class_template_args)
+                )
             }
             TypeRef::Ref(usr) => {
                 let name = ast
@@ -56,11 +79,11 @@ impl QualType {
                     .unwrap_or(usr.0.clone());
                 format!("{result}{}", name)
             }
-            TypeRef::TemplateTypeParameter(t) => {
-                format!("{result}{}", t)
-            }
-            TypeRef::TemplateNonTypeParameter(t) => {
-                format!("{result}{}", t)
+            TypeRef::TemplateTypeParameter(t) | TypeRef::TemplateNonTypeParameter(t) => {
+                format!(
+                    "{result}{}",
+                    specialize_template_type(t, class_template_parameters, class_template_args)
+                )
             }
             TypeRef::Unknown(tk) => {
                 format!("{result}UNKNOWN({})", tk.spelling())
@@ -69,6 +92,23 @@ impl QualType {
 
         result
     }
+}
+
+/// Given a template parameter in type position for which we only know the name, try to look up the type to replace it 
+/// with
+fn specialize_template_type(
+    t: &str,
+    class_template_parameters: &[TemplateParameterDecl],
+    class_template_args: Option<&[Option<TemplateType>]>,
+) -> String {
+    // find `t` in the parameters, then use that to find the arg, if it exists
+    for decl in class_template_parameters {
+        if t == decl.name() {
+            return specialize_template_parameter(decl, class_template_args);
+        }
+    }
+
+    t.to_string()
 }
 
 impl Display for QualType {
@@ -102,7 +142,8 @@ impl Display for QualType {
     }
 }
 
-pub fn qualtype_from_typeref(c_tr: Cursor) -> Result<QualType> {
+/// Get a qualified type from a reference to a type
+pub fn extract_type_from_typeref(c_tr: Cursor) -> Result<QualType> {
     if let Ok(c_ref) = c_tr.referenced() {
         let c_ref =
             if c_ref.kind() == CursorKind::ClassDecl || c_ref.kind() == CursorKind::ClassTemplate {
@@ -145,6 +186,7 @@ pub fn qualtype_from_typeref(c_tr: Cursor) -> Result<QualType> {
     }
 }
 
+/// Extract a qualified type from a clang Type
 pub fn extract_type(ty: Type, template_parameters: &[String]) -> Result<QualType> {
     let is_const = ty.is_const_qualified();
     let name = ty.spelling();

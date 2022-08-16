@@ -2,13 +2,12 @@ use log::*;
 use std::fmt::Display;
 
 use crate::cursor_kind::CursorKind;
-use crate::qualtype::{extract_type, qualtype_from_typeref};
-use crate::template_argument::TemplateParameterDecl;
+use crate::qualtype::{extract_type, extract_type_from_typeref};
+use crate::template_argument::{TemplateParameterDecl, TemplateType};
 use crate::{ast::AST, cursor::USR, qualtype::QualType, Cursor};
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
-
 
 pub struct Argument {
     pub(crate) name: String,
@@ -22,8 +21,18 @@ impl Display for Argument {
 }
 
 impl Argument {
-    fn format(&self, binding: &AST) -> String {
-        format!("{}: {}", self.name, self.qual_type.format(binding))
+    fn format(
+        &self,
+        ast: &AST,
+        class_template_parameters: &[TemplateParameterDecl],
+        class_template_args: Option<&[Option<TemplateType>]>,
+    ) -> String {
+        format!(
+            "{}: {}",
+            self.name,
+            self.qual_type
+                .format(ast, class_template_parameters, class_template_args)
+        )
     }
 }
 
@@ -73,7 +82,13 @@ impl Method {
         }
     }
 
-    pub fn pretty_print(&self, depth: usize, binding: &AST) {
+    pub fn pretty_print(
+        &self,
+        depth: usize,
+        ast: &AST,
+        class_template_parameters: &[TemplateParameterDecl],
+        class_template_args: Option<&[Option<TemplateType>]>,
+    ) {
         let indent = format!("{:width$}", "", width = depth * 2);
 
         let mut s = String::new();
@@ -91,7 +106,7 @@ impl Method {
             .function
             .arguments
             .iter()
-            .map(|p| p.format(binding))
+            .map(|p| p.format(ast, class_template_parameters, class_template_args))
             .collect::<Vec<String>>()
             .join(", ");
         s += &format!("({})", args);
@@ -100,7 +115,12 @@ impl Method {
             s += " const"
         };
 
-        s += &format!(" -> {}", self.function.result.format(binding));
+        s += &format!(
+            " -> {}",
+            self.function
+                .result
+                .format(ast, class_template_parameters, class_template_args)
+        );
 
         if self.is_pure_virtual {
             s += " = 0"
@@ -112,7 +132,6 @@ impl Method {
     }
 }
 
-
 pub fn extract_argument(c_arg: Cursor, template_parameters: &[String]) -> Result<Argument> {
     let children = c_arg.children();
 
@@ -122,7 +141,7 @@ pub fn extract_argument(c_arg: Cursor, template_parameters: &[String]) -> Result
         extract_type(ty, template_parameters)?
     } else if !children.is_empty() {
         match children[0].kind() {
-            CursorKind::TypeRef | CursorKind::TemplateRef => qualtype_from_typeref(children[0])?,
+            CursorKind::TypeRef | CursorKind::TemplateRef => extract_type_from_typeref(children[0])?,
             _ => {
                 debug!("other kind {:?}", children[0].kind(),);
                 QualType::unknown(children[0].ty().unwrap().kind())
@@ -203,7 +222,7 @@ pub fn extract_method(
         skip += 1;
 
         if c_result.kind() == CursorKind::TypeRef || c_result.kind() == CursorKind::TemplateRef {
-            qualtype_from_typeref(c_result.clone())?
+            extract_type_from_typeref(c_result.clone())?
         } else {
             QualType::unknown(ty_result.kind())
         }

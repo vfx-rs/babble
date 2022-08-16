@@ -16,30 +16,17 @@ pub enum Record {
 }
 
 impl Record {
-    pub fn pretty_print(&self, depth: usize, binding: &AST) {
+    pub fn pretty_print(&self, depth: usize, ast: &AST) {
         let indent = format!("{:width$}", "", width = depth * 2);
 
         match self {
             Record::ClassDecl(decl) => {
-                print!("ClassDecl ");
-                decl.pretty_print(depth, binding);
+                decl.pretty_print(depth, ast, &[], None);
             }
             Record::ClassTemplate(ct) => {
-                print!("ClassTemplate ");
-                ct.pretty_print(depth, binding);
+                ct.pretty_print(depth, ast, None);
             }
-            Record::ClassTemplateSpecialization(ClassTemplateSpecialization {
-                specialized_decl,
-                usr,
-                name,
-                args,
-            }) => {
-                let args = args.iter().map(|a| format!("{:?}", a)).collect::<Vec<_>>();
-                println!(
-                    "ClassTemplateSpecialization {name} of ({specialized_decl}) with <{}>",
-                    args.join(", ")
-                );
-            }
+            Record::ClassTemplateSpecialization(cts) => cts.pretty_print(depth, ast),
         }
     }
 

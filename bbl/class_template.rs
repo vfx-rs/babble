@@ -1,8 +1,14 @@
 use crate::{
-    ast::AST, class::ClassDecl, cursor_kind::CursorKind, function::extract_method,
-    template_argument::{TemplateParameterDecl, TemplateType}, Cursor, TranslationUnit, cursor::USR,
+    ast::AST,
+    class::{self, ClassDecl},
+    cursor::USR,
+    cursor_kind::CursorKind,
+    function::extract_method,
+    record::Record,
+    template_argument::{TemplateParameterDecl, TemplateType},
+    Cursor, TranslationUnit,
 };
-use log::*;
+use log::debug;
 use std::fmt::Display;
 
 use crate::error::Error;
@@ -13,20 +19,53 @@ pub struct ClassTemplate {
     pub(crate) template_parameters: Vec<TemplateParameterDecl>,
 }
 
+/// Choose the type replacement for the give `TemplateParameterDecl`
+pub(crate) fn specialize_template_parameter(
+    decl: &TemplateParameterDecl,
+    args: Option<&[Option<TemplateType>]>,
+) -> String {
+    if let Some(args) = args {
+        if let Some(arg) = args.get(decl.index()) {
+            if let Some(arg) = arg {
+                match arg {
+                    TemplateType::Type(name) => return name.to_string(),
+                    TemplateType::Integer(name) => return name.clone(),
+                };
+            } else if let TemplateParameterDecl::Integer {
+                default: Some(value),
+                ..
+            } = decl
+            {
+                // check if we have a non-type parameter with a default
+                return value.clone();
+            }
+        }
+    }
+
+    decl.default_name()
+}
+
 impl ClassTemplate {
-    pub fn pretty_print(&self, depth: usize, binding: &AST) {
+    pub fn pretty_print(
+        &self,
+        depth: usize,
+        ast: &AST,
+        template_args: Option<&[Option<TemplateType>]>,
+    ) {
         let indent = format!("{:width$}", "", width = depth * 2);
+
+        println!("+ ClassTemplate {}", self.class_decl.usr);
 
         let template_decl = if self.template_parameters.is_empty() {
             String::new()
         } else {
             format!(
-                "template <typename {}>\n{indent}",
+                "template <{}>\n{indent}",
                 self.template_parameters
                     .iter()
-                    .map(|t| format!("{t}"))
+                    .map(|t| specialize_template_parameter(t, template_args).to_string())
                     .collect::<Vec<_>>()
-                    .join(", typename ")
+                    .join(", ")
             )
         };
 
@@ -37,7 +76,7 @@ impl ClassTemplate {
                 "<{}>",
                 self.template_parameters
                     .iter()
-                    .map(|t| format!("{t}"))
+                    .map(|t| specialize_template_parameter(t, template_args).to_string())
                     .collect::<Vec<_>>()
                     .join(", ")
             )
@@ -48,7 +87,7 @@ impl ClassTemplate {
         );
 
         for method in &self.class_decl.methods {
-            method.pretty_print(depth + 1, binding);
+            method.pretty_print(depth + 1, ast, &self.template_parameters, template_args);
         }
 
         println!("{indent}}}");
@@ -88,13 +127,15 @@ pub fn extract_class_template(
     let mut template_parameters = Vec::new();
 
     let members = class_template.children();
+    let mut index = 0;
     for member in members {
         debug!("member {:?}", member);
         match member.kind() {
             CursorKind::TemplateTypeParameter => {
                 // TODO: Doesn't seem to be a way to get a type default
                 let name = member.display_name();
-                template_parameters.push(TemplateParameterDecl::Type { name });
+                template_parameters.push(TemplateParameterDecl::Type { name, index });
+                index += 1;
             }
             CursorKind::NonTypeTemplateParameter => {
                 for child in &member.children() {
@@ -108,12 +149,15 @@ pub fn extract_class_template(
                             template_parameters.push(TemplateParameterDecl::Integer {
                                 name,
                                 default: Some(tu.token(child.location()).spelling()),
-                            })
+                                index,
+                            });
+                            index += 1;
                         }
                         _ => unimplemented!(),
                     }
                 }
             }
+            CursorKind::TemplateTemplateParameter => unimplemented!(),
             CursorKind::CXXMethod
             | CursorKind::Constructor
             | CursorKind::Destructor
@@ -169,8 +213,33 @@ pub struct ClassTemplateSpecialization {
     pub(crate) usr: USR,
     pub(crate) name: String,
     /// Vec of options here because we know how many template arguments there are, but can't directly get any non-type
-    /// ones. 
-    /// 
+    /// ones.
+    ///
     /// Revisit and maybe we want to make that a hard error
     pub(crate) args: Vec<Option<TemplateType>>,
+}
+
+impl ClassTemplateSpecialization {
+    pub fn pretty_print(&self, depth: usize, ast: &AST) {
+        let indent = format!("{:width$}", "", width = depth * 2);
+
+        let args = self
+            .args
+            .iter()
+            .map(|a| format!("{:?}", a))
+            .collect::<Vec<_>>();
+        println!(
+            "+ ClassTemplateSpecialization {} of ({}) with <{}>",
+            self.name,
+            self.usr,
+            args.join(", ")
+        );
+
+        // this will be complicated...
+        let rec = ast.records.get(&self.specialized_decl).unwrap();
+        match rec {
+            Record::ClassTemplate(ct) => ct.pretty_print(depth, ast, Some(&self.args)),
+            _ => unreachable!(),
+        }
+    }
 }

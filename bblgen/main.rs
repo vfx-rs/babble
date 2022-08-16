@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .format_timestamp(None)
             .init();
     } else {
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug"))
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
             .format_timestamp(None)
             .init();
     }

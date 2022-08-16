@@ -5,6 +5,7 @@ use crate::Cursor;
 use crate::ast::AST;
 use crate::cursor_kind::CursorKind;
 use crate::function::extract_method;
+use crate::template_argument::{TemplateParameterDecl, TemplateType};
 use crate::{cursor::USR, qualtype::QualType, function::Method};
 
 use crate::error::Error;
@@ -19,13 +20,17 @@ pub struct ClassDecl {
 }
 
 impl ClassDecl {
-    pub fn pretty_print(&self, depth: usize, binding: &AST) {
+    pub fn pretty_print(&self, depth: usize, ast: &AST,
+        class_template_parameters: &[TemplateParameterDecl],
+        class_template_args: Option<&[Option<TemplateType>]>,
+    ) {
         let indent = format!("{:width$}", "", width = depth * 2);
 
+        println!("+ ClassTemplate {}", self.usr);
         println!("{indent}class {} {{", self.name);
 
         for method in &self.methods {
-            method.pretty_print(depth + 1, binding);
+            method.pretty_print(depth + 1, ast, class_template_parameters, class_template_args);
         }
 
         println!("{indent}}}");

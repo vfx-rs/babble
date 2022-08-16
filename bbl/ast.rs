@@ -1,6 +1,8 @@
-use hashbrown::HashMap;
+use indexmap::IndexMap;
+
 use log::*;
 
+use crate::index::Index;
 use crate::{
     class::extract_class_decl, class_template::extract_class_template, cursor::USR,
     cursor_kind::CursorKind, record::Record, type_alias::extract_type_alias_decl, Cursor,
@@ -11,20 +13,20 @@ use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct AST {
-    pub(crate) records: HashMap<USR, Record>,
+    pub(crate) records: IndexMap<USR, Record>,
 }
 
 impl AST {
     pub fn new() -> Self {
         AST {
-            records: HashMap::new(),
+            records: IndexMap::<USR, Record>::new(),
         }
     }
 
     pub fn pretty_print(&self, depth: usize) {
         for (usr, record) in &self.records {
-            print!("{usr}: ");
             record.pretty_print(depth + 1, self);
+            println!("");
         }
     }
 }
