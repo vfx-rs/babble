@@ -22,7 +22,7 @@ use std::{
     os::raw::{c_longlong, c_ulonglong, c_void},
 };
 
-use crate::cxtype::{to_type, Type};
+use crate::ty::{to_type, Type};
 
 use super::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;

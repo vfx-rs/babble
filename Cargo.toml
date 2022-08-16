@@ -17,6 +17,7 @@ path = "bbl/lib.rs"
 
 [dependencies]
 clang-sys = { path = "../clang-sys", features=["clang_13_0"] }
+clap = { version = "3.2.17", features = ["derive"] }
 env_logger = "0.9.0"
 hashbrown = "0.12.3"
 log = "0.4.17"
