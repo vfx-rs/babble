@@ -2,6 +2,8 @@ use log::*;
 use std::fmt::Display;
 
 use crate::class_template::ClassTemplateSpecialization;
+use crate::cursor::USR;
+use crate::namespace::extract_namespace;
 use crate::qualtype::extract_type;
 use crate::template_argument::TemplateType;
 use crate::ty::Type;
@@ -16,6 +18,7 @@ pub fn extract_type_alias_decl(
     already_visited: &mut Vec<String>,
     ast: &mut AST,
     tu: &TranslationUnit,
+    namespaces: &Vec<USR>,
 ) -> Result<ClassTemplateSpecialization> {
     let indent = format!("{:width$}", "", width = depth * 2);
 
@@ -42,17 +45,29 @@ pub fn extract_type_alias_decl(
         // TODO: merge this loop with the one above
         // First child will be the namespace of the target, next will be the template ref which will point to the class template
         let mut specialized_decl = None;
+        let mut local_namespaces = Vec::new();
         for child in c_type_alias_decl.children() {
             // println!("{indent}    {} {} {}", child.usr(), child.display_name(), child.kind());
-            if child.kind() == CursorKind::Namespace {
-                // push namespace here?
+            if child.kind() == CursorKind::NamespaceRef {
+                let c_namespace = child.referenced().unwrap();
+                if !already_visited.contains(&c_namespace.usr().0) {
+                    // extract the namespace here
+                    let ns = extract_namespace(c_namespace, depth+1, tu);
+                    let usr = ns.usr.clone();
+                    ast.namespaces.insert(usr.clone(), ns);
+                    already_visited.push(usr.0);
+                }
+                local_namespaces.push(c_namespace.usr());
             } else if child.kind() == CursorKind::TemplateRef {
                 if let Ok(cref) = child.referenced() {
                     if cref.kind() == CursorKind::ClassTemplate {
                         if !already_visited.contains(&cref.usr().0) {
                             // If we haven't already extracted the class which this alias refers to, do it now
+                            // if we've got namespaces defined on this ref then we /probably/ want to use them, 
+                            // otherwise use the ones passed in
+                            let ct_namespaes = if local_namespaces.is_empty() { &namespaces } else { &local_namespaces };
                             debug!("extracting class template {cref:?}");
-                            let ct = extract_class_template(cref, depth + 1, tu);
+                            let ct = extract_class_template(cref, depth + 1, tu, ct_namespaes);
                             ast.records
                                 .insert(ct.class_decl.usr.clone(), Record::ClassTemplate(ct));
                             already_visited.push(cref.usr().0.clone());
@@ -74,6 +89,7 @@ pub fn extract_type_alias_decl(
             usr: c_type_alias_decl.usr(),
             name,
             args: template_args,
+            namespaces: namespaces.clone(),
         })
     } else {
         error!("Could not get type from TypeAliasDecl {c_type_alias_decl:?}");

@@ -1,36 +1,52 @@
 use log::*;
 use std::fmt::Display;
 
-use crate::Cursor;
 use crate::ast::AST;
 use crate::cursor_kind::CursorKind;
 use crate::function::extract_method;
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
-use crate::{cursor::USR, qualtype::QualType, function::Method};
+use crate::Cursor;
+use crate::{cursor::USR, function::Method, qualtype::QualType};
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
-
 
 pub struct ClassDecl {
     pub(crate) usr: USR,
     pub(crate) name: String,
     pub(crate) fields: Vec<QualType>,
     pub(crate) methods: Vec<Method>,
+    pub(crate) namespaces: Vec<USR>,
 }
 
 impl ClassDecl {
-    pub fn pretty_print(&self, depth: usize, ast: &AST,
+    pub fn pretty_print(
+        &self,
+        depth: usize,
+        ast: &AST,
         class_template_parameters: &[TemplateParameterDecl],
         class_template_args: Option<&[Option<TemplateType>]>,
     ) {
         let indent = format!("{:width$}", "", width = depth * 2);
 
         println!("+ ClassTemplate {}", self.usr);
-        println!("{indent}class {} {{", self.name);
+
+        let ns_string = self
+            .namespaces
+            .iter()
+            .map(|u| ast.namespaces.get(u).unwrap().name.clone())
+            .collect::<Vec<String>>()
+            .join("::");
+
+        println!("{indent}{ns_string}::class {} {{", self.name);
 
         for method in &self.methods {
-            method.pretty_print(depth + 1, ast, class_template_parameters, class_template_args);
+            method.pretty_print(
+                depth + 1,
+                ast,
+                class_template_parameters,
+                class_template_args,
+            );
         }
 
         println!("{indent}}}");
@@ -43,8 +59,7 @@ impl Display for ClassDecl {
     }
 }
 
-
-pub fn extract_class_decl(class_decl: Cursor, depth: usize) -> ClassDecl {
+pub fn extract_class_decl(class_decl: Cursor, depth: usize, namespaces: &Vec<USR>) -> ClassDecl {
     let indent = format!("{:width$}", "", width = depth * 2);
 
     debug!("{indent}extract_class_decl({})", class_decl.usr());
@@ -103,5 +118,6 @@ pub fn extract_class_decl(class_decl: Cursor, depth: usize) -> ClassDecl {
         name: class_decl.spelling(),
         fields,
         methods,
+        namespaces: namespaces.clone(),
     }
 }

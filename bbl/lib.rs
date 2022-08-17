@@ -18,6 +18,7 @@ pub mod qualtype;
 pub mod class;
 pub mod class_template;
 pub mod type_alias;
+pub mod namespace;
 use ast::{AST, extract_ast};
 pub use cursor::{ChildVisitResult, Cursor};
 pub mod cursor_kind;
@@ -97,9 +98,10 @@ pub fn ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit) -> AST
     };
 
     let mut binding = AST::new();
+    let namespaces = Vec::new();
     let mut already_visited = Vec::new();
     for cur in ns {
-        extract_ast(cur.clone(), 0, 10, &mut already_visited, &mut binding, &tu);
+        extract_ast(cur.clone(), 0, 10, &mut already_visited, &mut binding, &tu, namespaces.clone());
     }
 
     binding

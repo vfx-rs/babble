@@ -32,15 +32,15 @@ pub(crate) fn specialize_template_parameter(
                     TemplateType::Integer(name) => return name.clone(),
                 };
             }
-            } else if let TemplateParameterDecl::Integer {
-                default: Some(value),
-                ..
-            } = decl
-            {
-                // check if we have a non-type parameter with a default
-                return value.clone();
-            }
+        } else if let TemplateParameterDecl::Integer {
+            default: Some(value),
+            ..
+        } = decl
+        {
+            // check if we have a non-type parameter with a default
+            return value.clone();
         }
+    }
 
     decl.default_name()
 }
@@ -53,6 +53,14 @@ impl ClassTemplate {
         template_args: Option<&[Option<TemplateType>]>,
     ) {
         let indent = format!("{:width$}", "", width = depth * 2);
+
+        let ns_string = self
+            .class_decl
+            .namespaces
+            .iter()
+            .map(|u| ast.namespaces.get(u).unwrap().name.clone())
+            .collect::<Vec<String>>()
+            .join("::");
 
         println!("+ ClassTemplate {}", self.class_decl.usr);
 
@@ -82,7 +90,7 @@ impl ClassTemplate {
             )
         };
         println!(
-            "{indent}{template_decl}class {}{template} {{",
+            "{indent}{template_decl}{ns_string}::class {}{template} {{",
             self.class_decl.name
         );
 
@@ -117,6 +125,7 @@ pub fn extract_class_template(
     class_template: Cursor,
     depth: usize,
     tu: &TranslationUnit,
+    namespaces: &Vec<USR>,
 ) -> ClassTemplate {
     let indent = format!("{:width$}", "", width = depth * 2);
 
@@ -203,6 +212,7 @@ pub fn extract_class_template(
             name: class_template.spelling(),
             fields,
             methods,
+            namespaces: namespaces.clone(),
         },
         template_parameters,
     }
@@ -217,6 +227,8 @@ pub struct ClassTemplateSpecialization {
     ///
     /// Revisit and maybe we want to make that a hard error
     pub(crate) args: Vec<Option<TemplateType>>,
+    /// The typedef itself is namespaced
+    pub(crate) namespaces: Vec<USR>,
 }
 
 impl ClassTemplateSpecialization {
@@ -228,8 +240,17 @@ impl ClassTemplateSpecialization {
             .iter()
             .map(|a| format!("{:?}", a))
             .collect::<Vec<_>>();
+
+        let ns_string = self
+            .namespaces
+            .iter()
+            .map(|u| ast.namespaces.get(u).unwrap().name.clone())
+            .collect::<Vec<String>>()
+            .join("::");
+
         println!(
-            "+ ClassTemplateSpecialization {} of ({}) with <{}>",
+            "+ ClassTemplateSpecialization {}::{} of ({}) with <{}>",
+            ns_string,
             self.name,
             self.usr,
             args.join(", ")
