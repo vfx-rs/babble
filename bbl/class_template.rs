@@ -31,6 +31,7 @@ pub(crate) fn specialize_template_parameter(
                     TemplateType::Type(name) => return name.to_string(),
                     TemplateType::Integer(name) => return name.clone(),
                 };
+            }
             } else if let TemplateParameterDecl::Integer {
                 default: Some(value),
                 ..
@@ -40,7 +41,6 @@ pub(crate) fn specialize_template_parameter(
                 return value.clone();
             }
         }
-    }
 
     decl.default_name()
 }
