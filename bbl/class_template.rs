@@ -1,6 +1,6 @@
 use crate::{
     ast::AST,
-    class::{self, ClassDecl},
+    class::{self, ClassDecl, AccessSpecifier, extract_field},
     cursor::USR,
     cursor_kind::CursorKind,
     function::extract_method,
@@ -8,7 +8,7 @@ use crate::{
     template_argument::{TemplateParameterDecl, TemplateType},
     Cursor, TranslationUnit,
 };
-use log::debug;
+use log::{debug, error};
 use std::fmt::Display;
 
 use crate::error::Error;
@@ -90,7 +90,7 @@ impl ClassTemplate {
             )
         };
         println!(
-            "{indent}{template_decl}{ns_string}::class {}{template} {{",
+            "{indent}{template_decl}class {ns_string}::{}{template} {{",
             self.class_decl.name
         );
 
@@ -171,8 +171,24 @@ pub fn extract_class_template(
             | CursorKind::Constructor
             | CursorKind::Destructor
             | CursorKind::FunctionTemplate => {
-                if let Ok(method) = extract_method(member, depth + 1, &template_parameters) {
-                    methods.push(method);
+                if let Ok(access) = member.cxx_access_specifier() {
+                    if access == AccessSpecifier::Public {
+                        if let Ok(method) = extract_method(member, depth + 1, &template_parameters) {
+                            methods.push(method);
+                        }
+                    }
+                } else {
+                    error!("Could not get access specifier from member {}", member.display_name());
+                }
+            }
+            CursorKind::FieldDecl => {
+                if let Ok(access) = member.cxx_access_specifier() {
+                    if access == AccessSpecifier::Public {
+                        let field = extract_field(member, depth, &template_parameters);
+                        fields.push(field);
+                    }
+                } else {
+                    error!("Could not get access specifier from member {}", member.display_name());
                 }
             }
             _ => {

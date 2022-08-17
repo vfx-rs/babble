@@ -1,4 +1,4 @@
-use crate::{template_argument::TemplateArgumentKind, token::SourceLocation};
+use crate::{template_argument::TemplateArgumentKind, token::SourceLocation, class::AccessSpecifier};
 
 use super::cursor_kind::CursorKind;
 use super::string::CXStringEx;
@@ -15,7 +15,7 @@ use clang_sys::{
     clang_getCursorReferenced, clang_getCursorResultType, clang_getCursorSpelling,
     clang_getCursorType, clang_getCursorUSR, clang_getNullCursor, clang_isCursorDefinition,
     clang_isInvalid, clang_visitChildren, CXChildVisitResult, CXChildVisit_Break,
-    CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor,
+    CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor, clang_getCXXAccessSpecifier,
 };
 use std::{
     fmt::{Debug, Display},
@@ -240,6 +240,10 @@ impl Cursor {
 
     pub fn cxx_record_is_abstract(&self) -> bool {
         unsafe { clang_CXXRecord_isAbstract(self.inner) != 0 }
+    }
+
+    pub fn cxx_access_specifier(&self) -> Result<AccessSpecifier> {
+        unsafe { clang_getCXXAccessSpecifier(self.inner).try_into() }
     }
 
     pub fn canonical(&self) -> Result<Cursor> {

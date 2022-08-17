@@ -1,12 +1,20 @@
+#![allow(non_upper_case_globals)]
+#![allow(non_snake_case)]
+
+use clang_sys::{
+    CX_CXXAccessSpecifier, CX_CXXInvalidAccessSpecifier, CX_CXXPrivate, CX_CXXProtected,
+    CX_CXXPublic,
+};
 use log::*;
 use std::fmt::Display;
 
 use crate::ast::AST;
 use crate::cursor_kind::CursorKind;
 use crate::function::extract_method;
+use crate::qualtype::extract_type;
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
-use crate::Cursor;
 use crate::{cursor::USR, function::Method, qualtype::QualType};
+use crate::{error, Cursor};
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -14,7 +22,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 pub struct ClassDecl {
     pub(crate) usr: USR,
     pub(crate) name: String,
-    pub(crate) fields: Vec<QualType>,
+    pub(crate) fields: Vec<Field>,
     pub(crate) methods: Vec<Method>,
     pub(crate) namespaces: Vec<USR>,
 }
@@ -38,7 +46,7 @@ impl ClassDecl {
             .collect::<Vec<String>>()
             .join("::");
 
-        println!("{indent}{ns_string}::class {} {{", self.name);
+        println!("{indent}class {ns_string}::{} {{", self.name);
 
         for method in &self.methods {
             method.pretty_print(
@@ -46,6 +54,13 @@ impl ClassDecl {
                 ast,
                 class_template_parameters,
                 class_template_args,
+            );
+        }
+
+        for field in &self.fields {
+            println!(
+                "{indent}{indent}{};",
+                field.format(ast, class_template_parameters, class_template_args)
             );
         }
 
@@ -78,8 +93,30 @@ pub fn extract_class_decl(class_decl: Cursor, depth: usize, namespaces: &Vec<USR
             | CursorKind::Constructor
             | CursorKind::Destructor
             | CursorKind::FunctionTemplate => {
-                if let Ok(method) = extract_method(member, depth + 1, &[]) {
-                    methods.push(method);
+                if let Ok(access) = member.cxx_access_specifier() {
+                    if access == AccessSpecifier::Public {
+                        if let Ok(method) = extract_method(member, depth + 1, &[]) {
+                            methods.push(method);
+                        }
+                    }
+                } else {
+                    error!(
+                        "Could not get access specifier from member {}",
+                        member.display_name()
+                    );
+                }
+            }
+            CursorKind::FieldDecl => {
+                if let Ok(access) = member.cxx_access_specifier() {
+                    if access == AccessSpecifier::Public {
+                        let field = extract_field(member, depth, &[]);
+                        fields.push(field);
+                    }
+                } else {
+                    error!(
+                        "Could not get access specifier from member {}",
+                        member.display_name()
+                    );
                 }
             }
             _ => {
@@ -119,5 +156,74 @@ pub fn extract_class_decl(class_decl: Cursor, depth: usize, namespaces: &Vec<USR
         fields,
         methods,
         namespaces: namespaces.clone(),
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum AccessSpecifier {
+    Public,
+    Protected,
+    Private,
+}
+
+impl TryFrom<CX_CXXAccessSpecifier> for AccessSpecifier {
+    type Error = crate::error::Error;
+
+    fn try_from(value: CX_CXXAccessSpecifier) -> Result<Self, Self::Error> {
+        match value {
+            CX_CXXInvalidAccessSpecifier => Err(Error::InvalidAccessSpecifier),
+            CX_CXXPublic => Ok(AccessSpecifier::Public),
+            CX_CXXProtected => Ok(AccessSpecifier::Protected),
+            CX_CXXPrivate => Ok(AccessSpecifier::Private),
+            _ => unreachable!(),
+        }
+    }
+}
+
+pub fn extract_field(
+    c_field: Cursor,
+    depth: usize,
+    class_template_parameters: &[TemplateParameterDecl],
+) -> Field {
+    let indent = format!("{:width$}", "", width = depth * 2);
+
+    let template_parameters = class_template_parameters
+        .iter()
+        .map(|t| t.name().to_string())
+        .collect::<Vec<_>>();
+
+    let ty = c_field.ty().unwrap();
+    let qual_type = extract_type(ty, &template_parameters).unwrap();
+
+    Field {
+        name: c_field.display_name(),
+        qual_type,
+    }
+}
+
+pub struct Field {
+    pub(crate) name: String,
+    pub(crate) qual_type: QualType,
+}
+
+impl Display for Field {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.name, self.qual_type)
+    }
+}
+
+impl Field {
+    fn format(
+        &self,
+        ast: &AST,
+        class_template_parameters: &[TemplateParameterDecl],
+        class_template_args: Option<&[Option<TemplateType>]>,
+    ) -> String {
+        format!(
+            "{}: {}",
+            self.name,
+            self.qual_type
+                .format(ast, class_template_parameters, class_template_args)
+        )
     }
 }

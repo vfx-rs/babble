@@ -67,7 +67,7 @@ pub fn extract_ast(
                 already_visited.push(c.usr().0);
             }
         }
-        CursorKind::ClassDecl => {
+        CursorKind::ClassDecl | CursorKind::StructDecl => {
             let cd = extract_class_decl(c, depth + 1, &namespaces);
             ast.records.insert(cd.usr.clone(), Record::ClassDecl(cd));
         }

@@ -11,7 +11,12 @@ template <typename T, int N=3, typename U=char>
 class Base {
     T m_arr[N];
 
+    void private_method();
+
 public:
+    Base();
+    Base(const Base&);
+
     T get_t();
     void take_n(T t[N]);
 };

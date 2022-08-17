@@ -7,6 +7,7 @@ pub enum Error {
     InvalidCursor,
     InvalidType,
     InvalidTemplateArgumentKind,
+    InvalidAccessSpecifier,
     TypeUnexposed,
     Failure,
     Crashed,
