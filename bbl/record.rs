@@ -6,7 +6,7 @@ use crate::{
     class::ClassDecl,
     class_template::{ClassTemplate, ClassTemplateSpecialization},
     cursor::USR,
-    template_argument::TemplateType,
+    template_argument::{TemplateType, TemplateParameterDecl},
 };
 
 pub enum Record {
@@ -17,8 +17,6 @@ pub enum Record {
 
 impl Record {
     pub fn pretty_print(&self, depth: usize, ast: &AST) {
-        let indent = format!("{:width$}", "", width = depth * 2);
-
         match self {
             Record::ClassDecl(decl) => {
                 decl.pretty_print(depth, ast, &[], None);
@@ -27,6 +25,25 @@ impl Record {
                 ct.pretty_print(depth, ast, None);
             }
             Record::ClassTemplateSpecialization(cts) => cts.pretty_print(depth, ast),
+        }
+    }
+
+
+    pub fn format(
+        &self,
+        ast: &AST,
+        class_template_parameters: &[TemplateParameterDecl],
+        class_template_args: Option<&[Option<TemplateType>]>,
+    ) -> String {
+        match self {
+            Record::ClassDecl(decl) => {
+                decl.format(ast)
+            }
+            Record::ClassTemplate(ct) => {
+                ct.format(ast, class_template_args)
+            }
+            // TODO: do we need to pass teh template args here?
+            Record::ClassTemplateSpecialization(cts) => cts.format(ast),
         }
     }
 

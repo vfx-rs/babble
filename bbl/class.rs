@@ -66,6 +66,22 @@ impl ClassDecl {
 
         println!("{indent}}}");
     }
+
+    pub fn format(
+        &self,
+        ast: &AST,
+    ) -> String {
+        let ns_string = self
+            .namespaces
+            .iter()
+            .map(|u| ast.namespaces.get(u).unwrap().name.clone())
+            .collect::<Vec<String>>()
+            .join("::");
+
+        format!("{ns_string}::{}", self.name)
+
+    }
+
 }
 
 impl Display for ClassDecl {

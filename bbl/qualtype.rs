@@ -75,7 +75,7 @@ impl QualType {
                 let name = ast
                     .records
                     .get(usr)
-                    .map(|r| format!("{}", r.name()))
+                    .map(|r| r.format(ast, class_template_parameters, class_template_args))
                     .unwrap_or(usr.0.clone());
                 format!("{result}{}", name)
             }

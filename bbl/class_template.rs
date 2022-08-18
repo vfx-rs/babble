@@ -100,6 +100,39 @@ impl ClassTemplate {
 
         println!("{indent}}}");
     }
+
+    pub fn format(
+        &self,
+        ast: &AST,
+        template_args: Option<&[Option<TemplateType>]>,
+    ) -> String {
+        let ns_string = self
+            .class_decl
+            .namespaces
+            .iter()
+            .map(|u| ast.namespaces.get(u).unwrap().name.clone())
+            .collect::<Vec<String>>()
+            .join("::");
+
+
+        let template = if self.template_parameters.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "<{}>",
+                self.template_parameters
+                    .iter()
+                    .map(|t| specialize_template_parameter(t, template_args).to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        };
+        format!(
+            "{ns_string}::{}{template}",
+            self.class_decl.name
+        )
+
+    }
 }
 
 impl Display for ClassTemplate {
@@ -276,6 +309,29 @@ impl ClassTemplateSpecialization {
         let rec = ast.records.get(&self.specialized_decl).unwrap();
         match rec {
             Record::ClassTemplate(ct) => ct.pretty_print(depth, ast, Some(&self.args)),
+            _ => unreachable!(),
+        }
+    }
+
+
+    pub fn format(&self, ast: &AST) -> String {
+        let args = self
+            .args
+            .iter()
+            .map(|a| format!("{:?}", a))
+            .collect::<Vec<_>>();
+
+        let ns_string = self
+            .namespaces
+            .iter()
+            .map(|u| ast.namespaces.get(u).unwrap().name.clone())
+            .collect::<Vec<String>>()
+            .join("::");
+
+        // this will be complicated...
+        let rec = ast.records.get(&self.specialized_decl).unwrap();
+        match rec {
+            Record::ClassTemplate(ct) => ct.format(ast, Some(&self.args)),
             _ => unreachable!(),
         }
     }
