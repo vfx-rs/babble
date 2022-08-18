@@ -2,11 +2,12 @@ use indexmap::IndexMap;
 
 use log::*;
 
+use crate::cursor;
 use crate::index::Index;
 use crate::namespace::{self, extract_namespace, Namespace};
 use crate::{
     class::extract_class_decl, class_template::extract_class_template, cursor::USR,
-    cursor_kind::CursorKind, record::Record, type_alias::extract_type_alias_decl, Cursor,
+    cursor_kind::CursorKind, record::Record, type_alias::extract_class_template_specialization, Cursor,
     TranslationUnit,
 };
 
@@ -61,21 +62,37 @@ pub fn extract_ast(
         CursorKind::ClassTemplate => {
             // We might extract a class template when visiting a type alias so check that we haven't already done so
             if !already_visited.contains(&c.usr().0) {
-                let ct = extract_class_template(c, depth + 1, tu, &namespaces);
-                ast.records
-                    .insert(ct.class_decl.usr.clone(), Record::ClassTemplate(ct));
-                already_visited.push(c.usr().0);
+                // Also make sure that we're dealing with a definition rather than a forward declaration
+                // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
+                // (for opaque types in the API)
+                if c.is_definition() {
+                    let ct = extract_class_template(c, depth + 1, tu, &namespaces);
+                    ast.records
+                        .insert(ct.class_decl.usr.clone(), Record::ClassTemplate(ct));
+                    already_visited.push(c.usr().0);
+                }
             }
         }
         CursorKind::ClassDecl | CursorKind::StructDecl => {
-            let cd = extract_class_decl(c, depth + 1, &namespaces);
-            ast.records.insert(cd.usr.clone(), Record::ClassDecl(cd));
+            // Make sure that we're dealing with a definition rather than a forward declaration
+            // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
+            // (for opaque types in the API)
+            if c.is_definition() {
+                let cd = extract_class_decl(c, depth + 1, &namespaces);
+                ast.records.insert(cd.usr.clone(), Record::ClassDecl(cd));
+            }
         }
         CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
-            let cts = extract_type_alias_decl(c, depth + 1, already_visited, ast, tu, &namespaces)
-                .expect(&format!("Failed to extract TypeAliasDecl {c:?}"));
-            ast.records
-                .insert(cts.usr.clone(), Record::ClassTemplateSpecialization(cts));
+            // check if this type alias has a TemplateRef child, in which case it's a class template specialization
+            if c.has_child_of_kind(CursorKind::TemplateRef) {
+                let cts = extract_class_template_specialization(c, depth + 1, already_visited, ast, tu, &namespaces)
+                    .expect(&format!("Failed to extract TypeAliasDecl {c:?}"));
+                ast.records
+                    .insert(cts.usr.clone(), Record::ClassTemplateSpecialization(cts));
+            } else {
+                debug!("TypeAliasDecl {} not handled as it is not a CTS", c.display_name());
+            }
+
         }
         CursorKind::Namespace => {
             let ns = extract_namespace(c, depth, tu);

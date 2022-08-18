@@ -76,6 +76,21 @@ impl Cursor {
         children
     }
 
+    /// Check whether this Cursor has a child of the given kind
+    pub fn has_child_of_kind(&self, kind: CursorKind) -> bool {
+        let mut result = false;
+        self.visit_children(|c, _| {
+            if c.kind() == kind {
+                result = true;
+                ChildVisitResult::Break
+            } else {
+                ChildVisitResult::Continue
+            }
+        });
+
+        result
+    }
+
     pub fn kind(&self) -> CursorKind {
         unsafe { clang_getCursorKind(self.inner).into() }
     }
@@ -249,6 +264,7 @@ impl Cursor {
     pub fn canonical(&self) -> Result<Cursor> {
         unsafe { cursor(clang_getCanonicalCursor(self.inner)) }
     }
+
 }
 
 pub(crate) fn cursor(cx: CXCursor) -> Result<Cursor> {

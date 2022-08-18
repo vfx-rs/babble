@@ -6,7 +6,7 @@ use crate::{
     function::extract_method,
     record::Record,
     template_argument::{TemplateParameterDecl, TemplateType},
-    Cursor, TranslationUnit,
+    Cursor, TranslationUnit, class_template,
 };
 use log::{debug, error};
 use std::fmt::Display;

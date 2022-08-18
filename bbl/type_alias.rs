@@ -12,7 +12,7 @@ use crate::{Cursor, ast::AST, TranslationUnit, record::Record, cursor_kind::Curs
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub fn extract_type_alias_decl(
+pub fn extract_class_template_specialization(
     c_type_alias_decl: Cursor,
     depth: usize,
     already_visited: &mut Vec<String>,

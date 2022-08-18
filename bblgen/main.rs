@@ -27,6 +27,10 @@ struct Args {
     /// Verbosity of the output
     #[clap(short, long, arg_enum, value_parser)]
     verbosity: Option<Verbosity>,
+
+    /// Args to pass straight to clang
+    #[clap(last=true, value_parser)]
+    clang_args: Vec<String>,
 }
 
 impl Display for Verbosity {
