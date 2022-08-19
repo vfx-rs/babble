@@ -38,6 +38,16 @@ impl AST {
             println!("");
         }
     }
+
+    pub fn class(&self, name: &str) -> Result<USR> {
+        for (usr, rec) in &self.records {
+            if rec.name() == name {
+                return Ok(usr.clone())
+            }
+        }
+
+        Err(Error::RecordNotFound)
+    }
 }
 
 /// Main recursive function to walk the AST and extract the pieces we're interested in

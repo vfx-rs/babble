@@ -82,24 +82,13 @@ impl Method {
         }
     }
 
-    pub fn pretty_print(
+    pub fn format(
         &self,
-        depth: usize,
         ast: &AST,
         class_template_parameters: &[TemplateParameterDecl],
         class_template_args: Option<&[Option<TemplateType>]>,
-    ) {
-        let indent = format!("{:width$}", "", width = depth * 2);
-
+    ) -> String {
         let mut s = String::new();
-        if self.is_static {
-            s += " static"
-        };
-        if self.is_virtual {
-            s += " virtual"
-        };
-
-        s += " ";
         s += &self.function.name;
 
         let args = self
@@ -110,6 +99,14 @@ impl Method {
             .collect::<Vec<String>>()
             .join(", ");
         s += &format!("({})", args);
+
+        if self.is_static {
+            s += " static"
+        };
+
+        if self.is_virtual {
+            s += " virtual"
+        };
 
         if self.is_const {
             s += " const"
@@ -126,9 +123,21 @@ impl Method {
             s += " = 0"
         };
 
-        s += ";";
+        s
+    }
 
-        println!("{indent}{s}");
+    pub fn pretty_print(
+        &self,
+        depth: usize,
+        ast: &AST,
+        class_template_parameters: &[TemplateParameterDecl],
+        class_template_args: Option<&[Option<TemplateType>]>,
+    ) {
+        let indent = format!("{:width$}", "", width = depth * 2);
+
+        let s = self.format(ast, class_template_parameters, class_template_args);
+
+        println!("{indent}{s};");
     }
 }
 

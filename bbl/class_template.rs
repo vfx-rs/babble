@@ -46,6 +46,14 @@ pub(crate) fn specialize_template_parameter(
 }
 
 impl ClassTemplate {
+    pub fn set_ignore(&mut self, ignore: bool) {
+        self.class_decl.set_ignore(ignore);
+    }
+
+    pub fn set_rename(&mut self, name: &str) {
+        self.class_decl.set_rename(name);
+    }
+
     pub fn pretty_print(
         &self,
         depth: usize,
@@ -256,13 +264,13 @@ pub fn extract_class_template(
     }
 
     ClassTemplate {
-        class_decl: ClassDecl {
-            usr: class_template.usr(),
-            name: class_template.spelling(),
+        class_decl: ClassDecl::new(
+            class_template.usr(),
+            class_template.spelling(),
             fields,
             methods,
-            namespaces: namespaces.clone(),
-        },
+            namespaces.clone(),
+        ),
         template_parameters,
     }
 }

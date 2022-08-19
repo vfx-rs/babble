@@ -25,9 +25,54 @@ pub struct ClassDecl {
     pub(crate) fields: Vec<Field>,
     pub(crate) methods: Vec<Method>,
     pub(crate) namespaces: Vec<USR>,
+
+    ignore: bool,
+    rename: Option<String>,
 }
 
 impl ClassDecl {
+    pub fn new(
+        usr: USR,
+        name: String,
+        fields: Vec<Field>,
+        methods: Vec<Method>,
+        namespaces: Vec<USR>,
+    ) -> ClassDecl {
+        ClassDecl {
+            usr,
+            name,
+            fields,
+            methods,
+            namespaces,
+            ignore: false,
+            rename: None,
+        }
+    }
+
+    pub fn set_ignore(&mut self, ignore: bool) {
+        self.ignore = true;
+    }
+
+    pub fn set_rename(&mut self, name: &str) {
+        self.rename = Some(name.to_string());
+    }
+
+    pub fn method(
+        &self,
+        signature: &str,
+        ast: &AST,
+        class_template_parameters: &[TemplateParameterDecl],
+        class_template_args: Option<&[Option<TemplateType>]>,
+    ) -> Result<USR> {
+        for method in &self.methods {
+            if method.format(ast, class_template_parameters, class_template_args) == signature {
+                return Ok(method.function.usr.clone());
+            }
+        }
+
+        Err(Error::MethodNotFound)
+    }
+
     pub fn pretty_print(
         &self,
         depth: usize,
@@ -37,7 +82,7 @@ impl ClassDecl {
     ) {
         let indent = format!("{:width$}", "", width = depth * 2);
 
-        println!("+ ClassTemplate {}", self.usr);
+        println!("+ ClassDecl {}", self.usr);
 
         let ns_string = self
             .namespaces
@@ -46,7 +91,13 @@ impl ClassDecl {
             .collect::<Vec<String>>()
             .join("::");
 
-        println!("{indent}class {ns_string}::{} {{", self.name);
+        let name = if let Some(ref rename) = self.rename {
+            rename
+        } else {
+            &self.name
+        };
+
+        println!("{indent}class {ns_string}::{} {{", name);
 
         for method in &self.methods {
             method.pretty_print(
@@ -67,10 +118,7 @@ impl ClassDecl {
         println!("{indent}}}");
     }
 
-    pub fn format(
-        &self,
-        ast: &AST,
-    ) -> String {
+    pub fn format(&self, ast: &AST) -> String {
         let ns_string = self
             .namespaces
             .iter()
@@ -79,9 +127,7 @@ impl ClassDecl {
             .join("::");
 
         format!("{ns_string}::{}", self.name)
-
     }
-
 }
 
 impl Display for ClassDecl {
@@ -166,13 +212,13 @@ pub fn extract_class_decl(class_decl: Cursor, depth: usize, namespaces: &Vec<USR
         }
     }
 
-    ClassDecl {
-        usr: class_decl.usr(),
-        name: class_decl.spelling(),
+    ClassDecl::new(
+        class_decl.usr(),
+        class_decl.spelling(),
         fields,
         methods,
-        namespaces: namespaces.clone(),
-    }
+        namespaces.clone(),
+    )
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]

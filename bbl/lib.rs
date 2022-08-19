@@ -19,6 +19,7 @@ pub mod class;
 pub mod class_template;
 pub mod type_alias;
 pub mod namespace;
+pub mod binding;
 use ast::{AST, extract_ast};
 pub use cursor::{ChildVisitResult, Cursor};
 pub mod cursor_kind;
@@ -65,7 +66,7 @@ pub fn parse_file<P: AsRef<Path>, S: AsRef<str>>(
 /// Convenience function to parse a C++ string with the given compiler arguments and optionally log diagnostics
 ///
 /// This creates a temporary file in `std::env::temp_dir()` with the file contents passed
-pub fn parse_string<S1: AsRef<str>, S: AsRef<str>>(
+pub fn parse_string_to_tu<S1: AsRef<str>, S: AsRef<str>>(
     contents: S1,
     cli_args: &[S],
     log_diagnostics: bool,
@@ -88,6 +89,35 @@ pub fn parse_string<S1: AsRef<str>, S: AsRef<str>>(
     Ok(tu)
 }
 
+pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
+    contents: S1,
+    cli_args: &[S],
+    log_diagnostics: bool,
+) -> Result<AST> {
+    let path = virtual_file::write_temp_file(contents.as_ref())?;
+    let index = index::Index::new();
+    let tu = index.parse_translation_unit(path, cli_args)?;
+
+    if log_diagnostics {
+        for d in tu.diagnostics() {
+            match d.severity() {
+                Severity::Ignored => debug!("{}", d),
+                Severity::Note => info!("{}", d),
+                Severity::Warning => warn!("{}", d),
+                Severity::Error | Severity::Fatal => error!("{}", d),
+            }
+        }
+    }
+
+    let cur = tu.get_cursor()?;
+
+    let mut ast = AST::new();
+    let mut already_visited = Vec::new();
+    extract_ast(cur, 0, 100, &mut already_visited, &mut ast, &tu, Vec::new());
+
+    Ok(ast)
+}
+
 use ty::{Type, TypeKind};
 
 pub fn ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit) -> AST {
@@ -97,14 +127,14 @@ pub fn ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit) -> AST
         c_tu.children_of_kind_with_name(CursorKind::Namespace, name, true)
     };
 
-    let mut binding = AST::new();
+    let mut ast = AST::new();
     let namespaces = Vec::new();
     let mut already_visited = Vec::new();
     for cur in ns {
-        extract_ast(cur.clone(), 0, 10, &mut already_visited, &mut binding, &tu, namespaces.clone());
+        extract_ast(cur.clone(), 0, 10, &mut already_visited, &mut ast, &tu, namespaces.clone());
     }
 
-    binding
+    ast
 }
 
 #[cfg(test)]

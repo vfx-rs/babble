@@ -1,12 +1,15 @@
 use log::*;
 use std::fmt::Display;
 
+use crate::error::Error;
+type Result<T, E = Error> = std::result::Result<T, E>;
+
 use crate::{
     ast::AST,
     class::ClassDecl,
     class_template::{ClassTemplate, ClassTemplateSpecialization},
     cursor::USR,
-    template_argument::{TemplateType, TemplateParameterDecl},
+    template_argument::{TemplateType, TemplateParameterDecl}, function::Method,
 };
 
 pub enum Record {
@@ -16,6 +19,29 @@ pub enum Record {
 }
 
 impl Record {
+    pub fn set_ignore(&mut self, ignore: bool) {
+        match self {
+            Record::ClassDecl(cd) => cd.set_ignore(ignore),
+            Record::ClassTemplate(ct) => ct.set_ignore(ignore),
+            _ => warn!("Tried to set ignore on a specialization"),
+        }
+    }
+
+    pub fn rename(&mut self, name: &str) {
+        match self {
+            Record::ClassDecl(cd) => cd.set_rename(name),
+            Record::ClassTemplate(ct) => ct.set_rename(name),
+            _ => warn!("Tried to set rename a specialization"),
+        }
+    }
+
+    pub fn method(&self, signature: &str, ast: &AST) -> Result<USR> {
+        match self {
+            Record::ClassDecl(cd) => cd.method(signature, ast, &[], None),
+            _ => todo!()
+        }
+    }
+
     pub fn pretty_print(&self, depth: usize, ast: &AST) {
         match self {
             Record::ClassDecl(decl) => {

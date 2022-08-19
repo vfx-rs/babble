@@ -17,6 +17,8 @@ pub enum Error {
     InvalidPath,
     IoError(std::io::Error),
     ParseError,
+    RecordNotFound,
+    MethodNotFound,
 }
 
 impl std::fmt::Display for Error {

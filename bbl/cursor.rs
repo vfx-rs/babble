@@ -335,7 +335,7 @@ impl From<ChildVisitResult> for CXChildVisitResult {
 
 #[cfg(test)]
 mod tests {
-    use crate::{cursor_kind::CursorKind, error::Error, parse_string};
+    use crate::{cursor_kind::CursorKind, error::Error, parse_string_to_tu};
 
     #[test]
     fn test_children() -> Result<(), Error> {
@@ -377,7 +377,7 @@ auto& free_function = ::A::free_function;
 }
         "#;
 
-        let tu = parse_string(contents, &["-std=c++11"], true)?;
+        let tu = parse_string_to_tu(contents, &["-std=c++11"], true)?;
 
         let c = tu.get_cursor().unwrap();
         let children = c.children();
@@ -396,7 +396,7 @@ auto& free_function = ::A::free_function;
 int a = 1;
 extern int b;
         "#;
-        let tu = parse_string(contents, &["-std=c++11"], true)?;
+        let tu = parse_string_to_tu(contents, &["-std=c++11"], true)?;
         let c = tu.get_cursor().unwrap();
         let children = c.children();
 
