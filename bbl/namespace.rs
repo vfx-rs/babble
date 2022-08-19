@@ -13,6 +13,9 @@ impl Namespace {
 
     }
 
+    pub fn usr(&self) -> USR {
+        self.usr
+    }
 }
 
 pub fn extract_namespace(c_namespace: Cursor, depth: usize, tu: &TranslationUnit) -> Namespace {

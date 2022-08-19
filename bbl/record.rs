@@ -80,4 +80,12 @@ impl Record {
             Record::ClassTemplateSpecialization(cts) => &cts.name,
         }
     }
+
+    pub fn usr(&self) -> USR {
+        match self {
+            Record::ClassDecl(cd) => cd.usr,
+            Record::ClassTemplate(ct) => ct.class_decl.usr,
+            Record::ClassTemplateSpecialization(cts) => cts.usr,
+        }
+    }
 }

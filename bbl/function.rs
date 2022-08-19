@@ -52,6 +52,11 @@ impl Function {
             arguments,
         }
     }
+
+    pub fn usr(&self) -> USR {
+        self.usr
+    }
+
 }
 
 pub struct Method {
@@ -80,6 +85,10 @@ impl Method {
             is_virtual,
             is_pure_virtual,
         }
+    }
+
+    pub fn usr(&self) -> USR {
+        self.function.usr
     }
 
     pub fn format(

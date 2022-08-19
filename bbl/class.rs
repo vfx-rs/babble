@@ -87,7 +87,7 @@ impl ClassDecl {
         let ns_string = self
             .namespaces
             .iter()
-            .map(|u| ast.namespaces.get(u).unwrap().name.clone())
+            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
             .collect::<Vec<String>>()
             .join("::");
 
@@ -122,7 +122,7 @@ impl ClassDecl {
         let ns_string = self
             .namespaces
             .iter()
-            .map(|u| ast.namespaces.get(u).unwrap().name.clone())
+            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
             .collect::<Vec<String>>()
             .join("::");
 

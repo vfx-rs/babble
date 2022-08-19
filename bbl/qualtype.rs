@@ -73,8 +73,7 @@ impl QualType {
             }
             TypeRef::Ref(usr) => {
                 let name = ast
-                    .records
-                    .get(usr)
+                    .get_record(*usr)
                     .map(|r| r.format(ast, class_template_parameters, class_template_args))
                     .unwrap_or(usr.to_string());
                 format!("{result}{}", name)

@@ -66,7 +66,7 @@ impl ClassTemplate {
             .class_decl
             .namespaces
             .iter()
-            .map(|u| ast.namespaces.get(u).unwrap().name.clone())
+            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
             .collect::<Vec<String>>()
             .join("::");
 
@@ -118,7 +118,7 @@ impl ClassTemplate {
             .class_decl
             .namespaces
             .iter()
-            .map(|u| ast.namespaces.get(u).unwrap().name.clone())
+            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
             .collect::<Vec<String>>()
             .join("::");
 
@@ -301,7 +301,7 @@ impl ClassTemplateSpecialization {
         let ns_string = self
             .namespaces
             .iter()
-            .map(|u| ast.namespaces.get(u).unwrap().name.clone())
+            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
             .collect::<Vec<String>>()
             .join("::");
 
@@ -314,7 +314,7 @@ impl ClassTemplateSpecialization {
         );
 
         // this will be complicated...
-        let rec = ast.records.get(&self.specialized_decl).unwrap();
+        let rec = ast.get_record(self.specialized_decl).unwrap();
         match rec {
             Record::ClassTemplate(ct) => ct.pretty_print(depth, ast, Some(&self.args)),
             _ => unreachable!(),
@@ -332,12 +332,12 @@ impl ClassTemplateSpecialization {
         let ns_string = self
             .namespaces
             .iter()
-            .map(|u| ast.namespaces.get(u).unwrap().name.clone())
+            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
             .collect::<Vec<String>>()
             .join("::");
 
         // this will be complicated...
-        let rec = ast.records.get(&self.specialized_decl).unwrap();
+        let rec = ast.get_record(self.specialized_decl).unwrap();
         match rec {
             Record::ClassTemplate(ct) => ct.format(ast, Some(&self.args)),
             _ => unreachable!(),

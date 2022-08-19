@@ -54,7 +54,7 @@ pub fn extract_class_template_specialization(
                     // extract the namespace here
                     let ns = extract_namespace(c_namespace, depth+1, tu);
                     let usr = ns.usr.clone();
-                    ast.namespaces.insert(usr.clone(), ns);
+                    ast.insert_namespace(ns);
                     already_visited.push(usr);
                 }
                 local_namespaces.push(c_namespace.usr());
@@ -68,8 +68,7 @@ pub fn extract_class_template_specialization(
                             let ct_namespaes = if local_namespaces.is_empty() { &namespaces } else { &local_namespaces };
                             debug!("extracting class template {cref:?}");
                             let ct = extract_class_template(cref, depth + 1, tu, ct_namespaes);
-                            ast.records
-                                .insert(ct.class_decl.usr.clone(), Record::ClassTemplate(ct));
+                            ast.insert_record(Record::ClassTemplate(ct));
                             already_visited.push(cref.usr());
                         }
                         specialized_decl = Some(cref.usr());
