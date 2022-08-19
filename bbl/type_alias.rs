@@ -15,7 +15,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 pub fn extract_class_template_specialization(
     c_type_alias_decl: Cursor,
     depth: usize,
-    already_visited: &mut Vec<String>,
+    already_visited: &mut Vec<USR>,
     ast: &mut AST,
     tu: &TranslationUnit,
     namespaces: &Vec<USR>,
@@ -50,18 +50,18 @@ pub fn extract_class_template_specialization(
             // println!("{indent}    {} {} {}", child.usr(), child.display_name(), child.kind());
             if child.kind() == CursorKind::NamespaceRef {
                 let c_namespace = child.referenced().unwrap();
-                if !already_visited.contains(&c_namespace.usr().0) {
+                if !already_visited.contains(&c_namespace.usr()) {
                     // extract the namespace here
                     let ns = extract_namespace(c_namespace, depth+1, tu);
                     let usr = ns.usr.clone();
                     ast.namespaces.insert(usr.clone(), ns);
-                    already_visited.push(usr.0);
+                    already_visited.push(usr);
                 }
                 local_namespaces.push(c_namespace.usr());
             } else if child.kind() == CursorKind::TemplateRef {
                 if let Ok(cref) = child.referenced() {
                     if cref.kind() == CursorKind::ClassTemplate {
-                        if !already_visited.contains(&cref.usr().0) {
+                        if !already_visited.contains(&cref.usr()) {
                             // If we haven't already extracted the class which this alias refers to, do it now
                             // if we've got namespaces defined on this ref then we /probably/ want to use them, 
                             // otherwise use the ones passed in
@@ -70,7 +70,7 @@ pub fn extract_class_template_specialization(
                             let ct = extract_class_template(cref, depth + 1, tu, ct_namespaes);
                             ast.records
                                 .insert(ct.class_decl.usr.clone(), Record::ClassTemplate(ct));
-                            already_visited.push(cref.usr().0.clone());
+                            already_visited.push(cref.usr());
                         }
                         specialized_decl = Some(cref.usr());
                         debug!("{indent}    -> {}", cref.usr());

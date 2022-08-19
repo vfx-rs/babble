@@ -76,7 +76,7 @@ impl QualType {
                     .records
                     .get(usr)
                     .map(|r| r.format(ast, class_template_parameters, class_template_args))
-                    .unwrap_or(usr.0.clone());
+                    .unwrap_or(usr.to_string());
                 format!("{result}{}", name)
             }
             TypeRef::TemplateTypeParameter(t) | TypeRef::TemplateNonTypeParameter(t) => {

@@ -23,3 +23,4 @@ env_logger = "0.9.0"
 hashbrown = "0.12.3"
 indexmap = {version = "1.9.1", features=["std"]}
 log = "0.4.17"
+ustr = "0.9.0"

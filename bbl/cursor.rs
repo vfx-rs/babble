@@ -27,8 +27,16 @@ use crate::ty::{to_type, Type};
 use super::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct USR(pub String);
+use ustr::Ustr;
+
+#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct USR(pub(crate) Ustr);
+
+impl USR {
+    pub fn is_empty(&self) -> bool {
+        self.0.as_str().is_empty()
+    }
+}
 
 impl Display for USR {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -104,7 +112,7 @@ impl Cursor {
     }
 
     pub fn usr(&self) -> USR {
-        unsafe { USR(clang_getCursorUSR(self.inner).to_string()) }
+        unsafe { USR(clang_getCursorUSR(self.inner).to_ustr()) }
     }
 
     pub fn is_definition(&self) -> bool {

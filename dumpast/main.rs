@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use bbl::{*, cursor_kind::CursorKind};
+use bbl::{*, cursor_kind::CursorKind, cursor::USR};
 
 use clap::{Parser, ValueEnum};
 
@@ -128,7 +128,7 @@ fn dump(
     c: Cursor,
     depth: usize,
     max_depth: usize,
-    already_visited: &mut Vec<String>,
+    already_visited: &mut Vec<USR>,
     tu: &TranslationUnit,
 ) {
     if depth > max_depth {
@@ -170,7 +170,7 @@ fn dump(
 
     if let Ok(cr) = c.referenced() {
         if cr != c {
-            if already_visited.contains(&cr.usr().0) {
+            if already_visited.contains(&cr.usr()) {
                 let template_args = if c.num_template_arguments() != -1 {
                     format!("[{}]", c.num_template_arguments())
                 } else {
@@ -179,8 +179,8 @@ fn dump(
 
                 println!("{indent}↪ {}: {} {} {} 🗸", cr.kind(), cr.display_name(), cr.usr(), template_args);
             } else {
-                if !cr.usr().0.is_empty() {
-                    already_visited.push(cr.usr().0);
+                if !cr.usr().is_empty() {
+                    already_visited.push(cr.usr());
                 }
                 print!("{indent}↪ ");
                 dump(cr, depth + 1, max_depth, already_visited, tu);
@@ -192,8 +192,8 @@ fn dump(
     if children.len() > 0 {}
 
     for child in children {
-        if !child.usr().0.is_empty() {
-            already_visited.push(child.usr().0);
+        if !child.usr().is_empty() {
+            already_visited.push(child.usr());
         }
 
         let icon = match child.kind() {

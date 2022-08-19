@@ -55,7 +55,7 @@ pub fn extract_ast(
     c: Cursor,
     depth: usize,
     max_depth: usize,
-    already_visited: &mut Vec<String>,
+    already_visited: &mut Vec<USR>,
     ast: &mut AST,
     tu: &TranslationUnit,
     namespaces: Vec<USR>,
@@ -71,7 +71,7 @@ pub fn extract_ast(
     match c.kind() {
         CursorKind::ClassTemplate => {
             // We might extract a class template when visiting a type alias so check that we haven't already done so
-            if !already_visited.contains(&c.usr().0) {
+            if !already_visited.contains(&c.usr()) {
                 // Also make sure that we're dealing with a definition rather than a forward declaration
                 // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
                 // (for opaque types in the API)
@@ -79,7 +79,7 @@ pub fn extract_ast(
                     let ct = extract_class_template(c, depth + 1, tu, &namespaces);
                     ast.records
                         .insert(ct.class_decl.usr.clone(), Record::ClassTemplate(ct));
-                    already_visited.push(c.usr().0);
+                    already_visited.push(c.usr());
                 }
             }
         }
@@ -108,7 +108,7 @@ pub fn extract_ast(
             let ns = extract_namespace(c, depth, tu);
             let usr = ns.usr.clone();
             ast.namespaces.insert(usr.clone(), ns);
-            already_visited.push(usr.0.clone());
+            already_visited.push(usr);
             namespaces.push(usr);
         }
         // CursorKind::NamespaceRef => {
@@ -120,10 +120,10 @@ pub fn extract_ast(
     debug!("{indent}{}: {} {}", c.kind(), c.display_name(), c.usr());
 
     if let Ok(cr) = c.referenced() {
-        if cr != c && !already_visited.contains(&cr.usr().0) {
+        if cr != c && !already_visited.contains(&cr.usr()) {
             // print!("{}-> ", indent);
             if !cr.usr().0.is_empty() {
-                already_visited.push(cr.usr().0);
+                already_visited.push(cr.usr());
             }
             extract_ast(
                 cr,
