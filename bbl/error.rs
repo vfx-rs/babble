@@ -19,6 +19,7 @@ pub enum Error {
     ParseError,
     RecordNotFound,
     MethodNotFound,
+    MultipleMatches,
 }
 
 impl std::fmt::Display for Error {

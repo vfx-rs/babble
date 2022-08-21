@@ -41,6 +41,8 @@ pub struct Function {
     pub(crate) name: String,
     pub(crate) result: QualType,
     pub(crate) arguments: Vec<Argument>,
+    pub(crate) replacement_name: Option<String>,
+    pub(crate) ignored: bool,
 }
 
 impl Function {
@@ -50,6 +52,8 @@ impl Function {
             name,
             result,
             arguments,
+            replacement_name: None,
+            ignored: false,
         }
     }
 
@@ -57,6 +61,38 @@ impl Function {
         self.usr
     }
 
+    pub fn rename(&mut self, new_name: &str) {
+        self.replacement_name = Some(new_name.to_string());
+    }
+
+    pub fn ignore(&mut self) {
+        self.ignored = true;
+    }
+
+    pub fn format(
+        &self,
+        ast: &AST,
+        template_parameters: &[TemplateParameterDecl],
+        template_args: Option<&[Option<TemplateType>]>,
+    ) -> String {
+        let mut s = String::new();
+        s += &self.name;
+
+        let args = self
+            .arguments
+            .iter()
+            .map(|p| p.format(ast, template_parameters, template_args))
+            .collect::<Vec<String>>()
+            .join(", ");
+        s += &format!("({})", args);
+
+        s += &format!(
+            " -> {}",
+            self.result.format(ast, template_parameters, template_args)
+        );
+
+        s
+    }
 }
 
 pub struct Method {
@@ -91,23 +127,36 @@ impl Method {
         self.function.usr
     }
 
+    pub fn name(&self) -> &str {
+        &self.function.name
+    }
+
+    pub fn rename(&mut self, new_name: &str) {
+        self.function.rename(new_name);
+    }
+
+    pub fn ignore(&mut self) {
+        self.function.ignore();
+    }
+
+    pub fn signature(
+        &self,
+        ast: &AST,
+        class_template_parameters: &[TemplateParameterDecl],
+        class_template_args: Option<&[Option<TemplateType>]>,
+    ) -> String {
+        self.format(ast, class_template_parameters, class_template_args)
+    }
+
     pub fn format(
         &self,
         ast: &AST,
         class_template_parameters: &[TemplateParameterDecl],
         class_template_args: Option<&[Option<TemplateType>]>,
     ) -> String {
-        let mut s = String::new();
-        s += &self.function.name;
-
-        let args = self
+        let mut s = self
             .function
-            .arguments
-            .iter()
-            .map(|p| p.format(ast, class_template_parameters, class_template_args))
-            .collect::<Vec<String>>()
-            .join(", ");
-        s += &format!("({})", args);
+            .format(ast, class_template_parameters, class_template_args);
 
         if self.is_static {
             s += " static"
@@ -120,13 +169,6 @@ impl Method {
         if self.is_const {
             s += " const"
         };
-
-        s += &format!(
-            " -> {}",
-            self.function
-                .result
-                .format(ast, class_template_parameters, class_template_args)
-        );
 
         if self.is_pure_virtual {
             s += " = 0"
@@ -146,7 +188,23 @@ impl Method {
 
         let s = self.format(ast, class_template_parameters, class_template_args);
 
-        println!("{indent}{s};");
+        let mut modify_attrs = Vec::new();
+        if self.function.ignored {
+            modify_attrs.push("ignored".to_string());
+        }
+
+        if let Some(new_name) = &self.function.replacement_name {
+            modify_attrs.push(format!("rename(\"{new_name}\")"));
+        }
+
+        let attr_string = if modify_attrs.is_empty() {
+            String::new()
+        } else {
+            format!("    [[{}]]", modify_attrs.join(", "))
+        };
+
+        println!("{indent}{s}{attr_string}");
+
     }
 }
 
@@ -159,7 +217,9 @@ pub fn extract_argument(c_arg: Cursor, template_parameters: &[String]) -> Result
         extract_type(ty, template_parameters)?
     } else if !children.is_empty() {
         match children[0].kind() {
-            CursorKind::TypeRef | CursorKind::TemplateRef => extract_type_from_typeref(children[0])?,
+            CursorKind::TypeRef | CursorKind::TemplateRef => {
+                extract_type_from_typeref(children[0])?
+            }
             _ => {
                 debug!("other kind {:?}", children[0].kind(),);
                 QualType::unknown(children[0].ty().unwrap().kind())

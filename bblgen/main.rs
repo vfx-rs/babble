@@ -29,18 +29,28 @@ struct Args {
     verbosity: Option<Verbosity>,
 
     /// Args to pass straight to clang
-    #[clap(last=true, value_parser)]
+    #[clap(last = true, value_parser)]
     clang_args: Vec<String>,
 }
 
 impl Display for Verbosity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Verbosity::Trace => { write!(f, "trace") },
-            Verbosity::Debug => { write!(f, "debug") },
-            Verbosity::Info => { write!(f, "info") },
-            Verbosity::Warn => { write!(f, "warn") },
-            Verbosity::Error => { write!(f, "error") },
+            Verbosity::Trace => {
+                write!(f, "trace")
+            }
+            Verbosity::Debug => {
+                write!(f, "debug")
+            }
+            Verbosity::Info => {
+                write!(f, "info")
+            }
+            Verbosity::Warn => {
+                write!(f, "warn")
+            }
+            Verbosity::Error => {
+                write!(f, "error")
+            }
         }
     }
 }
@@ -79,7 +89,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cur = tu.get_cursor()?;
 
-
     let ast = ast_from_namespace(&args.namespace.unwrap_or("".to_string()), cur, &tu);
 
     /*
@@ -89,9 +98,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .record("Vec3<T>")
                 .method("operator^").ignore()
             .specialize("T", "float")
-        .extract();    
+        .extract();
     */
-
 
     debug!("\n\n");
     ast.pretty_print(0);

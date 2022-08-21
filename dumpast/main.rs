@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use bbl::{*, cursor_kind::CursorKind, cursor::USR};
+use bbl::{cursor::USR, cursor_kind::CursorKind, *};
 
 use clap::{Parser, ValueEnum};
 
@@ -56,14 +56,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut already_visited = Vec::new();
     if let Some(namespace) = args.namespace {
-        let children = tu.get_cursor()?.children_of_kind_with_name(CursorKind::Namespace, &namespace, true);
+        let children =
+            tu.get_cursor()?
+                .children_of_kind_with_name(CursorKind::Namespace, &namespace, true);
         for child in children {
             dump(child, 0, max_depth, &mut already_visited, &tu);
         }
     } else {
         dump(tu.get_cursor()?, 0, max_depth, &mut already_visited, &tu);
     }
-
 
     Ok(())
 }
@@ -91,16 +92,27 @@ fn dump(
         CursorKind::IntegerLiteral => {
             println!("{}: {}", c.kind(), tu.token(c.location()).spelling());
         }
-        _ => println!("{}: {} {} {}", c.kind(), c.display_name(), c.usr(), template_args),
+        _ => println!(
+            "{}: {} {} {}",
+            c.kind(),
+            c.display_name(),
+            c.usr(),
+            template_args
+        ),
     }
 
     if let Ok(ty) = c.ty() {
-        let args = ty.template_argument_types()
-                                        .map(|v| {
-                                            v.iter()
-                                             .map(|t| if let Some(t) = t { format!("{}", t)} else { "NonType".to_string() } )
-                                             .collect::<Vec<String>>()
-                                        });
+        let args = ty.template_argument_types().map(|v| {
+            v.iter()
+                .map(|t| {
+                    if let Some(t) = t {
+                        format!("{}", t)
+                    } else {
+                        "NonType".to_string()
+                    }
+                })
+                .collect::<Vec<String>>()
+        });
 
         let template_args = if let Some(args) = args {
             format!("<{}>", args.join(", "))
@@ -108,9 +120,13 @@ fn dump(
             "".to_string()
         };
         let indent = format!("{:width$}", "", width = depth.saturating_sub(1) * 4 + 2);
-        println!("{indent}𝜏 {}: {} {}", ty.spelling(), ty.kind(), template_args);
+        println!(
+            "{indent}𝜏 {}: {} {}",
+            ty.spelling(),
+            ty.kind(),
+            template_args
+        );
     }
-
 
     if let Ok(cr) = c.referenced() {
         if cr != c {
@@ -121,7 +137,13 @@ fn dump(
                     "".to_string()
                 };
 
-                println!("{indent}↪ {}: {} {} {} 🗸", cr.kind(), cr.display_name(), cr.usr(), template_args);
+                println!(
+                    "{indent}↪ {}: {} {} {} 🗸",
+                    cr.kind(),
+                    cr.display_name(),
+                    cr.usr(),
+                    template_args
+                );
             } else {
                 if !cr.usr().is_empty() {
                     already_visited.push(cr.usr());
@@ -155,7 +177,6 @@ fn dump(
     }
 }
 
-
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 enum Verbosity {
     Trace,
@@ -168,11 +189,21 @@ enum Verbosity {
 impl Display for Verbosity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Verbosity::Trace => { write!(f, "trace") },
-            Verbosity::Debug => { write!(f, "debug") },
-            Verbosity::Info => { write!(f, "info") },
-            Verbosity::Warn => { write!(f, "warn") },
-            Verbosity::Error => { write!(f, "error") },
+            Verbosity::Trace => {
+                write!(f, "trace")
+            }
+            Verbosity::Debug => {
+                write!(f, "debug")
+            }
+            Verbosity::Info => {
+                write!(f, "info")
+            }
+            Verbosity::Warn => {
+                write!(f, "warn")
+            }
+            Verbosity::Error => {
+                write!(f, "error")
+            }
         }
     }
 }

@@ -7,20 +7,18 @@ use std::path::Path;
 
 use log::*;
 
-pub mod cursor;
-pub mod index;
-pub mod template_argument;
-pub mod virtual_file;
 pub mod ast;
-pub mod record;
-pub mod function;
-pub mod qualtype;
-pub mod class;
-pub mod class_template;
-pub mod type_alias;
-pub mod namespace;
 pub mod binding;
-use ast::{AST, extract_ast};
+pub mod class;
+pub mod cursor;
+pub mod function;
+pub mod index;
+pub mod namespace;
+pub mod qualtype;
+pub mod template_argument;
+pub mod type_alias;
+pub mod virtual_file;
+use ast::{extract_ast, AST};
 pub use cursor::{ChildVisitResult, Cursor};
 pub mod cursor_kind;
 pub mod error;
@@ -131,7 +129,15 @@ pub fn ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit) -> AST
     let namespaces = Vec::new();
     let mut already_visited = Vec::new();
     for cur in ns {
-        extract_ast(cur.clone(), 0, 10, &mut already_visited, &mut ast, &tu, namespaces.clone());
+        extract_ast(
+            cur.clone(),
+            0,
+            10,
+            &mut already_visited,
+            &mut ast,
+            &tu,
+            namespaces.clone(),
+        );
     }
 
     ast

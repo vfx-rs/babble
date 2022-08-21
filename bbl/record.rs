@@ -7,7 +7,6 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 use crate::{
     ast::AST,
     class::ClassDecl,
-    class_template::{ClassTemplate, ClassTemplateSpecialization},
     cursor::USR,
     template_argument::{TemplateType, TemplateParameterDecl}, function::Method,
 };

@@ -1,16 +1,37 @@
 use log::*;
 use std::fmt::Display;
 
-use crate::class_template::ClassTemplateSpecialization;
+use crate::class::extract_class_decl;
 use crate::cursor::USR;
 use crate::namespace::extract_namespace;
 use crate::qualtype::extract_type;
 use crate::template_argument::TemplateType;
 use crate::ty::Type;
-use crate::{Cursor, ast::AST, TranslationUnit, record::Record, cursor_kind::CursorKind, class_template::extract_class_template};
+use crate::{ast::AST, cursor_kind::CursorKind, Cursor, TranslationUnit};
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
+
+pub enum TypeAlias {
+    TypeAliasType { name: String, usr: USR },
+    ClassTemplateSpecialization(ClassTemplateSpecialization),
+}
+
+impl TypeAlias {
+    pub fn usr(&self) -> USR {
+        match self {
+            TypeAlias::TypeAliasType { usr, .. } => *usr,
+            TypeAlias::ClassTemplateSpecialization(cts) => cts.usr,
+        }
+    }
+
+    pub fn pretty_print(&self, depth: usize, ast: &AST) {
+        match self {
+            TypeAlias::TypeAliasType { name, usr } => todo!(),
+            TypeAlias::ClassTemplateSpecialization(cts) => cts.pretty_print(depth, ast),
+        }
+    }
+}
 
 pub fn extract_class_template_specialization(
     c_type_alias_decl: Cursor,
@@ -52,7 +73,7 @@ pub fn extract_class_template_specialization(
                 let c_namespace = child.referenced().unwrap();
                 if !already_visited.contains(&c_namespace.usr()) {
                     // extract the namespace here
-                    let ns = extract_namespace(c_namespace, depth+1, tu);
+                    let ns = extract_namespace(c_namespace, depth + 1, tu);
                     let usr = ns.usr.clone();
                     ast.insert_namespace(ns);
                     already_visited.push(usr);
@@ -63,12 +84,16 @@ pub fn extract_class_template_specialization(
                     if cref.kind() == CursorKind::ClassTemplate {
                         if !already_visited.contains(&cref.usr()) {
                             // If we haven't already extracted the class which this alias refers to, do it now
-                            // if we've got namespaces defined on this ref then we /probably/ want to use them, 
+                            // if we've got namespaces defined on this ref then we /probably/ want to use them,
                             // otherwise use the ones passed in
-                            let ct_namespaes = if local_namespaces.is_empty() { &namespaces } else { &local_namespaces };
+                            let ct_namespaes = if local_namespaces.is_empty() {
+                                &namespaces
+                            } else {
+                                &local_namespaces
+                            };
                             debug!("extracting class template {cref:?}");
-                            let ct = extract_class_template(cref, depth + 1, tu, ct_namespaes);
-                            ast.insert_record(Record::ClassTemplate(ct));
+                            let cd = extract_class_decl(cref, depth + 1, tu, ct_namespaes);
+                            ast.insert_class(cd);
                             already_visited.push(cref.usr());
                         }
                         specialized_decl = Some(cref.usr());
@@ -95,7 +120,6 @@ pub fn extract_class_template_specialization(
         Err(Error::InvalidType)
     }
 }
-
 
 fn extract_template_args(
     c_type_alias_decl: &Cursor,
@@ -166,4 +190,67 @@ fn extract_template_args(
     }
 
     template_args
+}
+
+pub struct ClassTemplateSpecialization {
+    pub(crate) specialized_decl: USR,
+    pub(crate) usr: USR,
+    pub(crate) name: String,
+    /// Vec of options here because we know how many template arguments there are, but can't directly get any non-type
+    /// ones.
+    ///
+    /// Revisit and maybe we want to make that a hard error
+    pub(crate) args: Vec<Option<TemplateType>>,
+    /// The typedef itself is namespaced
+    pub(crate) namespaces: Vec<USR>,
+}
+
+impl ClassTemplateSpecialization {
+    pub fn pretty_print(&self, depth: usize, ast: &AST) {
+        let indent = format!("{:width$}", "", width = depth * 2);
+
+        let args = self
+            .args
+            .iter()
+            .map(|a| format!("{:?}", a))
+            .collect::<Vec<_>>();
+
+        let ns_string = self
+            .namespaces
+            .iter()
+            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
+            .collect::<Vec<String>>()
+            .join("::");
+
+        println!(
+            "+ ClassTemplateSpecialization {}::{} of ({}) with <{}>",
+            ns_string,
+            self.name,
+            self.usr,
+            args.join(", ")
+        );
+
+        // this will be complicated...
+        let class = ast.get_class(self.specialized_decl).unwrap();
+        class.pretty_print(depth, ast, Some(&self.args));
+    }
+
+    pub fn format(&self, ast: &AST) -> String {
+        let args = self
+            .args
+            .iter()
+            .map(|a| format!("{:?}", a))
+            .collect::<Vec<_>>();
+
+        let ns_string = self
+            .namespaces
+            .iter()
+            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
+            .collect::<Vec<String>>()
+            .join("::");
+
+        // this will be complicated...
+        let class = ast.get_class(self.specialized_decl).unwrap();
+        class.format(ast, Some(&self.args))
+    }
 }

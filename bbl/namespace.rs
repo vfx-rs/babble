@@ -1,4 +1,4 @@
-use crate::{Cursor, TranslationUnit, cursor::USR, ast::AST};
+use crate::{ast::AST, cursor::USR, Cursor, TranslationUnit};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Namespace {
@@ -10,7 +10,6 @@ impl Namespace {
     pub fn pretty_print(&self, depth: usize, ast: &AST) {
         let indent = format!("{:width$}", "", width = depth * 2);
         println!("+ Namespace {} {}", self.usr, self.name);
-
     }
 
     pub fn usr(&self) -> USR {

@@ -1,107 +1,176 @@
-use ustr::{UstrMap, Ustr};
+use ustr::{Ustr, UstrMap};
 
 use log::*;
 
-use crate::cursor;
-use crate::function::{Method, Function};
+use crate::class::ClassDecl;
+use crate::function::{Function, Method};
 use crate::index::Index;
 use crate::namespace::{self, extract_namespace, Namespace};
+use crate::type_alias::TypeAlias;
 use crate::{
-    class::extract_class_decl, class_template::extract_class_template, cursor::USR,
-    cursor_kind::CursorKind, record::Record, type_alias::extract_class_template_specialization, Cursor,
-    TranslationUnit,
+    class::extract_class_decl, cursor::USR, cursor_kind::CursorKind,
+    type_alias::extract_class_template_specialization, Cursor, TranslationUnit,
 };
+use crate::{cursor, type_alias};
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+pub struct UstrIndexMap<T> {
+    storage: Vec<T>,
+    map: UstrMap<usize>,
+}
+
+impl<T> UstrIndexMap<T> {
+    pub fn new() -> UstrIndexMap<T> {
+        UstrIndexMap {
+            storage: Vec::new(),
+            map: Default::default(),
+        }
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, T> {
+        self.storage.iter()
+    }
+
+    pub fn get(&self, key: &Ustr) -> Option<&T> {
+        self.map.get(key).map(|id| &self.storage[*id])
+    }
+
+    pub fn get_id(&self, key: &Ustr) -> Option<&usize> {
+        self.map.get(key)
+    }
+
+    pub fn index(&self, id: usize) -> &T {
+        &self.storage[id]
+    }
+
+    pub fn index_mut(&mut self, id: usize) -> &mut T {
+        &mut self.storage[id]
+    }
+
+    pub fn len(&self) -> usize {
+        self.storage.len()
+    }
+
+    pub fn insert(&mut self, key: Ustr, value: T) -> usize {
+        let id = self.storage.len();
+        self.storage.push(value);
+        self.map.insert(key, id);
+        id
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct ClassId(usize);
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct MethodId(pub(crate) usize);
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct NamespaceId(pub(crate) usize);
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct FunctionId(pub(crate) usize);
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct TypeAliasId(pub(crate) usize);
+
 pub struct AST {
-    records: Vec<Record>,
-    record_map: UstrMap<usize>,
-    methods: Vec<Method>,
-    method_map: UstrMap<usize>,
-    functions: Vec<Function>,
-    function_map: UstrMap<usize>,
-    namespaces: Vec<Namespace>,
-    namespace_map: UstrMap<usize>,
+    classes: UstrIndexMap<ClassDecl>,
+    functions: UstrIndexMap<Function>,
+    namespaces: UstrIndexMap<Namespace>,
+    type_aliases: UstrIndexMap<TypeAlias>,
 }
 
 impl AST {
     pub fn new() -> Self {
         AST {
-            records: Vec::new(),
-            record_map: Default::default(),
-            methods: Vec::new(),
-            method_map: Default::default(),
-            functions: Vec::new(),
-            function_map: Default::default(),
-            namespaces: Vec::new(),
-            namespace_map: Default::default(),
+            classes: UstrIndexMap::new(),
+            functions: UstrIndexMap::new(),
+            namespaces: UstrIndexMap::new(),
+            type_aliases: UstrIndexMap::new(),
         }
     }
 
     pub fn pretty_print(&self, depth: usize) {
-        for namespace in &self.namespaces {
+        for namespace in self.namespaces.iter() {
             namespace.pretty_print(depth + 1, self);
             println!("");
         }
 
-        for record in &self.records {
-            record.pretty_print(depth + 1, self);
+        println!("");
+        for class in self.classes.iter() {
+            class.pretty_print(depth + 1, self, None);
+            println!("");
+        }
+
+        println!("");
+        // for function in self.functions.iter() {
+        //     function.pretty_print(depth + 1, self, &[], None);
+        //     println!("");
+        // }
+
+        for type_alias in self.type_aliases.iter() {
+            type_alias.pretty_print(depth + 1, self);
             println!("");
         }
     }
 
-    pub fn class(&self, name: &str) -> Result<USR> {
-        for rec in &self.records {
-            if rec.name() == name {
-                return Ok(rec.usr())
+    pub fn find_class(&self, name: &str) -> Result<ClassId> {
+        for class in self.classes.iter() {
+            if class.name() == name {
+                return self
+                    .classes
+                    .get_id(&class.usr().0)
+                    .map(|i| ClassId(*i))
+                    .ok_or(Error::RecordNotFound);
             }
         }
 
         Err(Error::RecordNotFound)
     }
 
-    pub fn insert_record(&mut self, record: Record) {
-        let idx = self.records.len();
-        self.record_map.insert(record.usr().0, idx);
-        self.records.push(record);
+    pub fn find_method(&self, class_id: ClassId, signature: &str) -> Result<MethodId> {
+        let class = self.classes.index(class_id.0);
+        class.find_method(self, signature).map(|t| t.0)
     }
 
-    pub fn get_record(&self, usr: USR) -> Option<&Record> {
-        self.record_map.get(&usr.0).map(|idx| &self.records[*idx])
+    pub fn rename_method(&mut self, class_id: ClassId, method_id: MethodId, new_name: &str) {
+        self.classes.index_mut(class_id.0).rename_method(method_id, new_name);
     }
 
-    pub fn insert_method(&mut self, method: Method) {
-        let idx = self.methods.len();
-        self.method_map.insert(method.usr().0, idx);
-        self.methods.push(method);
+    pub fn ignore_method(&mut self, class_id: ClassId, method_id: MethodId) {
+        self.classes.index_mut(class_id.0).ignore_method(method_id);
     }
 
-    pub fn get_method(&self, usr: USR) -> Option<&Method> {
-        self.method_map.get(&usr.0).map(|idx| &self.methods[*idx])
+    pub fn insert_class(&mut self, class: ClassDecl) {
+        self.classes.insert(class.usr().0, class);
+    }
+
+    pub fn get_class(&self, usr: USR) -> Option<&ClassDecl> {
+        self.classes.get(&usr.0)
     }
 
     pub fn insert_function(&mut self, function: Function) {
-        let idx = self.functions.len();
-        self.function_map.insert(function.usr().0, idx);
-        self.functions.push(function);
+        self.functions.insert(function.usr().0, function);
+    }
+
+    pub fn insert_type_alias(&mut self, type_alias: TypeAlias) {
+        self.type_aliases.insert(type_alias.usr().0, type_alias);
     }
 
     pub fn get_function(&self, usr: USR) -> Option<&Function> {
-        self.function_map.get(&usr.0).map(|idx| &self.functions[*idx])
+        self.functions.get(&usr.0)
     }
 
     pub fn insert_namespace(&mut self, namespace: Namespace) {
-        let idx = self.namespaces.len();
-        self.namespace_map.insert(namespace.usr().0, idx);
-        self.namespaces.push(namespace);
+        self.namespaces.insert(namespace.usr().0, namespace);
     }
 
     pub fn get_namespace(&self, usr: USR) -> Option<&Namespace> {
-        self.namespace_map.get(&usr.0).map(|idx| &self.namespaces[*idx])
+        self.namespaces.get(&usr.0)
     }
-
 }
 
 /// Main recursive function to walk the AST and extract the pieces we're interested in
@@ -123,38 +192,49 @@ pub fn extract_ast(
     let indent = format!("{:width$}", "", width = depth * 2);
 
     match c.kind() {
-        CursorKind::ClassTemplate => {
+        CursorKind::ClassTemplate | CursorKind::ClassDecl | CursorKind::StructDecl => {
             // We might extract a class template when visiting a type alias so check that we haven't already done so
             if !already_visited.contains(&c.usr()) {
                 // Also make sure that we're dealing with a definition rather than a forward declaration
                 // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
                 // (for opaque types in the API)
                 if c.is_definition() {
-                    let ct = extract_class_template(c, depth + 1, tu, &namespaces);
-                    ast.insert_record(Record::ClassTemplate(ct));
+                    let cd = extract_class_decl(c, depth + 1, tu, &namespaces);
+                    ast.insert_class(cd);
                     already_visited.push(c.usr());
                 }
             }
         }
+        /*
         CursorKind::ClassDecl | CursorKind::StructDecl => {
             // Make sure that we're dealing with a definition rather than a forward declaration
             // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
             // (for opaque types in the API)
             if c.is_definition() {
-                let cd = extract_class_decl(c, depth + 1, &namespaces);
+                let cd = extract_class_decl(c, depth + 1, tu, &namespaces);
                 ast.insert_record(Record::ClassDecl(cd));
             }
         }
+        */
         CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
             // check if this type alias has a TemplateRef child, in which case it's a class template specialization
             if c.has_child_of_kind(CursorKind::TemplateRef) {
-                let cts = extract_class_template_specialization(c, depth + 1, already_visited, ast, tu, &namespaces)
-                    .expect(&format!("Failed to extract TypeAliasDecl {c:?}"));
-                ast.insert_record(Record::ClassTemplateSpecialization(cts));
+                let cts = extract_class_template_specialization(
+                    c,
+                    depth + 1,
+                    already_visited,
+                    ast,
+                    tu,
+                    &namespaces,
+                )
+                .expect(&format!("Failed to extract TypeAliasDecl {c:?}"));
+                ast.insert_type_alias(TypeAlias::ClassTemplateSpecialization(cts));
             } else {
-                debug!("TypeAliasDecl {} not handled as it is not a CTS", c.display_name());
+                debug!(
+                    "TypeAliasDecl {} not handled as it is not a CTS",
+                    c.display_name()
+                );
             }
-
         }
         CursorKind::Namespace => {
             let ns = extract_namespace(c, depth, tu);

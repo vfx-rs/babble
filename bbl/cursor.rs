@@ -1,4 +1,6 @@
-use crate::{template_argument::TemplateArgumentKind, token::SourceLocation, class::AccessSpecifier};
+use crate::{
+    class::AccessSpecifier, template_argument::TemplateArgumentKind, token::SourceLocation,
+};
 
 use super::cursor_kind::CursorKind;
 use super::string::CXStringEx;
@@ -9,13 +11,13 @@ use clang_sys::{
     clang_Cursor_getTemplateArgumentKind, clang_Cursor_getTemplateArgumentType,
     clang_Cursor_getTemplateArgumentUnsignedValue, clang_Cursor_getTemplateArgumentValue,
     clang_Cursor_getVarDeclInitializer, clang_Cursor_hasVarDeclExternalStorage,
-    clang_Cursor_hasVarDeclGlobalStorage, clang_equalCursors, clang_getCanonicalCursor,
-    clang_getCursorDefinition, clang_getCursorDisplayName, clang_getCursorKind,
-    clang_getCursorLocation, clang_getCursorPrettyPrinted, clang_getCursorPrintingPolicy,
-    clang_getCursorReferenced, clang_getCursorResultType, clang_getCursorSpelling,
-    clang_getCursorType, clang_getCursorUSR, clang_getNullCursor, clang_isCursorDefinition,
-    clang_isInvalid, clang_visitChildren, CXChildVisitResult, CXChildVisit_Break,
-    CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor, clang_getCXXAccessSpecifier,
+    clang_Cursor_hasVarDeclGlobalStorage, clang_equalCursors, clang_getCXXAccessSpecifier,
+    clang_getCanonicalCursor, clang_getCursorDefinition, clang_getCursorDisplayName,
+    clang_getCursorKind, clang_getCursorLocation, clang_getCursorPrettyPrinted,
+    clang_getCursorPrintingPolicy, clang_getCursorReferenced, clang_getCursorResultType,
+    clang_getCursorSpelling, clang_getCursorType, clang_getCursorUSR, clang_getNullCursor,
+    clang_isCursorDefinition, clang_isInvalid, clang_visitChildren, CXChildVisitResult,
+    CXChildVisit_Break, CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor,
 };
 use std::{
     fmt::{Debug, Display},
@@ -272,7 +274,6 @@ impl Cursor {
     pub fn canonical(&self) -> Result<Cursor> {
         unsafe { cursor(clang_getCanonicalCursor(self.inner)) }
     }
-
 }
 
 pub(crate) fn cursor(cx: CXCursor) -> Result<Cursor> {

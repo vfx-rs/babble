@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use crate::{
     ast::AST,
-    class_template::specialize_template_parameter,
+    class::specialize_template_parameter,
     cursor::USR,
     cursor_kind::CursorKind,
     error::Error,
@@ -73,8 +73,8 @@ impl QualType {
             }
             TypeRef::Ref(usr) => {
                 let name = ast
-                    .get_record(*usr)
-                    .map(|r| r.format(ast, class_template_parameters, class_template_args))
+                    .get_class(*usr)
+                    .map(|r| r.format(ast, class_template_args))
                     .unwrap_or(usr.to_string());
                 format!("{result}{}", name)
             }
@@ -93,7 +93,7 @@ impl QualType {
     }
 }
 
-/// Given a template parameter in type position for which we only know the name, try to look up the type to replace it 
+/// Given a template parameter in type position for which we only know the name, try to look up the type to replace it
 /// with
 fn specialize_template_type(
     t: &str,
