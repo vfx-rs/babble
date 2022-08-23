@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use bbl::{cursor::USR, cursor_kind::CursorKind, *};
+use bbl::{cursor::USR, cursor_kind::CursorKind, *, ast::dump};
 
 use clap::{Parser, ValueEnum};
 
@@ -67,114 +67,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
-}
-
-fn dump(
-    c: Cursor,
-    depth: usize,
-    max_depth: usize,
-    already_visited: &mut Vec<USR>,
-    tu: &TranslationUnit,
-) {
-    if depth > max_depth {
-        println!("⋱");
-        return;
-    }
-    let indent = format!("{:width$}", "", width = depth * 4);
-
-    let template_args = if c.num_template_arguments() != -1 {
-        format!("[{}]", c.num_template_arguments())
-    } else {
-        "".to_string()
-    };
-
-    match c.kind() {
-        CursorKind::IntegerLiteral => {
-            println!("{}: {}", c.kind(), tu.token(c.location()).spelling());
-        }
-        _ => println!(
-            "{}: {} {} {}",
-            c.kind(),
-            c.display_name(),
-            c.usr(),
-            template_args
-        ),
-    }
-
-    if let Ok(ty) = c.ty() {
-        let args = ty.template_argument_types().map(|v| {
-            v.iter()
-                .map(|t| {
-                    if let Some(t) = t {
-                        format!("{}", t)
-                    } else {
-                        "NonType".to_string()
-                    }
-                })
-                .collect::<Vec<String>>()
-        });
-
-        let template_args = if let Some(args) = args {
-            format!("<{}>", args.join(", "))
-        } else {
-            "".to_string()
-        };
-        let indent = format!("{:width$}", "", width = depth.saturating_sub(1) * 4 + 2);
-        println!(
-            "{indent}𝜏 {}: {} {}",
-            ty.spelling(),
-            ty.kind(),
-            template_args
-        );
-    }
-
-    if let Ok(cr) = c.referenced() {
-        if cr != c {
-            if already_visited.contains(&cr.usr()) {
-                let template_args = if c.num_template_arguments() != -1 {
-                    format!("[{}]", c.num_template_arguments())
-                } else {
-                    "".to_string()
-                };
-
-                println!(
-                    "{indent}↪ {}: {} {} {} 🗸",
-                    cr.kind(),
-                    cr.display_name(),
-                    cr.usr(),
-                    template_args
-                );
-            } else {
-                if !cr.usr().is_empty() {
-                    already_visited.push(cr.usr());
-                }
-                print!("{indent}↪ ");
-                dump(cr, depth + 1, max_depth, already_visited, tu);
-            }
-        }
-    }
-
-    let children = c.children();
-    if children.len() > 0 {}
-
-    for child in children {
-        if !child.usr().is_empty() {
-            already_visited.push(child.usr());
-        }
-
-        let icon = match child.kind() {
-            CursorKind::ClassDecl => "●",
-            CursorKind::ClassTemplate => "○",
-            CursorKind::FunctionDecl => "ƒ",
-            CursorKind::FunctionTemplate => "ⓕ",
-            CursorKind::CXXMethod => "ɱ",
-            _ => "▸",
-        };
-
-        print!("{indent}{icon} ");
-
-        dump(child, depth + 1, max_depth, already_visited, tu);
-    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]

@@ -4,6 +4,7 @@ use crate::{ast::AST, cursor::USR, Cursor, TranslationUnit};
 pub struct Namespace {
     pub(crate) usr: USR,
     pub(crate) name: String,
+    pub(crate) rename: Option<String>,
 }
 
 impl Namespace {
@@ -22,5 +23,6 @@ pub fn extract_namespace(c_namespace: Cursor, depth: usize, tu: &TranslationUnit
     Namespace {
         usr: c_namespace.usr(),
         name: c_namespace.display_name(),
+        rename: None,
     }
 }

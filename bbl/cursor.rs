@@ -17,7 +17,7 @@ use clang_sys::{
     clang_getCursorPrintingPolicy, clang_getCursorReferenced, clang_getCursorResultType,
     clang_getCursorSpelling, clang_getCursorType, clang_getCursorUSR, clang_getNullCursor,
     clang_isCursorDefinition, clang_isInvalid, clang_visitChildren, CXChildVisitResult,
-    CXChildVisit_Break, CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor,
+    CXChildVisit_Break, CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor, clang_getCursorSemanticParent,
 };
 use std::{
     fmt::{Debug, Display},
@@ -274,6 +274,12 @@ impl Cursor {
     pub fn canonical(&self) -> Result<Cursor> {
         unsafe { cursor(clang_getCanonicalCursor(self.inner)) }
     }
+
+    pub fn semantic_parent(&self) -> Result<Cursor> {
+        unsafe { cursor(clang_getCursorSemanticParent(self.inner)) }
+    }
+
+
 }
 
 pub(crate) fn cursor(cx: CXCursor) -> Result<Cursor> {

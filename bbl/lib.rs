@@ -18,7 +18,8 @@ pub mod qualtype;
 pub mod template_argument;
 pub mod type_alias;
 pub mod virtual_file;
-use ast::{extract_ast, AST};
+pub mod translate;
+use ast::{extract_ast, AST, dump};
 pub use cursor::{ChildVisitResult, Cursor};
 pub mod cursor_kind;
 pub mod error;
@@ -114,6 +115,43 @@ pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
     extract_ast(cur, 0, 100, &mut already_visited, &mut ast, &tu, Vec::new());
 
     Ok(ast)
+}
+
+pub fn parse_string_and_dump_ast<S1: AsRef<str>, S: AsRef<str>>(
+    contents: S1,
+    cli_args: &[S],
+    namespace: Option<&str>,
+    log_diagnostics: bool,
+) -> Result<()> {
+    let path = virtual_file::write_temp_file(contents.as_ref())?;
+    let index = index::Index::new();
+    let tu = index.parse_translation_unit(path, cli_args)?;
+
+    if log_diagnostics {
+        for d in tu.diagnostics() {
+            match d.severity() {
+                Severity::Ignored => debug!("{}", d),
+                Severity::Note => info!("{}", d),
+                Severity::Warning => warn!("{}", d),
+                Severity::Error | Severity::Fatal => error!("{}", d),
+            }
+        }
+    }
+
+    let mut already_visited = Vec::new();
+    if let Some(namespace) = namespace {
+        let children =
+            tu.get_cursor()?
+                .children_of_kind_with_name(CursorKind::Namespace, &namespace, true);
+        for child in children {
+            dump(child, 0, 20, &mut already_visited, &tu);
+        }
+    } else {
+        dump(tu.get_cursor()?, 0, 20, &mut already_visited, &tu);
+    }
+
+
+    Ok(())
 }
 
 use ty::{Type, TypeKind};

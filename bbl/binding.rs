@@ -13,9 +13,10 @@ impl Binding {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{extract_ast, AST},
+        ast::{extract_ast, AST, dump},
         error::Error,
         parse_string_and_extract_ast, parse_string_to_tu,
+        translate::translate_cpp_ast_to_c, parse_string_and_dump_ast,
     };
 
     fn init_log() {
@@ -64,10 +65,53 @@ public:
         let method = ast.find_method(class, "method(a: UInt) -> Int")?;
         ast.ignore_method(class, method);
 
+        ast.pretty_print(0);
+
+        let c_ast = translate_cpp_ast_to_c(&ast);
+
+        c_ast.pretty_print(0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_binding_pass_class() -> Result<(), Error> {
+        init_log();
+        let mut ast = parse_string_and_extract_ast(
+            r#"
+
+namespace Test {
+class A {
+};
+
+class B {
+public:
+    void take_a(const A& a) const;
+    void take_a(A& a);
+};
+
+}
+    
+        "#,
+            &[
+                "-resource-dir",
+                "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
+                "-std=c++14",
+                "-I/usr/include",
+                "-I/usr/local/include",
+            ],
+            true,
+        )?;
 
         ast.pretty_print(0);
 
-        let bind = Binding::new(ast);
+        let class = ast.find_class("B")?;
+
+        let method = ast.find_method(class, "take_a(a: Test::A&)")?;
+
+        let c_ast = translate_cpp_ast_to_c(&ast);
+
+        c_ast.pretty_print(0);
 
         Ok(())
     }
@@ -101,7 +145,6 @@ public:
         let class = ast.find_class("Class")?;
         let method = ast.find_method(class, "foo()");
         assert!(matches!(method, Err(Error::MethodNotFound)));
-
 
         ast.pretty_print(0);
 
@@ -140,7 +183,6 @@ public:
         let class = ast.find_class("Class")?;
         let method = ast.find_method(class, "method");
         assert!(matches!(method, Err(Error::MultipleMatches)));
-
 
         ast.pretty_print(0);
 

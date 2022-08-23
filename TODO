@@ -1,2 +1,3 @@
 - [ ] function templates
 - [ ] store fwd decls so we can handle them when we encounter them in signiatures but the type is never defined
+- [ ] automatically rename const/non-const method pairs

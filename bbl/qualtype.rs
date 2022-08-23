@@ -13,6 +13,7 @@ use crate::{
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+#[derive(Clone)]
 pub enum TypeRef {
     Builtin(TypeKind),
     Ref(USR),
@@ -24,10 +25,11 @@ pub enum TypeRef {
     Unknown(TypeKind),
 }
 
+#[derive(Clone)]
 pub struct QualType {
-    name: String,
-    is_const: bool,
-    type_ref: TypeRef,
+    pub name: String,
+    pub is_const: bool,
+    pub type_ref: TypeRef,
 }
 
 impl QualType {

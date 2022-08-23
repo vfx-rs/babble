@@ -19,6 +19,13 @@ use crate::{error, Cursor, TranslationUnit};
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ClassBindKind {
+    OpaquePtr,
+    OpaqueBytes,
+    ValueType,
+}
+
 pub struct ClassDecl {
     pub(crate) usr: USR,
     pub(crate) name: String,
@@ -27,8 +34,10 @@ pub struct ClassDecl {
     pub(crate) namespaces: Vec<USR>,
     pub(crate) template_parameters: Vec<TemplateParameterDecl>,
 
-    ignore: bool,
-    rename: Option<String>,
+    pub(crate) ignore: bool,
+    pub(crate) rename: Option<String>,
+    pub(crate) bind_kind: ClassBindKind,
+
 }
 
 impl ClassDecl {
@@ -49,6 +58,7 @@ impl ClassDecl {
             template_parameters,
             ignore: false,
             rename: None,
+            bind_kind: ClassBindKind::OpaquePtr,
         }
     }
 
@@ -217,7 +227,10 @@ impl ClassDecl {
 
                 distances.sort_by(|a, b| a.0.cmp(&b.0));
 
-                error!("Could not find method matching signature: \"{}\"", signature);
+                error!(
+                    "Could not find method matching signature: \"{}\"",
+                    signature
+                );
                 error!("Did you mean one of:");
                 for (_, sug) in distances.iter().take(3) {
                     error!("  {sug}");
@@ -230,7 +243,10 @@ impl ClassDecl {
                 error!("Multiple matches found for signature \"{signature}\":");
 
                 for (_, method) in matches {
-                    error!("  {}", method.signature(ast, &self.template_parameters, None));
+                    error!(
+                        "  {}",
+                        method.signature(ast, &self.template_parameters, None)
+                    );
                 }
 
                 Err(Error::MultipleMatches)
@@ -253,6 +269,23 @@ impl Display for ClassDecl {
     }
 }
 
+// walk back up through a cursor's semantic parents and add them as namespaces
+pub fn walk_namespaces(c: Result<Cursor>, namespaces: &mut Vec<USR>) {
+    if let Ok(c) = c {
+        if c.kind() != CursorKind::TranslationUnit { 
+            namespaces.push(c.usr());
+            walk_namespaces(c.semantic_parent(), namespaces);
+        }
+    }
+}
+
+pub fn get_namespaces_for_decl(c: Cursor) -> Vec<USR> {
+    let mut namespaces = Vec::new();
+    walk_namespaces(c.semantic_parent(), &mut namespaces);
+    namespaces.reverse();
+    namespaces
+}
+
 pub fn extract_class_decl(
     class_template: Cursor,
     depth: usize,
@@ -262,6 +295,9 @@ pub fn extract_class_decl(
     let indent = format!("{:width$}", "", width = depth * 2);
 
     debug!("{indent}extract_class_decl({})", class_template.usr());
+
+    let namespaces = get_namespaces_for_decl(class_template);
+    println!("SEM NS: {namespaces:?}");
 
     let mut methods = Vec::new();
     let mut fields = Vec::new();
