@@ -167,10 +167,11 @@ pub struct CStruct {
     pub name_private: String,
     /// The name of the struct that will be used for a public #define, e.g. Imath_V3f
     pub name_public: String,
-    pub fields: UstrIndexMap<CField>,
+    pub fields: Vec<CField>,
     pub bind_kind: ClassBindKind,
     /// The class from whence this struct came
     pub class_id: ClassId,
+    pub usr: USR,
 }
 
 impl CStruct {
@@ -178,10 +179,17 @@ impl CStruct {
         format!("struct {}", self.name_private)
     }
 
-    pub fn pretty_print(&self, depth: usize) {
-        println!("typdef struct {0} {{}} {0}_t;", self.name_private);
+    pub fn pretty_print(&self, depth: usize, ast: &CAST) {
+        println!("typedef struct {{");
+
+        for field in self.fields.iter() {
+            println!("  {};", field.format(ast));
+        }
+
+        println!("}} {};", self.name_private);
+
         if self.name_private != self.name_public {
-            println!("#define {} {}", self.name_public, self.name_private);
+            println!("typedef {} {};", self.name_private, self.name_public);
         }
     }
 }
@@ -198,7 +206,7 @@ impl CAST {
 
     pub fn pretty_print(&self, depth: usize) {
         for st in self.structs.iter() {
-            st.pretty_print(depth);
+            st.pretty_print(depth, self);
         }
         println!("");
 
@@ -274,9 +282,8 @@ pub fn get_c_names(
         warn!("Renaming {cpp_name} to {c_name_private}");
     }
 
-
     // if the private and public prefixes are the same then we don't want to uniquify the public name, just use the
-    // private name
+    // private name (which will itself already be unique by the block above)
     if prefix_private == prefix_public {
         c_name_public = c_name_private.clone();
     } else {
@@ -314,7 +321,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> CAST {
             ns_prefix_private = format!("{ns_prefix_private}{}_", ns.name);
 
             // If the namespace has been renamed for public consumption, apply the new name
-            let ns_prefix_public = if let Some(name) = &ns.rename {
+            ns_prefix_public = if let Some(name) = &ns.rename {
                 format!("{ns_prefix_public}{}_", name)
             } else {
                 format!("{ns_prefix_public}{}_", ns.name)
@@ -334,16 +341,24 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> CAST {
             CStruct {
                 name_public: st_c_name_public.clone(),
                 name_private: st_c_name_private.clone(),
-                fields: UstrIndexMap::new(),
+                fields: Vec::new(),
                 bind_kind: class.bind_kind,
                 class_id: ClassId(class_id),
+                usr: class.usr(),
             },
         );
     }
 
-    // Now do the methods
+    // Now do the fields and methods
     for (class_id, class) in ast.classes.iter().enumerate() {
-        let st = structs.get(&class.usr().0).unwrap();
+        let mut st = structs.get_mut(&class.usr().0).unwrap();
+
+        for field in class.fields.iter() {
+            let name = field.name.clone();
+            let qual_type = translate_qual_type(&field.qual_type);
+
+            st.fields.push(CField{name, qual_type})
+        }
 
         // Now the generated struct name becomes the prefix for any methods it has
         let st_prefix_public = format!("{}_", st.name_public);
@@ -352,7 +367,33 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> CAST {
         for (method_id, method) in class.methods.iter().enumerate() {
             let source = CFunctionSource::Method((ClassId(class_id), MethodId(method_id)));
             let result = translate_qual_type(&method.function.result);
-            let arguments = translate_arguments(&method.function.arguments);
+            let mut arguments = translate_arguments(&method.function.arguments);
+
+            // insert self pointer
+            if !method.is_static {
+                let qt = CQualType {
+                    name: format!("{}*", st.name_private),
+                    is_const: false,
+                    type_ref: CTypeRef::Pointer(Box::new(CQualType {
+                        name: st.name_private.clone(),
+                        is_const: method.is_const,
+                        type_ref: CTypeRef::Ref(st.usr),
+                        cpp_type_ref: TypeRef::Ref(class.usr()),
+                    })),
+                    cpp_type_ref: TypeRef::Pointer(Box::new(QualType {
+                        name: class.name.clone(),
+                        is_const: method.is_const,
+                        type_ref: TypeRef::Ref(class.usr()),
+                    })),
+                };
+                arguments.insert(
+                    0,
+                    CArgument {
+                        name: "self".into(),
+                        qual_type: qt,
+                    },
+                );
+            }
 
             let fn_name = if let Some(name) = &method.function.replacement_name {
                 name

@@ -17,7 +17,7 @@ use clang_sys::{
     clang_getCursorPrintingPolicy, clang_getCursorReferenced, clang_getCursorResultType,
     clang_getCursorSpelling, clang_getCursorType, clang_getCursorUSR, clang_getNullCursor,
     clang_isCursorDefinition, clang_isInvalid, clang_visitChildren, CXChildVisitResult,
-    CXChildVisit_Break, CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor, clang_getCursorSemanticParent,
+    CXChildVisit_Break, CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor, clang_getCursorSemanticParent, clang_CXXConstructor_isConvertingConstructor, clang_CXXConstructor_isCopyConstructor, clang_CXXConstructor_isMoveConstructor, clang_CXXConstructor_isDefaultConstructor,
 };
 use std::{
     fmt::{Debug, Display},
@@ -269,6 +269,22 @@ impl Cursor {
 
     pub fn cxx_access_specifier(&self) -> Result<AccessSpecifier> {
         unsafe { clang_getCXXAccessSpecifier(self.inner).try_into() }
+    }
+
+    pub fn cxx_constructor_is_converting_constructor(&self) -> bool {
+        unsafe { clang_CXXConstructor_isConvertingConstructor(self.inner) != 0 }
+    }
+
+    pub fn cxx_constructor_is_copy_constructor(&self) -> bool {
+        unsafe { clang_CXXConstructor_isCopyConstructor(self.inner) != 0 }
+    }
+
+    pub fn cxx_constructor_is_move_constructor(&self) -> bool {
+        unsafe { clang_CXXConstructor_isMoveConstructor(self.inner) != 0 }
+    }
+
+    pub fn cxx_constructor_is_default_constructor(&self) -> bool {
+        unsafe { clang_CXXConstructor_isDefaultConstructor(self.inner) != 0 }
     }
 
     pub fn canonical(&self) -> Result<Cursor> {

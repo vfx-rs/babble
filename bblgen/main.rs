@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use bbl::*;
+use bbl::{*, ast::extract_ast_from_namespace};
 use log::*;
 
 use clap::{Parser, ValueEnum};
@@ -89,17 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cur = tu.get_cursor()?;
 
-    let ast = ast_from_namespace(&args.namespace.unwrap_or("".to_string()), cur, &tu);
-
-    /*
-    #[rustfmt::skip]
-    let ast = AstExtractor::new()
-        .namespace("Imath_3_1")
-            .record("Vec3<T>")
-                .method("operator^").ignore()
-            .specialize("T", "float")
-        .extract();
-    */
+    let ast = extract_ast_from_namespace(&args.namespace.unwrap_or("".to_string()), cur, &tu);
 
     debug!("\n\n");
     ast.pretty_print(0);

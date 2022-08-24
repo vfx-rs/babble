@@ -46,13 +46,13 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn new(usr: USR, name: String, result: QualType, arguments: Vec<Argument>) -> Self {
+    pub fn new(usr: USR, name: String, result: QualType, arguments: Vec<Argument>, replacement_name: Option<String>) -> Self {
         Function {
             usr,
             name,
             result,
             arguments,
-            replacement_name: None,
+            replacement_name,
             ignored: false,
         }
     }
@@ -109,13 +109,14 @@ impl Method {
         name: String,
         result: QualType,
         arguments: Vec<Argument>,
+        rename: Option<String>,
         is_const: bool,
         is_static: bool,
         is_virtual: bool,
         is_pure_virtual: bool,
     ) -> Self {
         Method {
-            function: Function::new(usr, name, result, arguments),
+            function: Function::new(usr, name, result, arguments, rename),
             is_const,
             is_static,
             is_virtual,
@@ -348,14 +349,87 @@ pub fn extract_method(
         }
     }
 
+    let replacement_name = get_default_replacement_name(c_method);
+
     Ok(Method::new(
         c_method.usr(),
         c_method.spelling(),
         result,
         arguments,
+        replacement_name,
         c_method.cxx_method_is_const(),
         c_method.cxx_method_is_static(),
         c_method.cxx_method_is_virtual(),
         c_method.cxx_method_is_pure_virtual(),
     ))
+}
+
+fn get_default_replacement_name(c_method: Cursor) -> Option<String> {
+    match c_method.kind() {
+        CursorKind::Constructor => {
+            if c_method.cxx_constructor_is_copy_constructor() {
+                Some("copy_ctor".into())
+            } else if c_method.cxx_constructor_is_move_constructor() {
+                Some("move_ctor".into())
+            } else if c_method.cxx_constructor_is_move_constructor() {
+                Some("default_ctor".into())
+            } else {
+                Some("ctor".into())
+            }
+        }
+        CursorKind::Destructor => Some("dtor".into()),
+        _ => if c_method.display_name().contains("operator+=") {
+            Some("op_add_assign".into())
+        } else if c_method.display_name().contains("operator+") {
+            Some("op_add".into())
+        } else if c_method.display_name().contains("operator-=") {
+            Some("op_sub_assign".into())
+        } else if c_method.display_name().contains("operator-") && c_method.num_arguments().unwrap() == 1 {
+            Some("op_sub".into())
+        } else if c_method.display_name().contains("operator-") && c_method.num_arguments().unwrap() == 0 {
+            Some("op_neg".into())
+        } else if c_method.display_name().contains("operator*=") {
+            Some("op_mul_assign".into())
+        } else if c_method.display_name().contains("operator*") {
+            Some("op_mul".into())
+        } else if c_method.display_name().contains("operator/=") {
+            Some("op_div_assign".into())
+        } else if c_method.display_name().contains("operator/") {
+            Some("op_div".into())
+        } else if c_method.display_name().contains("operator&=") {
+            Some("op_bitand_assign".into())
+        } else if c_method.display_name().contains("operator&") {
+            Some("op_bitand".into())
+        } else if c_method.display_name().contains("operator|=") {
+            Some("op_bitor_assign".into())
+        } else if c_method.display_name().contains("operator|") {
+            Some("op_bitor".into())
+        } else if c_method.display_name().contains("operator^=") {
+            Some("op_bitxor_assign".into())
+        } else if c_method.display_name().contains("operator^") {
+            Some("op_bitxor".into())
+        } else if c_method.display_name().contains("operator%=") {
+            Some("op_rem_assign".into())
+        } else if c_method.display_name().contains("operator%") {
+            Some("op_rem".into())
+        } else if c_method.display_name().contains("operator<<=") {
+            Some("op_shl_assign".into())
+        } else if c_method.display_name().contains("operator<<") {
+            Some("op_shl".into())
+        } else if c_method.display_name().contains("operator>>=") {
+            Some("op_shr_assign".into())
+        } else if c_method.display_name().contains("operator>>") {
+            Some("op_shr".into())
+        } else if c_method.display_name().contains("operator==") {
+            Some("op_eq".into())
+        } else if c_method.display_name().contains("operator=") {
+            Some("op_assign".into())
+        } else if c_method.display_name().contains("operator!") {
+            Some("op_not".into())
+        } else if c_method.display_name().contains("operator[]") {
+            Some("op_index".into())
+        } else {
+            None
+        }
+    }
 }

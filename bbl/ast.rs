@@ -37,6 +37,10 @@ impl<T> UstrIndexMap<T> {
         self.map.get(key).map(|id| &self.storage[*id])
     }
 
+    pub fn get_mut(&mut self, key: &Ustr) -> Option<&mut T> {
+        self.map.get(key).map(|id| &mut self.storage[*id])
+    }
+
     pub fn get_id(&self, key: &Ustr) -> Option<&usize> {
         self.map.get(key)
     }
@@ -117,6 +121,20 @@ impl AST {
         }
     }
 
+    pub fn find_namespace(&self, name: &str) -> Result<NamespaceId> {
+        for namespace in self.namespaces.iter() {
+            if namespace.name == name {
+                return self
+                    .namespaces
+                    .get_id(&namespace.usr().0)
+                    .map(|i| NamespaceId(*i))
+                    .ok_or(Error::NamespaceNotFound);
+            }
+        }
+
+        Err(Error::RecordNotFound)
+    }
+
     pub fn find_class(&self, name: &str) -> Result<ClassId> {
         for class in self.classes.iter() {
             if class.name() == name {
@@ -129,6 +147,10 @@ impl AST {
         }
 
         Err(Error::RecordNotFound)
+    }
+
+    pub fn rename_namespace(&mut self, namespace_id: NamespaceId, new_name: &str) {
+        self.namespaces.index_mut(namespace_id.0).rename(new_name);
     }
 
     pub fn find_method(&self, class_id: ClassId, signature: &str) -> Result<MethodId> {
@@ -392,4 +414,29 @@ pub fn dump(
 
         dump(child, depth + 1, max_depth, already_visited, tu);
     }
+}
+
+pub fn extract_ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit) -> AST {
+    let ns = if name.is_empty() {
+        c_tu.children()
+    } else {
+        c_tu.children_of_kind_with_name(CursorKind::Namespace, name, true)
+    };
+
+    let mut ast = AST::new();
+    let namespaces = Vec::new();
+    let mut already_visited = Vec::new();
+    for cur in ns {
+        extract_ast(
+            cur.clone(),
+            0,
+            100,
+            &mut already_visited,
+            &mut ast,
+            &tu,
+            namespaces.clone(),
+        );
+    }
+
+    ast
 }

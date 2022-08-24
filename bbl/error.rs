@@ -18,6 +18,7 @@ pub enum Error {
     IoError(std::io::Error),
     ParseError,
     RecordNotFound,
+    NamespaceNotFound,
     MethodNotFound,
     MultipleMatches,
 }

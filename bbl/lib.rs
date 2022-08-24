@@ -19,7 +19,7 @@ pub mod template_argument;
 pub mod type_alias;
 pub mod virtual_file;
 pub mod translate;
-use ast::{extract_ast, AST, dump};
+use ast::{extract_ast, AST, dump, extract_ast_from_namespace};
 pub use cursor::{ChildVisitResult, Cursor};
 pub mod cursor_kind;
 pub mod error;
@@ -92,6 +92,7 @@ pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
     contents: S1,
     cli_args: &[S],
     log_diagnostics: bool,
+    namespace: Option<&str>,
 ) -> Result<AST> {
     let path = virtual_file::write_temp_file(contents.as_ref())?;
     let index = index::Index::new();
@@ -112,7 +113,13 @@ pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
 
     let mut ast = AST::new();
     let mut already_visited = Vec::new();
-    extract_ast(cur, 0, 100, &mut already_visited, &mut ast, &tu, Vec::new());
+
+    if let Some(namespace) = namespace {
+        ast = extract_ast_from_namespace(namespace, cur, &tu);
+    } else {
+        extract_ast(cur, 0, 100, &mut already_visited, &mut ast, &tu, Vec::new());
+    }
+
 
     Ok(ast)
 }
@@ -155,31 +162,6 @@ pub fn parse_string_and_dump_ast<S1: AsRef<str>, S: AsRef<str>>(
 }
 
 use ty::{Type, TypeKind};
-
-pub fn ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit) -> AST {
-    let ns = if name.is_empty() {
-        c_tu.children()
-    } else {
-        c_tu.children_of_kind_with_name(CursorKind::Namespace, name, true)
-    };
-
-    let mut ast = AST::new();
-    let namespaces = Vec::new();
-    let mut already_visited = Vec::new();
-    for cur in ns {
-        extract_ast(
-            cur.clone(),
-            0,
-            10,
-            &mut already_visited,
-            &mut ast,
-            &tu,
-            namespaces.clone(),
-        );
-    }
-
-    ast
-}
 
 #[cfg(test)]
 pub(crate) fn get_test_filename(base: &str) -> String {

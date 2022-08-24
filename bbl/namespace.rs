@@ -16,6 +16,10 @@ impl Namespace {
     pub fn usr(&self) -> USR {
         self.usr
     }
+
+    pub fn rename(&mut self, new_name: &str) {
+        self.rename = Some(new_name.into());
+    }
 }
 
 pub fn extract_namespace(c_namespace: Cursor, depth: usize, tu: &TranslationUnit) -> Namespace {
