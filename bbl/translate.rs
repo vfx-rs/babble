@@ -288,6 +288,7 @@ pub fn translate_arguments(
     arguments: &Vec<Argument>,
     template_parms: &[TemplateParameterDecl],
     template_args: &[Option<TemplateType>],
+    used_argument_names: &mut HashSet<String>,
 ) -> Result<Vec<CArgument>> {
     let mut result = Vec::new();
 
@@ -300,8 +301,15 @@ pub fn translate_arguments(
             }
         };
 
+        // We need to create an argument name if none is specified in the header
+        let name = if arg.name.is_empty() {
+            "arg"
+        } else {
+            &arg.name
+        };
+
         result.push(CArgument {
-            name: arg.name.clone(),
+            name: get_unique_argument_name(name, used_argument_names),
             qual_type,
         });
     }
@@ -402,10 +410,21 @@ fn translate_class_template_specialization(
     functions: &mut UstrIndexMap<CFunction>,
     used_names: &mut HashSet<String>,
 ) -> Result<()> {
-    let class_id = ast.classes.get_id(&cts.specialized_decl.0).ok_or(Error::RecordNotFound)?;
+    let class_id = ast
+        .classes
+        .get_id(&cts.specialized_decl.0)
+        .ok_or(Error::RecordNotFound)?;
     let class = ast.classes.index(*class_id);
 
-    translate_class(ast, ClassId(*class_id), class, &cts.args, structs, functions, used_names);
+    translate_class(
+        ast,
+        ClassId(*class_id),
+        class,
+        &cts.args,
+        structs,
+        functions,
+        used_names,
+    );
 
     Ok(())
 }
@@ -434,8 +453,11 @@ pub fn translate_class(
     let mut fields = Vec::new();
     for field in class.fields.iter() {
         let name = field.name.clone();
-        let qual_type = match translate_qual_type(&field.qual_type, &class.template_parameters, template_args)
-        {
+        let qual_type = match translate_qual_type(
+            &field.qual_type,
+            &class.template_parameters,
+            template_args,
+        ) {
             Ok(qt) => qt,
             Err(e) => {
                 error!(
@@ -488,6 +510,18 @@ pub fn translate_class(
     Ok(())
 }
 
+fn get_unique_argument_name(name: &str, used_argument_names: &mut HashSet<String>) -> String {
+    let mut result = name.to_string();
+
+    let mut i = 0;
+    while used_argument_names.contains(&result) {
+        result = format!("{name}{i}");
+        i += 1
+    }
+
+    result
+}
+
 pub fn translate_method(
     ast: &AST,
     class_id: ClassId,
@@ -504,7 +538,15 @@ pub fn translate_method(
 ) -> Result<CFunction> {
     let source = CFunctionSource::Method((class_id, method_id));
     let result = translate_qual_type(&method.function.result, template_parms, template_args)?;
-    let mut arguments = translate_arguments(&method.function.arguments, template_parms, template_args)?;
+
+    let mut used_argument_names = HashSet::new();
+
+    let mut arguments = translate_arguments(
+        &method.function.arguments,
+        template_parms,
+        template_args,
+        &mut used_argument_names,
+    )?;
 
     // insert self pointer
     if !method.is_static {
@@ -526,7 +568,7 @@ pub fn translate_method(
         arguments.insert(
             0,
             CArgument {
-                name: "self".into(),
+                name: get_unique_argument_name("self", &mut used_argument_names),
                 qual_type: qt,
             },
         );
