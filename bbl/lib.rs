@@ -8,7 +8,6 @@ use std::path::Path;
 use log::*;
 
 pub mod ast;
-pub mod binding;
 pub mod class;
 pub mod cursor;
 pub mod function;
