@@ -13,10 +13,12 @@ impl Binding {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{extract_ast, AST, dump},
+        ast::{dump, extract_ast, AST},
         error::Error,
-        parse_string_and_extract_ast, parse_string_to_tu,
-        translate::translate_cpp_ast_to_c, parse_string_and_dump_ast,
+        parse_string_and_dump_ast, parse_string_and_extract_ast, parse_string_to_tu,
+        qualtype::QualType,
+        template_argument::TemplateType,
+        translate::translate_cpp_ast_to_c,
     };
 
     fn init_log() {
@@ -68,7 +70,7 @@ public:
 
         ast.pretty_print(0);
 
-        let c_ast = translate_cpp_ast_to_c(&ast);
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
 
         c_ast.pretty_print(0);
 
@@ -111,7 +113,7 @@ public:
 
         let method = ast.find_method(class, "take_a(a: Test::A&)")?;
 
-        let c_ast = translate_cpp_ast_to_c(&ast);
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
 
         c_ast.pretty_print(0);
 
@@ -204,7 +206,7 @@ public:
                 "-I/usr/local/include",
             ],
             true,
-            Some("Imath_3_1")
+            Some("Imath_3_1"),
         )?;
 
         ast.pretty_print(0);
@@ -212,13 +214,13 @@ public:
         let namespace = ast.find_namespace("Imath_3_1")?;
         ast.rename_namespace(namespace, "Imath");
 
-        // let class = ast.find_class("B")?;
-
-        // let method = ast.find_method(class, "take_a(a: Test::A&)")?;
-
-        let c_ast = translate_cpp_ast_to_c(&ast);
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
 
         c_ast.pretty_print(0);
+
+        // This will have to do for now
+        assert_eq!(c_ast.structs.len(), 1);
+        assert_eq!(c_ast.functions.len(), 42);
 
         Ok(())
     }
@@ -296,6 +298,52 @@ public:
         ast.pretty_print(0);
 
         let bind = Binding::new(ast);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_binding_template() -> Result<(), Error> {
+        init_log();
+
+        let mut ast = parse_string_and_extract_ast(
+            r#"
+
+namespace Test {
+
+template <typename T>
+class Class {
+    T a;
+public:
+    T return_t();
+    void take_t(const T*) const;
+};
+
+}
+    
+        "#,
+            &[
+                "-resource-dir",
+                "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
+                "-std=c++14",
+                "-I/usr/include",
+                "-I/usr/local/include",
+            ],
+            true,
+            None,
+        )?;
+
+        let class = ast.find_class("Class")?;
+        ast.specialize_class(
+            class,
+            "ClassFloat",
+            vec![Some(TemplateType::Type(QualType::float()))],
+        );
+
+        ast.pretty_print(0);
+
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        c_ast.pretty_print(0);
 
         Ok(())
     }

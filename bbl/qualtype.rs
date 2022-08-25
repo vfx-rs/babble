@@ -41,6 +41,14 @@ impl QualType {
         }
     }
 
+    pub fn float() -> Self {
+        QualType {
+            name: "float".into(),
+            is_const: false,
+            type_ref: TypeRef::Builtin(TypeKind::Float),
+        }
+    }
+
     pub fn format(
         &self,
         ast: &AST,

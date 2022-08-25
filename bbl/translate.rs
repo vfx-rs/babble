@@ -1,16 +1,22 @@
 use std::{fmt::Display, str::FromStr};
 
 use hashbrown::HashSet;
-use log::warn;
+use log::{error, warn};
 use ustr::Ustr;
 
+use crate::error::Error;
+type Result<T, E = Error> = std::result::Result<T, E>;
+
+use crate::template_argument::TemplateParameterDecl;
 use crate::{
     ast::{ClassId, FunctionId, MethodId, UstrIndexMap, AST},
-    class::ClassBindKind,
+    class::{ClassBindKind, ClassDecl},
     cursor::USR,
-    function::Argument,
+    function::{Argument, Method},
     qualtype::{QualType, TypeRef},
+    template_argument::TemplateType,
     ty::TypeKind,
+    type_alias::TypeAlias,
 };
 
 pub enum CTypeRef {
@@ -214,45 +220,93 @@ impl CAST {
             fun.pretty_print(depth, self);
         }
         println!("");
+
+        println!(
+            "{} structs and {} functions",
+            self.structs.len(),
+            self.functions.len()
+        );
     }
 }
 
-pub fn translate_qual_type(qual_type: &QualType) -> CQualType {
+pub fn translate_qual_type(
+    qual_type: &QualType,
+    template_parms: &[TemplateParameterDecl],
+    template_args: &[Option<TemplateType>],
+) -> Result<CQualType> {
     match &qual_type.type_ref {
-        TypeRef::Builtin(tk) => CQualType {
+        TypeRef::Builtin(tk) => Ok(CQualType {
             name: qual_type.name.clone(),
             is_const: qual_type.is_const,
             type_ref: CTypeRef::Builtin(*tk),
             cpp_type_ref: qual_type.type_ref.clone(),
-        },
+        }),
         TypeRef::Pointer(qt) | TypeRef::LValueReference(qt) | TypeRef::RValueReference(qt) => {
-            CQualType {
+            Ok(CQualType {
                 name: qual_type.name.clone(),
                 is_const: qual_type.is_const,
-                type_ref: CTypeRef::Pointer(Box::new(translate_qual_type(qt.as_ref()))),
+                type_ref: CTypeRef::Pointer(Box::new(translate_qual_type(
+                    qt.as_ref(),
+                    template_parms,
+                    template_args,
+                )?)),
                 cpp_type_ref: qual_type.type_ref.clone(),
-            }
+            })
         }
-        TypeRef::Ref(usr) => CQualType {
+        TypeRef::Ref(usr) => Ok(CQualType {
             name: qual_type.name.clone(),
             is_const: qual_type.is_const,
             type_ref: CTypeRef::Ref(*usr),
             cpp_type_ref: qual_type.type_ref.clone(),
-        },
+        }),
+        TypeRef::TemplateTypeParameter(parm_name) => {
+            // find the parameter with the given name in the params list, then get the matching arg here
+            let parm_index = template_parms
+                .iter()
+                .position(|p| p.name() == parm_name)
+                .ok_or(Error::TemplateParmNotFound(parm_name.into()))?;
+
+            if parm_index >= template_args.len() {
+                Err(Error::TemplateArgNotFound(parm_name.into()))
+            } else {
+                match &template_args[parm_index] {
+                    Some(TemplateType::Type(tty)) => {
+                        translate_qual_type(tty, template_parms, template_args)
+                    }
+                    Some(TemplateType::Integer(n)) => {
+                        todo!()
+                    }
+                    None => return Err(Error::InvalidTemplateArgumentKind),
+                }
+            }
+        }
         _ => todo!(),
     }
 }
 
-pub fn translate_arguments(arguments: &Vec<Argument>) -> Vec<CArgument> {
+pub fn translate_arguments(
+    arguments: &Vec<Argument>,
+    template_parms: &[TemplateParameterDecl],
+    template_args: &[Option<TemplateType>],
+) -> Result<Vec<CArgument>> {
     let mut result = Vec::new();
+
     for arg in arguments {
+        let qual_type = match translate_qual_type(&arg.qual_type, template_parms, template_args) {
+            Ok(qt) => qt,
+            Err(e) => {
+                error!("Error translating argument {}: {e}", arg.name);
+                return Err(e);
+            }
+        };
+
         result.push(CArgument {
             name: arg.name.clone(),
-            qual_type: translate_qual_type(&arg.qual_type),
+            qual_type,
         });
     }
 
-    result
+    Ok(result)
 }
 
 /// Given a C++ entity name, and a public and private prefix, generate the equivalent names for the C API, possibly
@@ -301,125 +355,219 @@ pub fn get_c_names(
     (c_name_public, c_name_private)
 }
 
-pub fn translate_cpp_ast_to_c(ast: &AST) -> CAST {
+pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
     let mut structs = UstrIndexMap::new();
     let mut functions = UstrIndexMap::new();
 
     let mut used_names = HashSet::new();
 
-    // Do all the classes first in one loop so we've got the struct definitions for when we do the methods
     for (class_id, class) in ast.classes.iter().enumerate() {
-        // build the namespace prefix
-        let mut ns_prefix_private = String::new();
-        let mut ns_prefix_public = String::new();
-        for uns in &class.namespaces {
-            let ns = ast
-                .get_namespace(*uns)
-                .expect(&format!("Could not get namespace {}", uns));
-
-            // The private namespace name is always taken from its decl
-            ns_prefix_private = format!("{ns_prefix_private}{}_", ns.name);
-
-            // If the namespace has been renamed for public consumption, apply the new name
-            ns_prefix_public = if let Some(name) = &ns.rename {
-                format!("{ns_prefix_public}{}_", name)
-            } else {
-                format!("{ns_prefix_public}{}_", ns.name)
-            };
+        // if this is a template class, we'll ignore it and translate its specializations instead
+        // TODO (AL): do we want to use a separate type for ClassTemplate again?
+        if !class.template_parameters.is_empty() {
+            continue;
         }
-        let ns_prefix_private = ns_prefix_private;
 
-        let (st_c_name_public, st_c_name_private) = get_c_names(
-            class.name(),
-            &ns_prefix_public,
-            &ns_prefix_private,
+        translate_class(
+            ast,
+            ClassId(class_id),
+            class,
+            &[],
+            &mut structs,
+            &mut functions,
             &mut used_names,
         );
+    }
 
-        structs.insert(
-            class.usr().0,
-            CStruct {
-                name_public: st_c_name_public.clone(),
-                name_private: st_c_name_private.clone(),
-                fields: Vec::new(),
-                bind_kind: class.bind_kind,
-                class_id: ClassId(class_id),
-                usr: class.usr(),
+    for (type_alias_id, type_alias) in ast.type_aliases.iter().enumerate() {
+        match type_alias {
+            TypeAlias::ClassTemplateSpecialization(cts) => translate_class_template_specialization(
+                ast,
+                cts,
+                &mut structs,
+                &mut functions,
+                &mut used_names,
+            )?,
+            _ => todo!(),
+        }
+    }
+
+    Ok(CAST { structs, functions })
+}
+
+fn translate_class_template_specialization(
+    ast: &AST,
+    cts: &crate::type_alias::ClassTemplateSpecialization,
+    structs: &mut UstrIndexMap<CStruct>,
+    functions: &mut UstrIndexMap<CFunction>,
+    used_names: &mut HashSet<String>,
+) -> Result<()> {
+    let class_id = ast.classes.get_id(&cts.specialized_decl.0).ok_or(Error::RecordNotFound)?;
+    let class = ast.classes.index(*class_id);
+
+    translate_class(ast, ClassId(*class_id), class, &cts.args, structs, functions, used_names);
+
+    Ok(())
+}
+
+pub fn translate_class(
+    ast: &AST,
+    class_id: ClassId,
+    class: &ClassDecl,
+    template_args: &[Option<TemplateType>],
+    structs: &mut UstrIndexMap<CStruct>,
+    functions: &mut UstrIndexMap<CFunction>,
+    used_names: &mut HashSet<String>,
+) -> Result<()> {
+    // build the namespace prefix
+    let (ns_prefix_public, ns_prefix_private) = build_namespace_prefix(ast, &class.namespaces);
+
+    // get unique, prefixed names for the struct
+    let (st_c_name_public, st_c_name_private) = get_c_names(
+        class.name(),
+        &ns_prefix_public,
+        &ns_prefix_private,
+        used_names,
+    );
+
+    // translate the fields
+    let mut fields = Vec::new();
+    for field in class.fields.iter() {
+        let name = field.name.clone();
+        let qual_type = match translate_qual_type(&field.qual_type, &class.template_parameters, template_args)
+        {
+            Ok(qt) => qt,
+            Err(e) => {
+                error!(
+                    "Could not translate field {name} of class {}: {e}",
+                    class.name()
+                );
+                return Err(e);
+            }
+        };
+
+        fields.push(CField { name, qual_type })
+    }
+
+    structs.insert(
+        class.usr().0,
+        CStruct {
+            name_public: st_c_name_public.clone(),
+            name_private: st_c_name_private.clone(),
+            fields,
+            bind_kind: class.bind_kind,
+            class_id: class_id,
+            usr: class.usr(),
+        },
+    );
+
+    // Now the generated struct name becomes the prefix for any methods it has
+    let st_prefix_public = format!("{}_", st_c_name_public);
+    let st_prefix_private = format!("{}_", st_c_name_private);
+
+    // translate the class's methods to functions
+    for (method_id, method) in class.methods.iter().enumerate() {
+        let c_function = translate_method(
+            ast,
+            class_id,
+            class,
+            &class.template_parameters,
+            template_args,
+            MethodId(method_id),
+            method,
+            &st_prefix_public,
+            &st_prefix_private,
+            &st_c_name_public,
+            &st_c_name_private,
+            used_names,
+        )?;
+
+        functions.insert(method.usr().0, c_function);
+    }
+
+    Ok(())
+}
+
+pub fn translate_method(
+    ast: &AST,
+    class_id: ClassId,
+    class: &ClassDecl,
+    template_parms: &[TemplateParameterDecl],
+    template_args: &[Option<TemplateType>],
+    method_id: MethodId,
+    method: &Method,
+    st_prefix_public: &str,
+    st_prefix_private: &str,
+    st_c_name_public: &str,
+    st_c_name_private: &str,
+    used_names: &mut HashSet<String>,
+) -> Result<CFunction> {
+    let source = CFunctionSource::Method((class_id, method_id));
+    let result = translate_qual_type(&method.function.result, template_parms, template_args)?;
+    let mut arguments = translate_arguments(&method.function.arguments, template_parms, template_args)?;
+
+    // insert self pointer
+    if !method.is_static {
+        let qt = CQualType {
+            name: format!("{}*", st_c_name_private),
+            is_const: false,
+            type_ref: CTypeRef::Pointer(Box::new(CQualType {
+                name: st_c_name_private.into(),
+                is_const: method.is_const,
+                type_ref: CTypeRef::Ref(class.usr()),
+                cpp_type_ref: TypeRef::Ref(class.usr()),
+            })),
+            cpp_type_ref: TypeRef::Pointer(Box::new(QualType {
+                name: class.name.clone(),
+                is_const: method.is_const,
+                type_ref: TypeRef::Ref(class.usr()),
+            })),
+        };
+        arguments.insert(
+            0,
+            CArgument {
+                name: "self".into(),
+                qual_type: qt,
             },
         );
     }
 
-    // Now do the fields and methods
-    for (class_id, class) in ast.classes.iter().enumerate() {
-        let mut st = structs.get_mut(&class.usr().0).unwrap();
+    let fn_name = if let Some(name) = &method.function.replacement_name {
+        name
+    } else {
+        &method.function.name
+    };
 
-        for field in class.fields.iter() {
-            let name = field.name.clone();
-            let qual_type = translate_qual_type(&field.qual_type);
+    let (fn_name_public, fn_name_private) =
+        get_c_names(fn_name, st_prefix_public, st_prefix_private, used_names);
 
-            st.fields.push(CField{name, qual_type})
-        }
+    Ok(CFunction {
+        name_private: fn_name_private,
+        name_public: fn_name_public,
+        result,
+        arguments,
+        source,
+    })
+}
 
-        // Now the generated struct name becomes the prefix for any methods it has
-        let st_prefix_public = format!("{}_", st.name_public);
-        let st_prefix_private = format!("{}_", st.name_private);
+pub fn build_namespace_prefix(ast: &AST, namespaces: &[USR]) -> (String, String) {
+    let mut ns_prefix_private = String::new();
+    let mut ns_prefix_public = String::new();
+    for uns in namespaces {
+        let ns = ast
+            .get_namespace(*uns)
+            .expect(&format!("Could not get namespace {}", uns));
 
-        for (method_id, method) in class.methods.iter().enumerate() {
-            let source = CFunctionSource::Method((ClassId(class_id), MethodId(method_id)));
-            let result = translate_qual_type(&method.function.result);
-            let mut arguments = translate_arguments(&method.function.arguments);
+        // The private namespace name is always taken from its decl
+        ns_prefix_private = format!("{ns_prefix_private}{}_", ns.name);
 
-            // insert self pointer
-            if !method.is_static {
-                let qt = CQualType {
-                    name: format!("{}*", st.name_private),
-                    is_const: false,
-                    type_ref: CTypeRef::Pointer(Box::new(CQualType {
-                        name: st.name_private.clone(),
-                        is_const: method.is_const,
-                        type_ref: CTypeRef::Ref(st.usr),
-                        cpp_type_ref: TypeRef::Ref(class.usr()),
-                    })),
-                    cpp_type_ref: TypeRef::Pointer(Box::new(QualType {
-                        name: class.name.clone(),
-                        is_const: method.is_const,
-                        type_ref: TypeRef::Ref(class.usr()),
-                    })),
-                };
-                arguments.insert(
-                    0,
-                    CArgument {
-                        name: "self".into(),
-                        qual_type: qt,
-                    },
-                );
-            }
-
-            let fn_name = if let Some(name) = &method.function.replacement_name {
-                name
-            } else {
-                &method.function.name
-            };
-
-            let (fn_name_public, fn_name_private) = get_c_names(
-                fn_name,
-                &st_prefix_public,
-                &st_prefix_private,
-                &mut used_names,
-            );
-
-            functions.insert(
-                method.usr().0,
-                CFunction {
-                    name_private: fn_name_private,
-                    name_public: fn_name_public,
-                    result,
-                    arguments,
-                    source,
-                },
-            );
-        }
+        // If the namespace has been renamed for public consumption, apply the new name
+        ns_prefix_public = if let Some(name) = &ns.rename {
+            format!("{ns_prefix_public}{}_", name)
+        } else {
+            format!("{ns_prefix_public}{}_", ns.name)
+        };
     }
 
-    CAST { structs, functions }
+    (ns_prefix_public, ns_prefix_private)
 }

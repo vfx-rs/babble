@@ -6,7 +6,8 @@ use crate::class::ClassDecl;
 use crate::function::{Function, Method};
 use crate::index::Index;
 use crate::namespace::{self, extract_namespace, Namespace};
-use crate::type_alias::TypeAlias;
+use crate::template_argument::{TemplateArgument, TemplateType};
+use crate::type_alias::{ClassTemplateSpecialization, TypeAlias};
 use crate::{
     class::extract_class_decl, cursor::USR, cursor_kind::CursorKind,
     type_alias::extract_class_template_specialization, Cursor, TranslationUnit,
@@ -149,6 +150,31 @@ impl AST {
         Err(Error::RecordNotFound)
     }
 
+    pub fn specialize_class(
+        &mut self,
+        class_id: ClassId,
+        name: &str,
+        args: Vec<Option<TemplateType>>,
+    ) -> Result<TypeAliasId> {
+        let class_decl = self.classes.index(class_id.0);
+
+        let usr = USR(Ustr::from(&format!("{}_{name}", class_decl.usr().0)));
+
+        let cts = ClassTemplateSpecialization {
+            specialized_decl: class_decl.usr(),
+            usr,
+            name: name.into(),
+            args,
+            namespaces: Vec::new(),
+        };
+
+        let id = self
+            .type_aliases
+            .insert(usr.0, TypeAlias::ClassTemplateSpecialization(cts));
+
+        Ok(TypeAliasId(id))
+    }
+
     pub fn rename_namespace(&mut self, namespace_id: NamespaceId, new_name: &str) {
         self.namespaces.index_mut(namespace_id.0).rename(new_name);
     }
@@ -159,7 +185,9 @@ impl AST {
     }
 
     pub fn rename_method(&mut self, class_id: ClassId, method_id: MethodId, new_name: &str) {
-        self.classes.index_mut(class_id.0).rename_method(method_id, new_name);
+        self.classes
+            .index_mut(class_id.0)
+            .rename_method(method_id, new_name);
     }
 
     pub fn ignore_method(&mut self, class_id: ClassId, method_id: MethodId) {

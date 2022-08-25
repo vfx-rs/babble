@@ -21,6 +21,8 @@ pub enum Error {
     NamespaceNotFound,
     MethodNotFound,
     MultipleMatches,
+    TemplateParmNotFound(String),
+    TemplateArgNotFound(String),
 }
 
 impl std::fmt::Display for Error {
