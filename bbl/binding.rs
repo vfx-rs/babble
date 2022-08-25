@@ -313,8 +313,8 @@ namespace Test {
 
 template <typename T>
 class Class {
-    T a;
 public:
+    T a;
     T return_t();
     void take_t(const T*) const;
 };
