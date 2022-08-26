@@ -7,10 +7,11 @@ use clang_sys::{
 };
 use log::*;
 use std::fmt::Display;
+use ustr::Ustr;
 
-use crate::ast::{MethodId, AST, get_namespaces_for_decl};
+use crate::ast::{get_namespaces_for_decl, MethodId, AST};
 use crate::cursor_kind::CursorKind;
-use crate::function::extract_method;
+use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::qualtype::extract_type;
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
 use crate::{cursor::USR, function::Method, qualtype::QualType};
@@ -26,6 +27,8 @@ pub enum ClassBindKind {
     ValueType,
 }
 
+pub struct MethodSpecializationId(pub(crate) usize);
+
 pub struct ClassDecl {
     pub(crate) usr: USR,
     pub(crate) name: String,
@@ -37,7 +40,7 @@ pub struct ClassDecl {
     pub(crate) ignore: bool,
     pub(crate) rename: Option<String>,
     pub(crate) bind_kind: ClassBindKind,
-
+    pub(crate) specialized_methods: Vec<MethodTemplateSpecialization>,
 }
 
 impl ClassDecl {
@@ -59,6 +62,7 @@ impl ClassDecl {
             ignore: false,
             rename: None,
             bind_kind: ClassBindKind::OpaquePtr,
+            specialized_methods: Vec::new(),
         }
     }
 
@@ -260,6 +264,31 @@ impl ClassDecl {
 
     pub fn ignore_method(&mut self, method_id: MethodId) {
         self.methods[method_id.0].ignore();
+    }
+
+    pub fn specialize_method(
+        &mut self,
+        method_id: MethodId,
+        name: &str,
+        args: Vec<Option<TemplateType>>,
+    ) -> Result<MethodSpecializationId> {
+        let method_decl = &self.methods[method_id.0];
+
+        let usr = USR(Ustr::from(&format!("{}_{name}", method_decl.usr().0)));
+
+        let id = self.specialized_methods.len();
+
+        let mts = MethodTemplateSpecialization {
+            specialized_decl: method_id,
+            usr,
+            name: name.into(),
+            args,
+            namespaces: Vec::new(),
+        };
+
+        self.specialized_methods.push(mts);
+
+        Ok(MethodSpecializationId(id))
     }
 }
 

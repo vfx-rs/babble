@@ -18,6 +18,7 @@ pub struct TemplateArgument {
     pub tty: TemplateType,
 }
 
+#[derive(Clone)]
 pub enum TemplateType {
     Type(QualType),
     Integer(String),

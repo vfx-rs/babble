@@ -4,7 +4,8 @@ use hashbrown::HashSet;
 use log::{error, warn};
 use ustr::Ustr;
 
-use crate::error::Error;
+use crate::class::MethodSpecializationId;
+use crate::error::{Error, TranslateArgumentError, TranslateTypeError};
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 use crate::template_argument::TemplateParameterDecl;
@@ -116,6 +117,7 @@ pub enum CFunctionSource {
     Method((ClassId, MethodId)),
     /// This function was translated from a c++ function
     Function(FunctionId),
+    SpecializedMethod((ClassId, MethodSpecializationId))
 }
 
 pub struct CFunction {
@@ -233,7 +235,7 @@ pub fn translate_qual_type(
     qual_type: &QualType,
     template_parms: &[TemplateParameterDecl],
     template_args: &[Option<TemplateType>],
-) -> Result<CQualType> {
+) -> Result<CQualType, TranslateTypeError> {
     match &qual_type.type_ref {
         TypeRef::Builtin(tk) => Ok(CQualType {
             name: qual_type.name.clone(),
@@ -264,10 +266,10 @@ pub fn translate_qual_type(
             let parm_index = template_parms
                 .iter()
                 .position(|p| p.name() == parm_name)
-                .ok_or(Error::TemplateParmNotFound(parm_name.into()))?;
+                .ok_or(TranslateTypeError::TemplateParmNotFound(parm_name.into()))?;
 
             if parm_index >= template_args.len() {
-                Err(Error::TemplateArgNotFound(parm_name.into()))
+                Err(TranslateTypeError::TemplateArgNotFound(parm_name.into()))
             } else {
                 match &template_args[parm_index] {
                     Some(TemplateType::Type(tty)) => {
@@ -276,7 +278,11 @@ pub fn translate_qual_type(
                     Some(TemplateType::Integer(n)) => {
                         todo!()
                     }
-                    None => return Err(Error::InvalidTemplateArgumentKind),
+                    None => {
+                        return Err(TranslateTypeError::InvalidTemplateArgumentKind(
+                            parm_name.into(),
+                        ))
+                    }
                 }
             }
         }
@@ -289,17 +295,18 @@ pub fn translate_arguments(
     template_parms: &[TemplateParameterDecl],
     template_args: &[Option<TemplateType>],
     used_argument_names: &mut HashSet<String>,
-) -> Result<Vec<CArgument>> {
+) -> Result<Vec<CArgument>, TranslateArgumentError> {
     let mut result = Vec::new();
 
     for arg in arguments {
-        let qual_type = match translate_qual_type(&arg.qual_type, template_parms, template_args) {
-            Ok(qt) => qt,
-            Err(e) => {
+        let qual_type = translate_qual_type(&arg.qual_type, template_parms, template_args)
+            .map_err(|e| {
                 error!("Error translating argument {}: {e}", arg.name);
-                return Err(e);
-            }
-        };
+                TranslateArgumentError {
+                    name: arg.name.clone(),
+                    source: e,
+                }
+            })?;
 
         // We need to create an argument name if none is specified in the header
         let name = if arg.name.is_empty() {
@@ -384,7 +391,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
             &mut structs,
             &mut functions,
             &mut used_names,
-        );
+        )?;
     }
 
     for (type_alias_id, type_alias) in ast.type_aliases.iter().enumerate() {
@@ -482,7 +489,7 @@ pub fn translate_class(
     used_names: &mut HashSet<String>,
 ) -> Result<()> {
     // build the namespace prefix
-    let (ns_prefix_public, ns_prefix_private) = build_namespace_prefix(ast, &class.namespaces);
+    let (ns_prefix_public, ns_prefix_private) = build_namespace_prefix(ast, &class.namespaces)?;
 
     // get unique, prefixed names for the struct
     let (st_c_name_public, st_c_name_private) = get_c_names(
@@ -507,7 +514,7 @@ pub fn translate_class(
                     "Could not translate field {name} of class {}: {e}",
                     class.name()
                 );
-                return Err(e);
+                return Err(Error::TranslateField { name, source: e });
             }
         };
 
@@ -532,13 +539,42 @@ pub fn translate_class(
 
     // translate the class's methods to functions
     for (method_id, method) in class.methods.iter().enumerate() {
+        if method.is_templated() {
+            // if the method itself has template parameters, then skip it and we'll deal with specializations
+            // separately
+            continue;
+        }
+
         let c_function = translate_method(
             ast,
             class_id,
             class,
             &class.template_parameters,
             template_args,
-            MethodId(method_id),
+            CFunctionSource::Method((class_id, MethodId(method_id))),
+            method,
+            &st_prefix_public,
+            &st_prefix_private,
+            &st_c_name_public,
+            &st_c_name_private,
+            used_names,
+        )?;
+
+        functions.insert(method.usr().0, c_function);
+    }
+
+    for (spec_method_id, spec_method) in class.specialized_methods.iter().enumerate() {
+        let combined_template_args = template_args.iter().cloned().chain(spec_method.args.iter().cloned()).collect::<Vec<_>>();
+        let source = CFunctionSource::SpecializedMethod((class_id, MethodSpecializationId(spec_method_id)));
+        let method = &class.methods[spec_method.specialized_decl.0];
+
+        let c_function = translate_method(
+            ast,
+            class_id,
+            class,
+            &class.template_parameters,
+            &combined_template_args,
+            source,
             method,
             &st_prefix_public,
             &st_prefix_private,
@@ -574,14 +610,21 @@ fn translate_function(
     template_args: &[Option<TemplateType>],
 ) -> Result<()> {
     // build the namespace prefix
-    let (ns_prefix_public, ns_prefix_private) = build_namespace_prefix(ast, &function.namespaces);
+    let (ns_prefix_public, ns_prefix_private) = build_namespace_prefix(ast, &function.namespaces)?;
 
     let source = CFunctionSource::Function(function_id);
     let result = translate_qual_type(
         &function.result,
         &function.template_parameters,
         template_args,
-    )?;
+    )
+    .map_err(|e| Error::TranslateFunction {
+        name: function.name.clone(),
+        source: TranslateArgumentError {
+            name: "[return]".into(),
+            source: e,
+        },
+    })?;
 
     let mut used_argument_names = HashSet::new();
 
@@ -590,7 +633,11 @@ fn translate_function(
         &function.template_parameters,
         template_args,
         &mut used_argument_names,
-    )?;
+    )
+    .map_err(|e| Error::TranslateFunction {
+        name: function.name.clone(),
+        source: e,
+    })?;
 
     let fn_name = if let Some(name) = &function.replacement_name {
         name
@@ -619,9 +666,9 @@ pub fn translate_method(
     ast: &AST,
     class_id: ClassId,
     class: &ClassDecl,
-    template_parms: &[TemplateParameterDecl],
+    class_template_parms: &[TemplateParameterDecl],
     template_args: &[Option<TemplateType>],
-    method_id: MethodId,
+    source: CFunctionSource,
     method: &Method,
     st_prefix_public: &str,
     st_prefix_private: &str,
@@ -629,17 +676,36 @@ pub fn translate_method(
     st_c_name_private: &str,
     used_names: &mut HashSet<String>,
 ) -> Result<CFunction> {
-    let source = CFunctionSource::Method((class_id, method_id));
-    let result = translate_qual_type(&method.function.result, template_parms, template_args)?;
+    // Concatenate both the class template parameters and any template parameters on the function
+    let template_parms = method
+        .function
+        .template_parameters
+        .iter()
+        .cloned()
+        .chain(class_template_parms.iter().cloned())
+        .collect::<Vec<_>>();
+
+    let result = translate_qual_type(&method.function.result, &template_parms, template_args)
+        .map_err(|e| Error::TranslateFunction {
+            name: format!("{}::{}", class.name(), method.name()),
+            source: TranslateArgumentError {
+                name: "[return]".into(),
+                source: e,
+            },
+        })?;
 
     let mut used_argument_names = HashSet::new();
 
     let mut arguments = translate_arguments(
         &method.function.arguments,
-        template_parms,
+        &template_parms,
         template_args,
         &mut used_argument_names,
-    )?;
+    )
+    .map_err(|e| Error::TranslateFunction {
+        name: format!("{}::{}", class.name(), method.name()),
+        source: e,
+    })?;
 
     // insert self pointer
     if !method.is_static {
@@ -685,24 +751,25 @@ pub fn translate_method(
     })
 }
 
-pub fn build_namespace_prefix(ast: &AST, namespaces: &[USR]) -> (String, String) {
+pub fn build_namespace_prefix(ast: &AST, namespaces: &[USR]) -> Result<(String, String)> {
     let mut ns_prefix_private = String::new();
     let mut ns_prefix_public = String::new();
     for uns in namespaces {
-        let ns = ast
-            .get_namespace(*uns)
-            .expect(&format!("Could not get namespace {}", uns));
+        // let ns = ast
+        //     .get_namespace(*uns)
+        //     .expect(&format!("Could not get namespace {}", uns));
+        let names = ast.get_class_or_namespace_names(*uns)?;
 
         // The private namespace name is always taken from its decl
-        ns_prefix_private = format!("{ns_prefix_private}{}_", ns.name);
+        ns_prefix_private = format!("{ns_prefix_private}{}_", names.0);
 
         // If the namespace has been renamed for public consumption, apply the new name
-        ns_prefix_public = if let Some(name) = &ns.rename {
+        ns_prefix_public = if let Some(name) = names.1 {
             format!("{ns_prefix_public}{}_", name)
         } else {
-            format!("{ns_prefix_public}{}_", ns.name)
+            format!("{ns_prefix_public}{}_", names.0)
         };
     }
 
-    (ns_prefix_public, ns_prefix_private)
+    Ok((ns_prefix_public, ns_prefix_private))
 }

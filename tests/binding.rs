@@ -391,3 +391,50 @@ T function_template(T&& a, float*);
 
     Ok(())
 }
+
+#[test]
+fn bind_method_template() -> Result<(), Error> {
+    common::init_log();
+
+    let mut ast = parse_string_and_extract_ast(
+        r#"
+namespace Test {
+class Class {
+public:
+    template <typename T>
+    T method_template(T&& a, float*);
+};
+}
+        "#,
+        &[
+            "-resource-dir",
+            "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
+            "-std=c++14",
+            "-I/usr/include",
+            "-I/usr/local/include",
+        ],
+        true,
+        None,
+    )?;
+
+    ast.pretty_print(0);
+    let class = ast.find_class("Class")?;
+    let method = ast.find_method(class, "method_template")?;
+    ast.specialize_method(
+        class,
+        method,
+        "method_float",
+        vec![Some(TemplateType::Type(QualType::float()))],
+    )?;
+
+
+    ast.pretty_print(0);
+
+    let c_ast = translate_cpp_ast_to_c(&ast)?;
+    c_ast.pretty_print(0);
+
+    assert_eq!(c_ast.structs.len(), 1);
+    assert_eq!(c_ast.functions.len(), 1);
+
+    Ok(())
+}

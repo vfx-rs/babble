@@ -2,7 +2,7 @@ use ustr::{Ustr, UstrMap};
 
 use log::*;
 
-use crate::class::ClassDecl;
+use crate::class::{ClassDecl, MethodSpecializationId};
 use crate::function::{Function, Method, extract_function};
 use crate::index::Index;
 use crate::namespace::{self, extract_namespace, Namespace};
@@ -259,6 +259,36 @@ impl AST {
         class.find_method(self, signature).map(|t| t.0)
     }
 
+    pub fn specialize_method(
+        &mut self,
+        class_id: ClassId,
+        method_id: MethodId,
+        name: &str,
+        args: Vec<Option<TemplateType>>,
+    ) -> Result<MethodSpecializationId> {
+        self.classes
+            .index_mut(class_id.0)
+            .specialize_method(method_id, name, args)
+
+        // let function_decl = self.functions.index(function_id.0);
+
+        // let usr = USR(Ustr::from(&format!("{}_{name}", function_decl.usr().0)));
+
+        // let fts = FunctionTemplateSpecialization {
+        //     specialized_decl: function_decl.usr(),
+        //     usr,
+        //     name: name.into(),
+        //     args,
+        //     namespaces: Vec::new(),
+        // };
+
+        // let id = self
+        //     .type_aliases
+        //     .insert(usr.0, TypeAlias::FunctionTemplateSpecialization(fts));
+
+        // Ok(TypeAliasId(id))
+    }
+
     pub fn rename_method(&mut self, class_id: ClassId, method_id: MethodId, new_name: &str) {
         self.classes
             .index_mut(class_id.0)
@@ -295,6 +325,16 @@ impl AST {
 
     pub fn get_namespace(&self, usr: USR) -> Option<&Namespace> {
         self.namespaces.get(&usr.0)
+    }
+
+    pub fn get_class_or_namespace_names(&self, usr: USR) -> Result<(&str, Option<&String>)> {
+        if let Some(ns) = self.namespaces.get(&usr.0) {
+            Ok((&ns.name, ns.rename.as_ref()))
+        } else if let Some(class) = self.classes.get(&usr.0) {
+            Ok((&class.name, class.rename.as_ref()))
+        } else {
+            Err(Error::ClassOrNamespaceNotFound(usr))
+        }
     }
 }
 

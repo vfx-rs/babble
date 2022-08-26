@@ -1,7 +1,7 @@
 use log::*;
 use std::fmt::Display;
 
-use crate::ast::get_namespaces_for_decl;
+use crate::ast::{get_namespaces_for_decl, MethodId};
 use crate::cursor_kind::CursorKind;
 use crate::qualtype::{extract_type, extract_type_from_typeref};
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
@@ -68,6 +68,14 @@ impl Function {
             namespaces,
             template_parameters,
         }
+    }
+
+    pub fn template_parameters(&self) -> &[TemplateParameterDecl] {
+        &self.template_parameters
+    }
+
+    pub fn is_templated(&self) -> bool {
+        !self.template_parameters.is_empty()
     }
 
     pub fn usr(&self) -> USR {
@@ -191,6 +199,15 @@ impl Method {
         }
     }
 
+
+    pub fn template_parameters(&self) -> &[TemplateParameterDecl] {
+        self.function.template_parameters()
+    }
+
+    pub fn is_templated(&self) -> bool {
+        self.function.is_templated()
+    }
+
     pub fn usr(&self) -> USR {
         self.function.usr
     }
@@ -273,6 +290,19 @@ impl Method {
 
         println!("{indent}{s}{attr_string}");
     }
+}
+
+pub struct MethodTemplateSpecialization {
+    pub(crate) specialized_decl: MethodId,
+    pub(crate) usr: USR,
+    pub(crate) name: String,
+    /// Vec of options here because we know how many template arguments there are, but can't directly get any non-type
+    /// ones.
+    ///
+    /// Revisit and maybe we want to make that a hard error
+    pub(crate) args: Vec<Option<TemplateType>>,
+    /// The typedef itself is namespaced
+    pub(crate) namespaces: Vec<USR>,
 }
 
 pub fn extract_argument(c_arg: Cursor, template_parameters: &[String]) -> Result<Argument> {
