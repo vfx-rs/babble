@@ -1,6 +1,7 @@
 use log::*;
 use std::fmt::Display;
 
+use crate::ast::get_namespaces_for_decl;
 use crate::cursor_kind::CursorKind;
 use crate::qualtype::{extract_type, extract_type_from_typeref};
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
@@ -43,10 +44,20 @@ pub struct Function {
     pub(crate) arguments: Vec<Argument>,
     pub(crate) replacement_name: Option<String>,
     pub(crate) ignored: bool,
+    pub(crate) namespaces: Vec<USR>,
+    pub(crate) template_parameters: Vec<TemplateParameterDecl>,
 }
 
 impl Function {
-    pub fn new(usr: USR, name: String, result: QualType, arguments: Vec<Argument>, replacement_name: Option<String>) -> Self {
+    pub fn new(
+        usr: USR,
+        name: String,
+        result: QualType,
+        arguments: Vec<Argument>,
+        replacement_name: Option<String>,
+        namespaces: Vec<USR>,
+        template_parameters: Vec<TemplateParameterDecl>,
+    ) -> Self {
         Function {
             usr,
             name,
@@ -54,6 +65,8 @@ impl Function {
             arguments,
             replacement_name,
             ignored: false,
+            namespaces,
+            template_parameters,
         }
     }
 
@@ -69,10 +82,19 @@ impl Function {
         self.ignored = true;
     }
 
+    pub fn signature(
+        &self,
+        ast: &AST,
+        outer_template_parameters: &[TemplateParameterDecl],
+        template_args: Option<&[Option<TemplateType>]>,
+    ) -> String {
+        self.format(ast, outer_template_parameters, template_args)
+    }
+
     pub fn format(
         &self,
         ast: &AST,
-        template_parameters: &[TemplateParameterDecl],
+        outer_template_parameters: &[TemplateParameterDecl],
         template_args: Option<&[Option<TemplateType>]>,
     ) -> String {
         let mut s = String::new();
@@ -81,17 +103,52 @@ impl Function {
         let args = self
             .arguments
             .iter()
-            .map(|p| p.format(ast, template_parameters, template_args))
+            .map(|p| p.format(ast, outer_template_parameters, template_args))
             .collect::<Vec<String>>()
             .join(", ");
         s += &format!("({})", args);
 
         s += &format!(
             " -> {}",
-            self.result.format(ast, template_parameters, template_args)
+            self.result
+                .format(ast, outer_template_parameters, template_args)
         );
 
         s
+    }
+
+    pub fn pretty_print(
+        &self,
+        depth: usize,
+        ast: &AST,
+        outer_template_parameters: &[TemplateParameterDecl],
+        template_args: Option<&[Option<TemplateType>]>,
+    ) {
+        let indent = format!("{:width$}", "", width = depth * 2);
+
+        let s = self.format(ast, outer_template_parameters, template_args);
+
+        let mut modify_attrs = Vec::new();
+        if self.ignored {
+            modify_attrs.push("ignored".to_string());
+        }
+
+        if let Some(new_name) = &self.replacement_name {
+            modify_attrs.push(format!("rename(\"{new_name}\")"));
+        }
+
+        let attr_string = if modify_attrs.is_empty() {
+            String::new()
+        } else {
+            format!("    [[{}]]", modify_attrs.join(", "))
+        };
+
+        let template_str = if !self.template_parameters.is_empty() {
+            let parms = self.template_parameters.iter().map(|t| t.name().to_string() ).collect::<Vec<_>>();
+            format!("{indent}template <typename {}>\n", parms.join(", typename"))
+        } else {String::new()};
+
+        println!("{template_str}{indent}{s}{attr_string}");
     }
 }
 
@@ -110,13 +167,23 @@ impl Method {
         result: QualType,
         arguments: Vec<Argument>,
         rename: Option<String>,
+        namespaces: Vec<USR>,
+        template_parameters: Vec<TemplateParameterDecl>,
         is_const: bool,
         is_static: bool,
         is_virtual: bool,
         is_pure_virtual: bool,
     ) -> Self {
         Method {
-            function: Function::new(usr, name, result, arguments, rename),
+            function: Function::new(
+                usr,
+                name,
+                result,
+                arguments,
+                rename,
+                namespaces,
+                template_parameters,
+            ),
             is_const,
             is_static,
             is_virtual,
@@ -205,7 +272,6 @@ impl Method {
         };
 
         println!("{indent}{s}{attr_string}");
-
     }
 }
 
@@ -237,19 +303,19 @@ pub fn extract_argument(c_arg: Cursor, template_parameters: &[String]) -> Result
     })
 }
 
-pub fn extract_method(
-    c_method: Cursor,
+pub fn extract_function(
+    c_function: Cursor,
     depth: usize,
-    class_template_parameters: &[TemplateParameterDecl],
-) -> Result<Method> {
+    extra_template_parameters: &[TemplateParameterDecl],
+) -> Result<Function> {
     let indent = format!("{:width$}", "", width = depth * 2);
 
-    let c_method = c_method.canonical().unwrap();
+    let c_function = c_function.canonical().unwrap();
 
     debug!(
         "{indent}+ CXXMethod {} {}",
-        c_method.display_name(),
-        if c_method.cxx_method_is_const() {
+        c_function.display_name(),
+        if c_function.cxx_method_is_const() {
             "const"
         } else {
             ""
@@ -263,8 +329,8 @@ pub fn extract_method(
     // 3. The arguments
     // So we need to traverse the children, pluck off any template parameters,
     // then the first thing that's *not* a template parameter will be the return type, and everything after that will be an argument
-    // let c_method_template_parameters = c_method.children().iter().filter(|c| c.kind() == CursorKind::TemplateTypeParameter || c.kind() == CursorKind::NonTypeTemplateParameter || c.kind() || CursorKind::TemplateTemplateParameter)
-    let children = c_method.children();
+    // let c_function_template_parameters = c_function.children().iter().filter(|c| c.kind() == CursorKind::TemplateTypeParameter || c.kind() == CursorKind::NonTypeTemplateParameter || c.kind() || CursorKind::TemplateTemplateParameter)
+    let children = c_function.children();
     debug!("{} children", children.len());
     debug!("{:?}", children);
 
@@ -281,7 +347,17 @@ pub fn extract_method(
         })
         .collect();
 
-    let template_parameters = class_template_parameters
+    // store the function template parameters on the function
+    let template_parameters = c_template_parameters
+        .iter()
+        .enumerate()
+        .map(|(index, c)| TemplateParameterDecl::Type {
+            name: c.display_name(),
+            index,
+        })
+        .collect::<Vec<_>>();
+
+    let string_template_parameters = extra_template_parameters
         .iter()
         .map(|t| t.name().to_string())
         .chain(c_template_parameters.iter().map(|c| c.display_name()))
@@ -289,13 +365,13 @@ pub fn extract_method(
 
     let mut skip = c_template_parameters.len();
 
-    let ty_result = c_method.result_ty().unwrap();
+    let ty_result = c_function.result_ty().unwrap();
     let result = if ty_result.is_builtin() || ty_result.is_pointer() {
-        extract_type(ty_result, &template_parameters)?
+        extract_type(ty_result, &string_template_parameters)?
     } else {
         let c_result = children.iter().skip(skip).next().expect(&format!(
             "Could not get result cursor from {}",
-            c_method.display_name()
+            c_function.display_name()
         ));
 
         skip += 1;
@@ -307,7 +383,7 @@ pub fn extract_method(
         }
     };
 
-    let num_arguments = match c_method.num_arguments() {
+    let num_arguments = match c_function.num_arguments() {
         Ok(n) => n as usize,
         Err(_) => children.len(),
     };
@@ -319,10 +395,13 @@ pub fn extract_method(
             break;
         }
 
-        arguments.push(extract_argument(c_arg.clone(), &template_parameters)?);
+        arguments.push(extract_argument(
+            c_arg.clone(),
+            &string_template_parameters,
+        )?);
     }
 
-    for child in c_method.children() {
+    for child in c_function.children() {
         debug!(
             "{indent}    - {}: {} {}",
             child.display_name(),
@@ -349,19 +428,47 @@ pub fn extract_method(
         }
     }
 
-    let replacement_name = get_default_replacement_name(c_method);
+    let replacement_name = get_default_replacement_name(c_function);
 
-    Ok(Method::new(
-        c_method.usr(),
-        c_method.spelling(),
+    let namespaces = get_namespaces_for_decl(c_function);
+
+    Ok(Function::new(
+        c_function.usr(),
+        c_function.spelling(),
         result,
         arguments,
         replacement_name,
-        c_method.cxx_method_is_const(),
-        c_method.cxx_method_is_static(),
-        c_method.cxx_method_is_virtual(),
-        c_method.cxx_method_is_pure_virtual(),
+        namespaces,
+        template_parameters,
     ))
+}
+
+pub fn extract_method(
+    c_method: Cursor,
+    depth: usize,
+    class_template_parameters: &[TemplateParameterDecl],
+) -> Result<Method> {
+    let indent = format!("{:width$}", "", width = depth * 2);
+
+    let c_method = c_method.canonical().unwrap();
+
+    debug!(
+        "{indent}+ CXXMethod {} {}",
+        c_method.display_name(),
+        if c_method.cxx_method_is_const() {
+            "const"
+        } else {
+            ""
+        }
+    );
+
+    Ok(Method {
+        function: extract_function(c_method, depth, class_template_parameters)?,
+        is_const: c_method.cxx_method_is_const(),
+        is_static: c_method.cxx_method_is_static(),
+        is_virtual: c_method.cxx_method_is_virtual(),
+        is_pure_virtual: c_method.cxx_method_is_pure_virtual(),
+    })
 }
 
 fn get_default_replacement_name(c_method: Cursor) -> Option<String> {
@@ -378,58 +485,64 @@ fn get_default_replacement_name(c_method: Cursor) -> Option<String> {
             }
         }
         CursorKind::Destructor => Some("dtor".into()),
-        _ => if c_method.display_name().contains("operator+=") {
-            Some("op_add_assign".into())
-        } else if c_method.display_name().contains("operator+") {
-            Some("op_add".into())
-        } else if c_method.display_name().contains("operator-=") {
-            Some("op_sub_assign".into())
-        } else if c_method.display_name().contains("operator-") && c_method.num_arguments().unwrap() == 1 {
-            Some("op_sub".into())
-        } else if c_method.display_name().contains("operator-") && c_method.num_arguments().unwrap() == 0 {
-            Some("op_neg".into())
-        } else if c_method.display_name().contains("operator*=") {
-            Some("op_mul_assign".into())
-        } else if c_method.display_name().contains("operator*") {
-            Some("op_mul".into())
-        } else if c_method.display_name().contains("operator/=") {
-            Some("op_div_assign".into())
-        } else if c_method.display_name().contains("operator/") {
-            Some("op_div".into())
-        } else if c_method.display_name().contains("operator&=") {
-            Some("op_bitand_assign".into())
-        } else if c_method.display_name().contains("operator&") {
-            Some("op_bitand".into())
-        } else if c_method.display_name().contains("operator|=") {
-            Some("op_bitor_assign".into())
-        } else if c_method.display_name().contains("operator|") {
-            Some("op_bitor".into())
-        } else if c_method.display_name().contains("operator^=") {
-            Some("op_bitxor_assign".into())
-        } else if c_method.display_name().contains("operator^") {
-            Some("op_bitxor".into())
-        } else if c_method.display_name().contains("operator%=") {
-            Some("op_rem_assign".into())
-        } else if c_method.display_name().contains("operator%") {
-            Some("op_rem".into())
-        } else if c_method.display_name().contains("operator<<=") {
-            Some("op_shl_assign".into())
-        } else if c_method.display_name().contains("operator<<") {
-            Some("op_shl".into())
-        } else if c_method.display_name().contains("operator>>=") {
-            Some("op_shr_assign".into())
-        } else if c_method.display_name().contains("operator>>") {
-            Some("op_shr".into())
-        } else if c_method.display_name().contains("operator==") {
-            Some("op_eq".into())
-        } else if c_method.display_name().contains("operator=") {
-            Some("op_assign".into())
-        } else if c_method.display_name().contains("operator!") {
-            Some("op_not".into())
-        } else if c_method.display_name().contains("operator[]") {
-            Some("op_index".into())
-        } else {
-            None
+        _ => {
+            if c_method.display_name().contains("operator+=") {
+                Some("op_add_assign".into())
+            } else if c_method.display_name().contains("operator+") {
+                Some("op_add".into())
+            } else if c_method.display_name().contains("operator-=") {
+                Some("op_sub_assign".into())
+            } else if c_method.display_name().contains("operator-")
+                && c_method.num_arguments().unwrap() == 1
+            {
+                Some("op_sub".into())
+            } else if c_method.display_name().contains("operator-")
+                && c_method.num_arguments().unwrap() == 0
+            {
+                Some("op_neg".into())
+            } else if c_method.display_name().contains("operator*=") {
+                Some("op_mul_assign".into())
+            } else if c_method.display_name().contains("operator*") {
+                Some("op_mul".into())
+            } else if c_method.display_name().contains("operator/=") {
+                Some("op_div_assign".into())
+            } else if c_method.display_name().contains("operator/") {
+                Some("op_div".into())
+            } else if c_method.display_name().contains("operator&=") {
+                Some("op_bitand_assign".into())
+            } else if c_method.display_name().contains("operator&") {
+                Some("op_bitand".into())
+            } else if c_method.display_name().contains("operator|=") {
+                Some("op_bitor_assign".into())
+            } else if c_method.display_name().contains("operator|") {
+                Some("op_bitor".into())
+            } else if c_method.display_name().contains("operator^=") {
+                Some("op_bitxor_assign".into())
+            } else if c_method.display_name().contains("operator^") {
+                Some("op_bitxor".into())
+            } else if c_method.display_name().contains("operator%=") {
+                Some("op_rem_assign".into())
+            } else if c_method.display_name().contains("operator%") {
+                Some("op_rem".into())
+            } else if c_method.display_name().contains("operator<<=") {
+                Some("op_shl_assign".into())
+            } else if c_method.display_name().contains("operator<<") {
+                Some("op_shl".into())
+            } else if c_method.display_name().contains("operator>>=") {
+                Some("op_shr_assign".into())
+            } else if c_method.display_name().contains("operator>>") {
+                Some("op_shr".into())
+            } else if c_method.display_name().contains("operator==") {
+                Some("op_eq".into())
+            } else if c_method.display_name().contains("operator=") {
+                Some("op_assign".into())
+            } else if c_method.display_name().contains("operator!") {
+                Some("op_not".into())
+            } else if c_method.display_name().contains("operator[]") {
+                Some("op_index".into())
+            } else {
+                None
+            }
         }
     }
 }

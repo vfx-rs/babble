@@ -5,7 +5,7 @@ use crate::class::extract_class_decl;
 use crate::cursor::USR;
 use crate::namespace::extract_namespace;
 use crate::qualtype::extract_type;
-use crate::template_argument::TemplateType;
+use crate::template_argument::{TemplateParameterDecl, TemplateType};
 use crate::ty::Type;
 use crate::{ast::AST, cursor_kind::CursorKind, Cursor, TranslationUnit};
 
@@ -15,6 +15,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 pub enum TypeAlias {
     TypeAliasType { name: String, usr: USR },
     ClassTemplateSpecialization(ClassTemplateSpecialization),
+    FunctionTemplateSpecialization(FunctionTemplateSpecialization),
 }
 
 impl TypeAlias {
@@ -22,13 +23,15 @@ impl TypeAlias {
         match self {
             TypeAlias::TypeAliasType { usr, .. } => *usr,
             TypeAlias::ClassTemplateSpecialization(cts) => cts.usr,
+            TypeAlias::FunctionTemplateSpecialization(fts) => fts.usr,
         }
     }
 
-    pub fn pretty_print(&self, depth: usize, ast: &AST) {
+    pub fn pretty_print(&self, depth: usize, ast: &AST, outer_template_parameters: &[TemplateParameterDecl]) {
         match self {
             TypeAlias::TypeAliasType { name, usr } => todo!(),
             TypeAlias::ClassTemplateSpecialization(cts) => cts.pretty_print(depth, ast),
+            TypeAlias::FunctionTemplateSpecialization(fts) => fts.pretty_print(depth, ast, outer_template_parameters),
         }
     }
 }
@@ -252,5 +255,73 @@ impl ClassTemplateSpecialization {
         // this will be complicated...
         let class = ast.get_class(self.specialized_decl).unwrap();
         class.format(ast, Some(&self.args))
+    }
+}
+
+pub struct FunctionTemplateSpecialization {
+    pub(crate) specialized_decl: USR,
+    pub(crate) usr: USR,
+    pub(crate) name: String,
+    /// Vec of options here because we know how many template arguments there are, but can't directly get any non-type
+    /// ones.
+    ///
+    /// Revisit and maybe we want to make that a hard error
+    pub(crate) args: Vec<Option<TemplateType>>,
+    /// The typedef itself is namespaced
+    pub(crate) namespaces: Vec<USR>,
+}
+
+impl FunctionTemplateSpecialization {
+    pub fn pretty_print(
+        &self,
+        depth: usize,
+        ast: &AST,
+        outer_template_parameters: &[TemplateParameterDecl],
+    ) {
+        let indent = format!("{:width$}", "", width = depth * 2);
+
+        let args = self
+            .args
+            .iter()
+            .map(|a| format!("{:?}", a))
+            .collect::<Vec<_>>();
+
+        let ns_string = self
+            .namespaces
+            .iter()
+            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
+            .collect::<Vec<String>>()
+            .join("::");
+
+        println!(
+            "+ FunctionTemplateSpecialization {}::{} of ({}) with <{}>",
+            ns_string,
+            self.name,
+            self.usr,
+            args.join(", ")
+        );
+
+        // this will be complicated...
+        let function = ast.get_function(self.specialized_decl).unwrap();
+        function.pretty_print(depth, ast, outer_template_parameters, Some(&self.args));
+    }
+
+    pub fn format(&self, ast: &AST, outer_template_parameters: &[TemplateParameterDecl]) -> String {
+        let args = self
+            .args
+            .iter()
+            .map(|a| format!("{:?}", a))
+            .collect::<Vec<_>>();
+
+        let ns_string = self
+            .namespaces
+            .iter()
+            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
+            .collect::<Vec<String>>()
+            .join("::");
+
+        // this will be complicated...
+        let function = ast.get_function(self.specialized_decl).unwrap();
+        function.format(ast, outer_template_parameters, Some(&self.args))
     }
 }

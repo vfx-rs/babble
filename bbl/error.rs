@@ -23,6 +23,7 @@ pub enum Error {
     MultipleMatches,
     TemplateParmNotFound(String),
     TemplateArgNotFound(String),
+    FunctionNotFound(String),
 }
 
 impl std::fmt::Display for Error {

@@ -396,11 +396,54 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
                 &mut functions,
                 &mut used_names,
             )?,
+            TypeAlias::FunctionTemplateSpecialization(fts) => {
+                translate_function_template_specialization(
+                    ast,
+                    fts,
+                    &mut functions,
+                    &mut used_names,
+                )?
+            }
             _ => todo!(),
         }
     }
 
+    for (function_id, function) in ast.functions.iter().enumerate() {
+        translate_function(
+            ast,
+            FunctionId(function_id),
+            function,
+            &mut functions,
+            &mut used_names,
+            &[],
+        );
+    }
+
     Ok(CAST { structs, functions })
+}
+
+fn translate_function_template_specialization(
+    ast: &AST,
+    fts: &crate::type_alias::FunctionTemplateSpecialization,
+    functions: &mut UstrIndexMap<CFunction>,
+    used_names: &mut HashSet<String>,
+) -> Result<()> {
+    let function_id = ast
+        .functions
+        .get_id(&fts.specialized_decl.0)
+        .ok_or(Error::FunctionNotFound(fts.specialized_decl.to_string()))?;
+    let function = ast.functions.index(*function_id);
+
+    translate_function(
+        ast,
+        FunctionId(*function_id),
+        function,
+        functions,
+        used_names,
+        &fts.args,
+    );
+
+    Ok(())
 }
 
 fn translate_class_template_specialization(
@@ -520,6 +563,56 @@ fn get_unique_argument_name(name: &str, used_argument_names: &mut HashSet<String
     }
 
     result
+}
+
+fn translate_function(
+    ast: &AST,
+    function_id: FunctionId,
+    function: &crate::function::Function,
+    functions: &mut UstrIndexMap<CFunction>,
+    used_names: &mut HashSet<String>,
+    template_args: &[Option<TemplateType>],
+) -> Result<()> {
+    // build the namespace prefix
+    let (ns_prefix_public, ns_prefix_private) = build_namespace_prefix(ast, &function.namespaces);
+
+    let source = CFunctionSource::Function(function_id);
+    let result = translate_qual_type(
+        &function.result,
+        &function.template_parameters,
+        template_args,
+    )?;
+
+    let mut used_argument_names = HashSet::new();
+
+    let mut arguments = translate_arguments(
+        &function.arguments,
+        &function.template_parameters,
+        template_args,
+        &mut used_argument_names,
+    )?;
+
+    let fn_name = if let Some(name) = &function.replacement_name {
+        name
+    } else {
+        &function.name
+    };
+
+    let (fn_name_public, fn_name_private) =
+        get_c_names(fn_name, &ns_prefix_public, &ns_prefix_private, used_names);
+
+    functions.insert(
+        function.usr().0,
+        CFunction {
+            name_private: fn_name_private,
+            name_public: fn_name_public,
+            result,
+            arguments,
+            source,
+        },
+    );
+
+    Ok(())
 }
 
 pub fn translate_method(

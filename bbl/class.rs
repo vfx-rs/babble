@@ -8,7 +8,7 @@ use clang_sys::{
 use log::*;
 use std::fmt::Display;
 
-use crate::ast::{MethodId, AST};
+use crate::ast::{MethodId, AST, get_namespaces_for_decl};
 use crate::cursor_kind::CursorKind;
 use crate::function::extract_method;
 use crate::qualtype::extract_type;
@@ -267,23 +267,6 @@ impl Display for ClassDecl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
     }
-}
-
-// walk back up through a cursor's semantic parents and add them as namespaces
-pub fn walk_namespaces(c: Result<Cursor>, namespaces: &mut Vec<USR>) {
-    if let Ok(c) = c {
-        if c.kind() != CursorKind::TranslationUnit { 
-            namespaces.push(c.usr());
-            walk_namespaces(c.semantic_parent(), namespaces);
-        }
-    }
-}
-
-pub fn get_namespaces_for_decl(c: Cursor) -> Vec<USR> {
-    let mut namespaces = Vec::new();
-    walk_namespaces(c.semantic_parent(), &mut namespaces);
-    namespaces.reverse();
-    namespaces
 }
 
 pub fn extract_class_decl(

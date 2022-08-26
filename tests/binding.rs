@@ -318,3 +318,76 @@ public:
 
     Ok(())
 }
+
+#[test]
+fn bind_function() -> Result<(), Error> {
+    common::init_log();
+
+    let ast = parse_string_and_extract_ast(
+        r#"
+namespace Test {
+int basic_function(int&& a, float*);
+}
+        "#,
+        &[
+            "-resource-dir",
+            "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
+            "-std=c++14",
+            "-I/usr/include",
+            "-I/usr/local/include",
+        ],
+        true,
+        None,
+    )?;
+
+    ast.pretty_print(0);
+
+    let c_ast = translate_cpp_ast_to_c(&ast)?;
+    assert_eq!(c_ast.structs.len(), 0);
+    assert_eq!(c_ast.functions.len(), 1);
+    c_ast.pretty_print(0);
+
+    Ok(())
+}
+
+#[test]
+fn bind_function_template() -> Result<(), Error> {
+    common::init_log();
+
+    let mut ast = parse_string_and_extract_ast(
+        r#"
+namespace Test {
+template <typename T>
+T function_template(T&& a, float*);
+}
+        "#,
+        &[
+            "-resource-dir",
+            "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
+            "-std=c++14",
+            "-I/usr/include",
+            "-I/usr/local/include",
+        ],
+        true,
+        None,
+    )?;
+
+    ast.pretty_print(0);
+    let function = ast.find_function("function_template")?;
+    ast.specialize_function(
+        function,
+        "function_float",
+        vec![Some(TemplateType::Type(QualType::float()))],
+    )?;
+
+
+    ast.pretty_print(0);
+
+    let c_ast = translate_cpp_ast_to_c(&ast)?;
+    c_ast.pretty_print(0);
+
+    assert_eq!(c_ast.structs.len(), 0);
+    assert_eq!(c_ast.functions.len(), 1);
+
+    Ok(())
+}

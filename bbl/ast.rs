@@ -3,11 +3,11 @@ use ustr::{Ustr, UstrMap};
 use log::*;
 
 use crate::class::ClassDecl;
-use crate::function::{Function, Method};
+use crate::function::{Function, Method, extract_function};
 use crate::index::Index;
 use crate::namespace::{self, extract_namespace, Namespace};
 use crate::template_argument::{TemplateArgument, TemplateType};
-use crate::type_alias::{ClassTemplateSpecialization, TypeAlias};
+use crate::type_alias::{ClassTemplateSpecialization, TypeAlias, FunctionTemplateSpecialization};
 use crate::{
     class::extract_class_decl, cursor::USR, cursor_kind::CursorKind,
     type_alias::extract_class_template_specialization, Cursor, TranslationUnit,
@@ -111,13 +111,13 @@ impl AST {
         }
 
         println!("");
-        // for function in self.functions.iter() {
-        //     function.pretty_print(depth + 1, self, &[], None);
-        //     println!("");
-        // }
+        for function in self.functions.iter() {
+            function.pretty_print(depth + 1, self, &[], None);
+            println!("");
+        }
 
         for type_alias in self.type_aliases.iter() {
-            type_alias.pretty_print(depth + 1, self);
+            type_alias.pretty_print(depth + 1, self, &[]);
             println!("");
         }
     }
@@ -171,6 +171,81 @@ impl AST {
         let id = self
             .type_aliases
             .insert(usr.0, TypeAlias::ClassTemplateSpecialization(cts));
+
+        Ok(TypeAliasId(id))
+    }
+
+    pub fn find_function(&self, signature: &str) -> Result<FunctionId> {
+        let mut matches = Vec::new();
+
+        for (function_id, function) in self.functions.iter().enumerate() {
+            if function
+                .signature(self, &[], None)
+                .contains(signature)
+            {
+                matches.push((function_id, function));
+            }
+        }
+
+        match matches.len() {
+            0 => {
+                let mut distances = Vec::with_capacity(self.functions.len());
+                for function in self.functions.iter() {
+                    let sig = function.signature(self, &[], None);
+                    let dist = levenshtein::levenshtein(&sig, signature);
+                    distances.push((dist, sig));
+                }
+
+                distances.sort_by(|a, b| a.0.cmp(&b.0));
+
+                error!(
+                    "Could not find function matching signature: \"{}\"",
+                    signature
+                );
+                error!("Did you mean one of:");
+                for (_, sug) in distances.iter().take(3) {
+                    error!("  {sug}");
+                }
+
+                Err(Error::FunctionNotFound(signature.into()))
+            }
+            1 => Ok(FunctionId(matches[0].0)),
+            _ => {
+                error!("Multiple matches found for signature \"{signature}\":");
+
+                for (_, function) in matches {
+                    error!(
+                        "  {}",
+                        function.signature(self, &[], None)
+                    );
+                }
+
+                Err(Error::MultipleMatches)
+            }
+        }
+    }
+
+    pub fn specialize_function(
+        &mut self,
+        function_id: FunctionId,
+        name: &str,
+        args: Vec<Option<TemplateType>>,
+    ) -> Result<TypeAliasId> {
+        let function_decl = self.functions.index(function_id.0);
+
+        let usr = USR(Ustr::from(&format!("{}_{name}", function_decl.usr().0)));
+
+        let fts = FunctionTemplateSpecialization {
+            specialized_decl: function_decl.usr(),
+            usr,
+            name: name.into(),
+            args,
+            namespaces: Vec::new(),
+        };
+
+        let id = self
+            .type_aliases
+            .insert(usr.0, TypeAlias::FunctionTemplateSpecialization(fts));
 
         Ok(TypeAliasId(id))
     }
@@ -232,12 +307,12 @@ pub fn extract_ast(
     ast: &mut AST,
     tu: &TranslationUnit,
     namespaces: Vec<USR>,
-) {
+) -> Result<()> {
     let mut namespaces = namespaces;
 
     if depth > max_depth {
         // println!("");
-        return;
+        return Ok(());
     }
     let indent = format!("{:width$}", "", width = depth * 2);
 
@@ -255,17 +330,6 @@ pub fn extract_ast(
                 }
             }
         }
-        /*
-        CursorKind::ClassDecl | CursorKind::StructDecl => {
-            // Make sure that we're dealing with a definition rather than a forward declaration
-            // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
-            // (for opaque types in the API)
-            if c.is_definition() {
-                let cd = extract_class_decl(c, depth + 1, tu, &namespaces);
-                ast.insert_record(Record::ClassDecl(cd));
-            }
-        }
-        */
         CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
             // check if this type alias has a TemplateRef child, in which case it's a class template specialization
             if c.has_child_of_kind(CursorKind::TemplateRef) {
@@ -291,6 +355,11 @@ pub fn extract_ast(
             let usr = ns.usr;
             ast.insert_namespace(ns);
             already_visited.push(usr);
+        }
+        CursorKind::FunctionDecl | CursorKind::FunctionTemplate => {
+            let fun = extract_function(c, depth+1, &[])?;
+            ast.insert_function(fun);
+            already_visited.push(c.usr());
         }
         // CursorKind::NamespaceRef => {
 
@@ -334,6 +403,8 @@ pub fn extract_ast(
             namespaces.clone(),
         );
     }
+
+    Ok(())
 }
 
 pub fn dump(
@@ -467,4 +538,21 @@ pub fn extract_ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit
     }
 
     ast
+}
+
+// walk back up through a cursor's semantic parents and add them as namespaces
+pub fn walk_namespaces(c: Result<Cursor>, namespaces: &mut Vec<USR>) {
+    if let Ok(c) = c {
+        if c.kind() != CursorKind::TranslationUnit { 
+            namespaces.push(c.usr());
+            walk_namespaces(c.semantic_parent(), namespaces);
+        }
+    }
+}
+
+pub fn get_namespaces_for_decl(c: Cursor) -> Vec<USR> {
+    let mut namespaces = Vec::new();
+    walk_namespaces(c.semantic_parent(), &mut namespaces);
+    namespaces.reverse();
+    namespaces
 }
