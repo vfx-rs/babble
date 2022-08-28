@@ -157,7 +157,7 @@ pub fn extract_type_from_typeref(c_tr: Cursor) -> Result<QualType> {
     if let Ok(c_ref) = c_tr.referenced() {
         let c_ref =
             if c_ref.kind() == CursorKind::ClassDecl || c_ref.kind() == CursorKind::ClassTemplate {
-                c_ref.canonical().unwrap()
+                c_ref.canonical()?
             } else {
                 c_ref
             };
@@ -170,7 +170,7 @@ pub fn extract_type_from_typeref(c_tr: Cursor) -> Result<QualType> {
 
         match c_ref.kind() {
             CursorKind::ClassDecl | CursorKind::ClassTemplate => {
-                let c_ref = c_ref.canonical().unwrap();
+                let c_ref = c_ref.canonical()?;
                 Ok(QualType {
                     name: c_ref.spelling(),
                     is_const,
@@ -184,7 +184,7 @@ pub fn extract_type_from_typeref(c_tr: Cursor) -> Result<QualType> {
             }),
             _ => {
                 error!("unhandled type {}", c_tr.display_name());
-                Ok(QualType::unknown(c_ref.ty().unwrap().kind()))
+                Ok(QualType::unknown(c_ref.ty()?.kind()))
             }
         }
     } else {
@@ -192,7 +192,7 @@ pub fn extract_type_from_typeref(c_tr: Cursor) -> Result<QualType> {
             "could not get referenced type from TypeRef {}",
             c_tr.display_name()
         );
-        Ok(QualType::unknown(c_tr.ty().unwrap().kind()))
+        Ok(QualType::unknown(c_tr.ty()?.kind()))
     }
 }
 

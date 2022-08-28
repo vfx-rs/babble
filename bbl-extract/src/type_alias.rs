@@ -66,7 +66,7 @@ pub fn extract_class_template_specialization(
     );
 
     if let Ok(ty) = c_type_alias_decl.ty() {
-        let template_args = extract_template_args(&c_type_alias_decl, &ty, tu);
+        let template_args = extract_template_args(&c_type_alias_decl, &ty, tu)?;
 
         debug!("Template args:");
         for template_arg in &template_args {
@@ -82,7 +82,9 @@ pub fn extract_class_template_specialization(
         for child in c_type_alias_decl.children() {
             // println!("{indent}    {} {} {}", child.usr(), child.display_name(), child.kind());
             if child.kind() == CursorKind::NamespaceRef {
-                let c_namespace = child.referenced().unwrap();
+                let c_namespace = child
+                    .referenced()
+                    .map_err(|_| Error::FailedToGetNamespaceRefFrom(child.display_name()))?;
                 if !already_visited.contains(&c_namespace.usr()) {
                     // extract the namespace here
                     let ns = extract_namespace(c_namespace, depth + 1, tu);
@@ -114,7 +116,6 @@ pub fn extract_class_template_specialization(
                         unimplemented!();
                     }
                 } else {
-                    error!("{indent}ERROR could not get referenced template from {child:?}");
                     return Err(Error::FailedToGetTemplateRefFrom(
                         c_type_alias_decl.display_name(),
                     ));
@@ -132,7 +133,6 @@ pub fn extract_class_template_specialization(
             namespaces: namespaces.clone(),
         })
     } else {
-        error!("Could not get type from TypeAliasDecl {c_type_alias_decl:?}");
         Err(Error::FailedToGetTypeFrom(c_type_alias_decl.display_name()))
     }
 }
@@ -141,7 +141,7 @@ fn extract_template_args(
     c_type_alias_decl: &Cursor,
     ty: &Type,
     tu: &TranslationUnit,
-) -> Vec<Option<TemplateType>> {
+) -> Result<Vec<Option<TemplateType>>> {
     let num_args = ty.num_template_arguments();
 
     // Get any type template args on this type alias.
@@ -150,8 +150,7 @@ fn extract_template_args(
         template_args.reserve(num_args as usize);
         for i in 0..num_args {
             if let Ok(tty) = ty.template_argument_as_type(i as u32) {
-                let qt = extract_type(tty.clone(), &[])
-                    .expect(&format!("Could not extract QualType from {}", tty));
+                let qt = extract_type(tty.clone(), &[])?;
                 template_args.push(Some(TemplateType::Type(qt)));
             } else {
                 // If it's not a type, we have to handle it separately, below.
@@ -205,7 +204,7 @@ fn extract_template_args(
         }
     }
 
-    template_args
+    Ok(template_args)
 }
 
 pub struct ClassTemplateSpecialization {

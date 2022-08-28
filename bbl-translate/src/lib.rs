@@ -392,7 +392,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
             if !class.is_specialized() {
                 warn!(
                     "class {} is templated but has no specializations and so will be ignored",
-                    class.get_qualified_name(ast).expect(&format!("Could not get qualified name for {}", class.usr()))
+                    class.get_qualified_name(ast)?
                 );
             }
             continue;
@@ -435,7 +435,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
             if !function.is_specialized() {
                 warn!(
                     "function {} is templated but has no specializations and so will be ignored",
-                    function.get_qualified_name(ast).expect(&format!("Could not get qualified name for {}", function.usr()))
+                    function.get_qualified_name(ast)?
                 );
             }
             continue;
@@ -570,7 +570,7 @@ pub fn translate_class(
             if !method.is_specialized() {
                 warn!(
                     "method {} is templated but has no specializations and so will be ignored",
-                    method.get_qualified_name(ast).expect(&format!("Could not get qualified name for {}", method.usr()))
+                    method.get_qualified_name(ast)?
                 );
             }
             continue;
@@ -785,9 +785,6 @@ pub fn build_namespace_prefix(ast: &AST, namespaces: &[USR]) -> Result<(String, 
     let mut ns_prefix_private = String::new();
     let mut ns_prefix_public = String::new();
     for uns in namespaces {
-        // let ns = ast
-        //     .get_namespace(*uns)
-        //     .expect(&format!("Could not get namespace {}", uns));
         let names = ast.get_class_or_namespace_names(*uns)?;
 
         // The private namespace name is always taken from its decl

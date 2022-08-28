@@ -32,10 +32,11 @@ impl Index {
                 .ok_or(Error::InvalidPath)?,
         )?;
 
-        let cargs: Vec<_> = args
+        let cargs = args
             .iter()
-            .map(|a| CString::new(a.as_ref()).unwrap())
-            .collect();
+            .map(|a| CString::new(a.as_ref()).map_err(|e| Error::from(e)))
+            .collect::<Result<Vec<_>>>()?;
+
         let cstrargs: Vec<_> = cargs.iter().map(|a| a.as_ptr()).collect();
 
         let tu = unsafe {

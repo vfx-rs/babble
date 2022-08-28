@@ -22,6 +22,9 @@ pub enum Error {
     },
     FailedToGetTemplateRefFrom(String),
     FailedToGetTypeFrom(String),
+    FailedToGetNamespaceRefFrom(String),
+    FailedToGetCursor,
+    TemplateArgExtraction(String),
     NoMatchingTemplateParameter(String),
     IoError(std::io::Error),
 }

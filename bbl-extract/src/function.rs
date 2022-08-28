@@ -457,12 +457,12 @@ pub fn extract_argument(c_arg: Cursor, template_parameters: &[String]) -> Result
             }
             _ => {
                 debug!("other kind {:?}", children[0].kind(),);
-                QualType::unknown(children[0].ty().unwrap().kind())
+                QualType::unknown(children[0].ty()?.kind())
             }
         }
     } else {
         error!("coulnd't do argument type");
-        QualType::unknown(children[0].ty().unwrap().kind())
+        QualType::unknown(children[0].ty()?.kind())
     };
 
     Ok(Argument {
@@ -478,7 +478,7 @@ pub fn extract_function(
 ) -> Result<Function> {
     let indent = format!("{:width$}", "", width = depth * 2);
 
-    let c_function = c_function.canonical().unwrap();
+    let c_function = c_function.canonical()?;
 
     debug!(
         "{indent}+ CXXMethod {} {}",
@@ -533,14 +533,11 @@ pub fn extract_function(
 
     let mut skip = c_template_parameters.len();
 
-    let ty_result = c_function.result_ty().unwrap();
+    let ty_result = c_function.result_ty()?;
     let result = if ty_result.is_builtin() || ty_result.is_pointer() {
         extract_type(ty_result, &string_template_parameters)?
     } else {
-        let c_result = children.iter().skip(skip).next().expect(&format!(
-            "Could not get result cursor from {}",
-            c_function.display_name()
-        ));
+        let c_result = children.iter().skip(skip).next().ok_or(Error::FailedToGetCursor)?;
 
         skip += 1;
 
@@ -581,7 +578,7 @@ pub fn extract_function(
                 let c_ref = if c_ref.kind() == CursorKind::ClassDecl
                     || c_ref.kind() == CursorKind::ClassTemplate
                 {
-                    c_ref.canonical().unwrap()
+                    c_ref.canonical()?
                 } else {
                     c_ref
                 };
@@ -620,7 +617,7 @@ pub fn extract_method(
 ) -> Result<Method> {
     let indent = format!("{:width$}", "", width = depth * 2);
 
-    let c_method = c_method.canonical().unwrap();
+    let c_method = c_method.canonical()?;
 
     debug!(
         "{indent}+ CXXMethod {} {}",

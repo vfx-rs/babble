@@ -422,7 +422,7 @@ pub fn get_qualified_name(decl: &str, namespaces: &[USR], ast: &AST) -> Result<S
         } else if let Some(class) = ast.get_class(*uns) {
             result = format!("{result}{}::", class.name());
         } else {
-            return Err(Error::ClassOrNamespaceNotFound(*uns))
+            return Err(Error::ClassOrNamespaceNotFound(*uns));
         }
     }
 
@@ -457,8 +457,7 @@ pub fn extract_ast(
                 // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
                 // (for opaque types in the API)
                 if c.is_definition() {
-                    let cd = extract_class_decl(c, depth + 1, tu, &namespaces)
-                        .expect(&format!("Failed to extract ClassDecl {c:?}"));
+                    let cd = extract_class_decl(c, depth + 1, tu, &namespaces)?;
                     ast.insert_class(cd);
                     already_visited.push(c.usr());
                 }
@@ -474,8 +473,7 @@ pub fn extract_ast(
                     ast,
                     tu,
                     &namespaces,
-                )
-                .expect(&format!("Failed to extract TypeAliasDecl {c:?}"));
+                )?;
                 ast.insert_type_alias(TypeAlias::ClassTemplateSpecialization(cts));
             } else {
                 debug!(

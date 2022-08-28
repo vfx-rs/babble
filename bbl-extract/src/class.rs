@@ -431,7 +431,7 @@ pub fn extract_class_decl(
             CursorKind::FieldDecl => {
                 if let Ok(access) = member.cxx_access_specifier() {
                     if access == AccessSpecifier::Public {
-                        let field = extract_field(member, depth, &template_parameters);
+                        let field = extract_field(member, depth, &template_parameters)?;
                         fields.push(field);
                     }
                 } else {
@@ -488,7 +488,7 @@ pub fn extract_field(
     c_field: Cursor,
     depth: usize,
     class_template_parameters: &[TemplateParameterDecl],
-) -> Field {
+) -> Result<Field> {
     let indent = format!("{:width$}", "", width = depth * 2);
 
     let template_parameters = class_template_parameters
@@ -496,13 +496,13 @@ pub fn extract_field(
         .map(|t| t.name().to_string())
         .collect::<Vec<_>>();
 
-    let ty = c_field.ty().unwrap();
-    let qual_type = extract_type(ty, &template_parameters).unwrap();
+    let ty = c_field.ty()?;
+    let qual_type = extract_type(ty, &template_parameters)?;
 
-    Field {
+    Ok(Field {
         name: c_field.display_name(),
         qual_type,
-    }
+    })
 }
 
 pub struct Field {
