@@ -1,21 +1,20 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_snake_case)]
 
-use clang_sys::{
-    CX_CXXAccessSpecifier, CX_CXXInvalidAccessSpecifier, CX_CXXPrivate, CX_CXXProtected,
-    CX_CXXPublic,
-};
+use bbl_clang::access_specifier::AccessSpecifier;
+use bbl_clang::cursor::{Cursor, USR};
+use bbl_clang::translation_unit::TranslationUnit;
 use log::*;
 use std::fmt::Display;
 use ustr::Ustr;
 
 use crate::ast::{get_namespaces_for_decl, MethodId, AST};
-use crate::cursor_kind::CursorKind;
+use crate::error;
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::qualtype::extract_type;
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
-use crate::{cursor::USR, function::Method, qualtype::QualType};
-use crate::{error, Cursor, TranslationUnit};
+use crate::{function::Method, qualtype::QualType};
+use bbl_clang::cursor_kind::CursorKind;
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -30,7 +29,9 @@ pub enum ClassBindKind {
 pub struct MethodSpecializationId(pub(crate) usize);
 
 impl MethodSpecializationId {
-    pub fn new(id: usize) -> MethodSpecializationId { MethodSpecializationId(id) }
+    pub fn new(id: usize) -> MethodSpecializationId {
+        MethodSpecializationId(id)
+    }
 }
 
 impl From<MethodSpecializationId> for usize {
@@ -84,12 +85,24 @@ impl ClassDecl {
         self.usr
     }
 
-    pub fn fields(&self) -> &[Field] { &self.fields }
-    pub fn methods(&self) -> &[Method] { &self.methods }
-    pub fn namespaces(&self) -> &[USR] { &self.namespaces }
-    pub fn template_parameters(&self) -> &[TemplateParameterDecl] { &self.template_parameters }
-    pub fn bind_kind(&self) -> &ClassBindKind { &self.bind_kind }
-    pub fn specialized_methods(&self) -> &[MethodTemplateSpecialization] { &self.specialized_methods }
+    pub fn fields(&self) -> &[Field] {
+        &self.fields
+    }
+    pub fn methods(&self) -> &[Method] {
+        &self.methods
+    }
+    pub fn namespaces(&self) -> &[USR] {
+        &self.namespaces
+    }
+    pub fn template_parameters(&self) -> &[TemplateParameterDecl] {
+        &self.template_parameters
+    }
+    pub fn bind_kind(&self) -> &ClassBindKind {
+        &self.bind_kind
+    }
+    pub fn specialized_methods(&self) -> &[MethodTemplateSpecialization] {
+        &self.specialized_methods
+    }
 
     pub fn set_ignore(&mut self, ignore: bool) {
         self.ignore = true;
@@ -440,27 +453,6 @@ pub fn extract_class_decl(
     )
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum AccessSpecifier {
-    Public,
-    Protected,
-    Private,
-}
-
-impl TryFrom<CX_CXXAccessSpecifier> for AccessSpecifier {
-    type Error = crate::error::Error;
-
-    fn try_from(value: CX_CXXAccessSpecifier) -> Result<Self, Self::Error> {
-        match value {
-            CX_CXXInvalidAccessSpecifier => Err(Error::InvalidAccessSpecifier),
-            CX_CXXPublic => Ok(AccessSpecifier::Public),
-            CX_CXXProtected => Ok(AccessSpecifier::Protected),
-            CX_CXXPrivate => Ok(AccessSpecifier::Private),
-            _ => unreachable!(),
-        }
-    }
-}
-
 pub fn extract_field(
     c_field: Cursor,
     depth: usize,
@@ -494,8 +486,12 @@ impl Display for Field {
 }
 
 impl Field {
-    pub fn name(&self) -> &str { &self.name }
-    pub fn qual_type(&self) -> &QualType { &self.qual_type }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn qual_type(&self) -> &QualType {
+        &self.qual_type
+    }
 
     fn format(
         &self,

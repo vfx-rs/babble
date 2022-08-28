@@ -8,7 +8,7 @@ name = "bbl_extract"
 path = "src/lib.rs"
 
 [dependencies]
-clang-sys = {version = "1.3.3", features = ["clang_13_0"] }
+bbl-clang = { path = "../bbl-clang", version = "0.1.0" }
 clap = { version = "3.2.17", features = ["derive", "unstable-doc"] }
 env_logger = "0.9.0"
 hashbrown = "0.12.3"

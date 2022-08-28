@@ -1,16 +1,14 @@
-use log::debug;
 use std::{
     collections::hash_map::DefaultHasher,
-    ffi::CString,
     hash::{Hash, Hasher},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use super::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Write out a temporary file we can pass to libclang to compile.
-/// 
+///
 /// Will write to $OUT_DIR if it is set (i.e. if we are being called from build.rs), or std::env::temp_dir() otherwise
 pub fn write_temp_file(file_contents: &str) -> Result<PathBuf, std::io::Error> {
     let mut filename = if let Ok(dir) = std::env::var("OUT_DIR") {
@@ -33,6 +31,7 @@ pub fn write_temp_file(file_contents: &str) -> Result<PathBuf, std::io::Error> {
 mod tests {
     use crate::index::Index;
     use crate::*;
+    use log::*;
 
     #[test]
     fn test_virtual_file() -> Result<(), crate::error::Error> {

@@ -1,18 +1,16 @@
+use bbl_clang::cursor::Cursor;
+use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::TranslationUnit};
 use ustr::{Ustr, UstrMap};
 
 use log::*;
 
 use crate::class::{ClassDecl, MethodSpecializationId};
-use crate::function::{Function, Method, extract_function};
-use crate::index::Index;
+use crate::function::{extract_function, Function, Method};
 use crate::namespace::{self, extract_namespace, Namespace};
 use crate::template_argument::{TemplateArgument, TemplateType};
-use crate::type_alias::{ClassTemplateSpecialization, TypeAlias, FunctionTemplateSpecialization};
-use crate::{
-    class::extract_class_decl, cursor::USR, cursor_kind::CursorKind,
-    type_alias::extract_class_template_specialization, Cursor, TranslationUnit,
-};
-use crate::{cursor, type_alias};
+use crate::type_alias;
+use crate::type_alias::{ClassTemplateSpecialization, FunctionTemplateSpecialization, TypeAlias};
+use crate::{class::extract_class_decl, type_alias::extract_class_template_specialization};
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -70,7 +68,9 @@ impl<T> UstrIndexMap<T> {
 pub struct ClassId(pub(crate) usize);
 
 impl ClassId {
-    pub fn new(id: usize) -> ClassId { ClassId(id) }
+    pub fn new(id: usize) -> ClassId {
+        ClassId(id)
+    }
 }
 
 impl From<ClassId> for usize {
@@ -83,7 +83,9 @@ impl From<ClassId> for usize {
 pub struct MethodId(pub(crate) usize);
 
 impl MethodId {
-    pub fn new(id: usize) -> MethodId { MethodId(id) }
+    pub fn new(id: usize) -> MethodId {
+        MethodId(id)
+    }
 }
 
 impl From<MethodId> for usize {
@@ -96,7 +98,9 @@ impl From<MethodId> for usize {
 pub struct NamespaceId(pub(crate) usize);
 
 impl NamespaceId {
-    pub fn new(id: usize) -> NamespaceId { NamespaceId(id) }
+    pub fn new(id: usize) -> NamespaceId {
+        NamespaceId(id)
+    }
 }
 
 impl From<NamespaceId> for usize {
@@ -109,7 +113,9 @@ impl From<NamespaceId> for usize {
 pub struct FunctionId(pub(crate) usize);
 
 impl FunctionId {
-    pub fn new(id: usize) -> FunctionId { FunctionId(id) }
+    pub fn new(id: usize) -> FunctionId {
+        FunctionId(id)
+    }
 }
 
 impl From<FunctionId> for usize {
@@ -122,7 +128,9 @@ impl From<FunctionId> for usize {
 pub struct TypeAliasId(pub(crate) usize);
 
 impl TypeAliasId {
-    pub fn new(id: usize) -> TypeAliasId { TypeAliasId(id) }
+    pub fn new(id: usize) -> TypeAliasId {
+        TypeAliasId(id)
+    }
 }
 
 impl From<TypeAliasId> for usize {
@@ -148,10 +156,18 @@ impl AST {
         }
     }
 
-    pub fn classes(&self) -> &UstrIndexMap<ClassDecl> { &self.classes }
-    pub fn functions(&self) -> &UstrIndexMap<Function> { &self.functions }
-    pub fn type_aliases(&self) -> &UstrIndexMap<TypeAlias> { &self.type_aliases }
-    pub fn namespaces(&self) -> &UstrIndexMap<Namespace> { &self.namespaces }
+    pub fn classes(&self) -> &UstrIndexMap<ClassDecl> {
+        &self.classes
+    }
+    pub fn functions(&self) -> &UstrIndexMap<Function> {
+        &self.functions
+    }
+    pub fn type_aliases(&self) -> &UstrIndexMap<TypeAlias> {
+        &self.type_aliases
+    }
+    pub fn namespaces(&self) -> &UstrIndexMap<Namespace> {
+        &self.namespaces
+    }
 
     pub fn pretty_print(&self, depth: usize) {
         for namespace in self.namespaces.iter() {
@@ -234,10 +250,7 @@ impl AST {
         let mut matches = Vec::new();
 
         for (function_id, function) in self.functions.iter().enumerate() {
-            if function
-                .signature(self, &[], None)
-                .contains(signature)
-            {
+            if function.signature(self, &[], None).contains(signature) {
                 matches.push((function_id, function));
             }
         }
@@ -269,10 +282,7 @@ impl AST {
                 error!("Multiple matches found for signature \"{signature}\":");
 
                 for (_, function) in matches {
-                    error!(
-                        "  {}",
-                        function.signature(self, &[], None)
-                    );
+                    error!("  {}", function.signature(self, &[], None));
                 }
 
                 Err(Error::MultipleMatches)
@@ -367,7 +377,8 @@ impl AST {
     }
 
     pub fn insert_type_alias(&mut self, type_alias: TypeAlias) {
-        self.type_aliases.insert(type_alias.usr().into(), type_alias);
+        self.type_aliases
+            .insert(type_alias.usr().into(), type_alias);
     }
 
     pub fn get_function(&self, usr: USR) -> Option<&Function> {
@@ -452,7 +463,7 @@ pub fn extract_ast(
             already_visited.push(usr);
         }
         CursorKind::FunctionDecl | CursorKind::FunctionTemplate => {
-            let fun = extract_function(c, depth+1, &[])?;
+            let fun = extract_function(c, depth + 1, &[])?;
             ast.insert_function(fun);
             already_visited.push(c.usr());
         }
@@ -636,9 +647,9 @@ pub fn extract_ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit
 }
 
 // walk back up through a cursor's semantic parents and add them as namespaces
-pub fn walk_namespaces(c: Result<Cursor>, namespaces: &mut Vec<USR>) {
+pub fn walk_namespaces(c: Result<Cursor, bbl_clang::error::Error>, namespaces: &mut Vec<USR>) {
     if let Ok(c) = c {
-        if c.kind() != CursorKind::TranslationUnit { 
+        if c.kind() != CursorKind::TranslationUnit {
             namespaces.push(c.usr());
             walk_namespaces(c.semantic_parent(), namespaces);
         }

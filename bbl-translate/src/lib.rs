@@ -1,7 +1,9 @@
-use std::{fmt::Display};
+use std::fmt::Display;
 
+use bbl_clang::cursor::USR;
+use bbl_clang::ty::TypeKind;
 use bbl_extract::function::Function;
-use bbl_extract::type_alias::{FunctionTemplateSpecialization, ClassTemplateSpecialization};
+use bbl_extract::type_alias::{ClassTemplateSpecialization, FunctionTemplateSpecialization};
 use hashbrown::HashSet;
 use log::{error, warn};
 
@@ -13,11 +15,9 @@ use bbl_extract::template_argument::TemplateParameterDecl;
 use bbl_extract::{
     ast::{ClassId, FunctionId, MethodId, UstrIndexMap, AST},
     class::{ClassBindKind, ClassDecl},
-    cursor::USR,
     function::{Argument, Method},
     qualtype::{QualType, TypeRef},
     template_argument::TemplateType,
-    ty::TypeKind,
     type_alias::TypeAlias,
 };
 
@@ -118,7 +118,7 @@ pub enum CFunctionSource {
     Method((ClassId, MethodId)),
     /// This function was translated from a c++ function
     Function(FunctionId),
-    SpecializedMethod((ClassId, MethodSpecializationId))
+    SpecializedMethod((ClassId, MethodSpecializationId)),
 }
 
 pub struct CFunction {
@@ -565,8 +565,15 @@ pub fn translate_class(
     }
 
     for (spec_method_id, spec_method) in class.specialized_methods().iter().enumerate() {
-        let combined_template_args = template_args.iter().cloned().chain(spec_method.template_arguments().iter().cloned()).collect::<Vec<_>>();
-        let source = CFunctionSource::SpecializedMethod((class_id, MethodSpecializationId::new(spec_method_id)));
+        let combined_template_args = template_args
+            .iter()
+            .cloned()
+            .chain(spec_method.template_arguments().iter().cloned())
+            .collect::<Vec<_>>();
+        let source = CFunctionSource::SpecializedMethod((
+            class_id,
+            MethodSpecializationId::new(spec_method_id),
+        ));
         let method = class.get_method(spec_method.specialized_decl());
 
         let c_function = translate_method(
@@ -685,13 +692,15 @@ pub fn translate_method(
         .chain(class_template_parms.iter().cloned())
         .collect::<Vec<_>>();
 
-    let result = translate_qual_type(&method.result(), &template_parms, template_args)
-        .map_err(|e| Error::TranslateFunction {
-            name: format!("{}::{}", class.name(), method.name()),
-            source: TranslateArgumentError {
-                name: "[return]".into(),
-                source: e,
-            },
+    let result =
+        translate_qual_type(&method.result(), &template_parms, template_args).map_err(|e| {
+            Error::TranslateFunction {
+                name: format!("{}::{}", class.name(), method.name()),
+                source: TranslateArgumentError {
+                    name: "[return]".into(),
+                    source: e,
+                },
+            }
         })?;
 
     let mut used_argument_names = HashSet::new();

@@ -1,6 +1,6 @@
 use clang_sys::*;
 
-use crate::CXStringEx;
+use crate::string::CXStringEx;
 
 pub struct File {
     pub(crate) inner: CXFile,

@@ -1,15 +1,16 @@
+use bbl_clang::{
+    cursor::{Cursor, USR},
+    cursor_kind::CursorKind,
+    ty::{Type, TypeKind},
+};
 use log::*;
 use std::fmt::Display;
 
 use crate::{
     ast::AST,
     class::specialize_template_parameter,
-    cursor::USR,
-    cursor_kind::CursorKind,
     error::Error,
     template_argument::{TemplateParameterDecl, TemplateType},
-    ty::{Type, TypeKind},
-    Cursor,
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -259,7 +260,7 @@ pub fn extract_type(ty: Type, template_parameters: &[String]) -> Result<QualType
                         "Got unexposed for {name} with no matching template parmaeter in {:?}",
                         template_parameters
                     );
-                    Err(Error::TypeUnexposed)
+                    Err(Error::NoMatchingTemplateParameter(name))
                 }
             }
             _ => {

@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use clang_sys::{clang_getSpellingLocation, clang_getTokenSpelling, CXSourceLocation, CXToken};
 
-use crate::{file::File, CXStringEx, TranslationUnit};
+use crate::{file::File, string::CXStringEx, translation_unit::TranslationUnit};
 
 pub struct Token<'tu> {
     pub(crate) inner: CXToken,

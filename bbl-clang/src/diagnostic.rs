@@ -9,7 +9,7 @@ use clang_sys::{
     CXDiagnostic_Ignored, CXDiagnostic_Note, CXDiagnostic_Warning,
 };
 
-use crate::CXStringEx;
+use crate::string::CXStringEx;
 
 #[derive(Clone)]
 pub struct Diagnostic {

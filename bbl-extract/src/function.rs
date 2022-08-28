@@ -1,11 +1,12 @@
+use bbl_clang::cursor::{Cursor, USR};
 use log::*;
 use std::fmt::Display;
 
 use crate::ast::{get_namespaces_for_decl, MethodId};
-use crate::cursor_kind::CursorKind;
 use crate::qualtype::{extract_type, extract_type_from_typeref};
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
-use crate::{ast::AST, cursor::USR, qualtype::QualType, Cursor};
+use crate::{ast::AST, qualtype::QualType};
+use bbl_clang::cursor_kind::CursorKind;
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -180,9 +181,15 @@ impl Function {
         };
 
         let template_str = if !self.template_parameters.is_empty() {
-            let parms = self.template_parameters.iter().map(|t| t.name().to_string() ).collect::<Vec<_>>();
+            let parms = self
+                .template_parameters
+                .iter()
+                .map(|t| t.name().to_string())
+                .collect::<Vec<_>>();
             format!("{indent}template <typename {}>\n", parms.join(", typename"))
-        } else {String::new()};
+        } else {
+            String::new()
+        };
 
         println!("{template_str}{indent}{s}{attr_string}");
     }
@@ -246,7 +253,6 @@ impl Method {
     pub fn namespaces(&self) -> &[USR] {
         &self.function.namespaces
     }
-
 
     pub fn template_parameters(&self) -> &[TemplateParameterDecl] {
         self.function.template_parameters()
@@ -385,8 +391,6 @@ impl MethodTemplateSpecialization {
     pub fn namespaces(&self) -> &[USR] {
         &self.namespaces
     }
-
-
 }
 
 pub fn extract_argument(c_arg: Cursor, template_parameters: &[String]) -> Result<Argument> {

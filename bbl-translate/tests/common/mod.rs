@@ -4,4 +4,3 @@ pub fn init_log() {
         //.is_test(true)
         .try_init();
 }
-

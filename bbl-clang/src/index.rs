@@ -4,7 +4,7 @@ use std::path::Path;
 use clang_sys::{clang_createIndex, clang_parseTranslationUnit, CXIndex};
 
 use crate::error::Error;
-use crate::TranslationUnit;
+use crate::translation_unit::TranslationUnit;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 use log::*;

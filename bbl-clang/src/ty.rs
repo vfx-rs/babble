@@ -5,7 +5,7 @@ use std::fmt::{Debug, Display};
 
 use clang_sys::*;
 
-use crate::{cursor::cursor, CXStringEx, Cursor};
+use crate::{cursor::cursor, cursor::Cursor, string::CXStringEx};
 
 use super::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;

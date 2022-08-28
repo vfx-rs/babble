@@ -1,6 +1,6 @@
 use crate::diagnostic::Diagnostic;
+use crate::string::CXStringEx;
 use crate::token::{SourceLocation, Token};
-use crate::CXStringEx;
 
 use super::cursor::{cursor, Cursor};
 use super::error::Error;

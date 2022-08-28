@@ -1,8 +1,7 @@
 mod common;
 
 use bbl_extract::{
-    error::Error, parse_string_and_extract_ast, qualtype::QualType,
-    template_argument::TemplateType, 
+    error::Error, parse_string_and_extract_ast, qualtype::QualType, template_argument::TemplateType,
 };
 
 use bbl_translate::translate_cpp_ast_to_c;
@@ -382,7 +381,6 @@ T function_template(T&& a, float*);
         vec![Some(TemplateType::Type(QualType::float()))],
     )?;
 
-
     ast.pretty_print(0);
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
@@ -428,7 +426,6 @@ public:
         "method_float",
         vec![Some(TemplateType::Type(QualType::float()))],
     )?;
-
 
     ast.pretty_print(0);
 

@@ -1,13 +1,15 @@
+use bbl_clang::cursor_kind::CursorKind;
+use bbl_clang::translation_unit::TranslationUnit;
 use log::*;
 use std::fmt::Display;
 
+use crate::ast::AST;
 use crate::class::extract_class_decl;
-use crate::cursor::USR;
 use crate::namespace::extract_namespace;
 use crate::qualtype::extract_type;
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
-use crate::ty::Type;
-use crate::{ast::AST, cursor_kind::CursorKind, Cursor, TranslationUnit};
+use bbl_clang::cursor::{Cursor, USR};
+use bbl_clang::ty::Type;
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -27,11 +29,18 @@ impl TypeAlias {
         }
     }
 
-    pub fn pretty_print(&self, depth: usize, ast: &AST, outer_template_parameters: &[TemplateParameterDecl]) {
+    pub fn pretty_print(
+        &self,
+        depth: usize,
+        ast: &AST,
+        outer_template_parameters: &[TemplateParameterDecl],
+    ) {
         match self {
             TypeAlias::TypeAliasType { name, usr } => todo!(),
             TypeAlias::ClassTemplateSpecialization(cts) => cts.pretty_print(depth, ast),
-            TypeAlias::FunctionTemplateSpecialization(fts) => fts.pretty_print(depth, ast, outer_template_parameters),
+            TypeAlias::FunctionTemplateSpecialization(fts) => {
+                fts.pretty_print(depth, ast, outer_template_parameters)
+            }
         }
     }
 }
@@ -106,13 +115,17 @@ pub fn extract_class_template_specialization(
                     }
                 } else {
                     error!("{indent}ERROR could not get referenced template from {child:?}");
-                    return Err(Error::InvalidType);
+                    return Err(Error::FailedToGetTemplateRefFrom(
+                        c_type_alias_decl.display_name(),
+                    ));
                 }
             }
         }
 
         Ok(ClassTemplateSpecialization {
-            specialized_decl: specialized_decl.ok_or(Error::InvalidType)?,
+            specialized_decl: specialized_decl.ok_or(Error::FailedToGetTemplateRefFrom(
+                c_type_alias_decl.display_name(),
+            ))?,
             usr: c_type_alias_decl.usr(),
             name,
             template_arguments: template_args,
@@ -120,7 +133,7 @@ pub fn extract_class_template_specialization(
         })
     } else {
         error!("Could not get type from TypeAliasDecl {c_type_alias_decl:?}");
-        Err(Error::InvalidType)
+        Err(Error::FailedToGetTypeFrom(c_type_alias_decl.display_name()))
     }
 }
 
@@ -343,7 +356,12 @@ impl FunctionTemplateSpecialization {
 
         // this will be complicated...
         let function = ast.get_function(self.specialized_decl).unwrap();
-        function.pretty_print(depth, ast, outer_template_parameters, Some(self.template_arguments()));
+        function.pretty_print(
+            depth,
+            ast,
+            outer_template_parameters,
+            Some(self.template_arguments()),
+        );
     }
 
     pub fn format(&self, ast: &AST, outer_template_parameters: &[TemplateParameterDecl]) -> String {
@@ -362,6 +380,10 @@ impl FunctionTemplateSpecialization {
 
         // this will be complicated...
         let function = ast.get_function(self.specialized_decl).unwrap();
-        function.format(ast, outer_template_parameters, Some(self.template_arguments()))
+        function.format(
+            ast,
+            outer_template_parameters,
+            Some(self.template_arguments()),
+        )
     }
 }

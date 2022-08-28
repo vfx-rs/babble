@@ -1,4 +1,5 @@
-use crate::{ast::AST, cursor::USR, Cursor, TranslationUnit};
+use crate::ast::AST;
+use bbl_clang::{cursor::Cursor, cursor::USR, translation_unit::TranslationUnit};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Namespace {
