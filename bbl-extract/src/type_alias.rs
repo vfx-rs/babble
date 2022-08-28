@@ -115,7 +115,7 @@ pub fn extract_class_template_specialization(
             specialized_decl: specialized_decl.ok_or(Error::InvalidType)?,
             usr: c_type_alias_decl.usr(),
             name,
-            args: template_args,
+            template_arguments: template_args,
             namespaces: namespaces.clone(),
         })
     } else {
@@ -203,17 +203,37 @@ pub struct ClassTemplateSpecialization {
     /// ones.
     ///
     /// Revisit and maybe we want to make that a hard error
-    pub(crate) args: Vec<Option<TemplateType>>,
+    pub(crate) template_arguments: Vec<Option<TemplateType>>,
     /// The typedef itself is namespaced
     pub(crate) namespaces: Vec<USR>,
 }
 
 impl ClassTemplateSpecialization {
+    pub fn specialized_decl(&self) -> USR {
+        self.specialized_decl
+    }
+
+    pub fn usr(&self) -> USR {
+        self.usr
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn template_arguments(&self) -> &[Option<TemplateType>] {
+        &self.template_arguments
+    }
+
+    pub fn namespaces(&self) -> &[USR] {
+        &self.namespaces
+    }
+
     pub fn pretty_print(&self, depth: usize, ast: &AST) {
         let indent = format!("{:width$}", "", width = depth * 2);
 
         let args = self
-            .args
+            .template_arguments()
             .iter()
             .map(|a| format!("{:?}", a))
             .collect::<Vec<_>>();
@@ -235,12 +255,12 @@ impl ClassTemplateSpecialization {
 
         // this will be complicated...
         let class = ast.get_class(self.specialized_decl).unwrap();
-        class.pretty_print(depth, ast, Some(&self.args));
+        class.pretty_print(depth, ast, Some(self.template_arguments()));
     }
 
     pub fn format(&self, ast: &AST) -> String {
         let args = self
-            .args
+            .template_arguments()
             .iter()
             .map(|a| format!("{:?}", a))
             .collect::<Vec<_>>();
@@ -254,7 +274,7 @@ impl ClassTemplateSpecialization {
 
         // this will be complicated...
         let class = ast.get_class(self.specialized_decl).unwrap();
-        class.format(ast, Some(&self.args))
+        class.format(ast, Some(self.template_arguments()))
     }
 }
 
@@ -266,12 +286,32 @@ pub struct FunctionTemplateSpecialization {
     /// ones.
     ///
     /// Revisit and maybe we want to make that a hard error
-    pub(crate) args: Vec<Option<TemplateType>>,
+    pub(crate) template_arguments: Vec<Option<TemplateType>>,
     /// The typedef itself is namespaced
     pub(crate) namespaces: Vec<USR>,
 }
 
 impl FunctionTemplateSpecialization {
+    pub fn specialized_decl(&self) -> USR {
+        self.specialized_decl
+    }
+
+    pub fn usr(&self) -> USR {
+        self.usr
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn template_arguments(&self) -> &[Option<TemplateType>] {
+        &self.template_arguments
+    }
+
+    pub fn namespaces(&self) -> &[USR] {
+        &self.namespaces
+    }
+
     pub fn pretty_print(
         &self,
         depth: usize,
@@ -281,7 +321,7 @@ impl FunctionTemplateSpecialization {
         let indent = format!("{:width$}", "", width = depth * 2);
 
         let args = self
-            .args
+            .template_arguments()
             .iter()
             .map(|a| format!("{:?}", a))
             .collect::<Vec<_>>();
@@ -303,12 +343,12 @@ impl FunctionTemplateSpecialization {
 
         // this will be complicated...
         let function = ast.get_function(self.specialized_decl).unwrap();
-        function.pretty_print(depth, ast, outer_template_parameters, Some(&self.args));
+        function.pretty_print(depth, ast, outer_template_parameters, Some(self.template_arguments()));
     }
 
     pub fn format(&self, ast: &AST, outer_template_parameters: &[TemplateParameterDecl]) -> String {
         let args = self
-            .args
+            .template_arguments()
             .iter()
             .map(|a| format!("{:?}", a))
             .collect::<Vec<_>>();
@@ -322,6 +362,6 @@ impl FunctionTemplateSpecialization {
 
         // this will be complicated...
         let function = ast.get_function(self.specialized_decl).unwrap();
-        function.format(ast, outer_template_parameters, Some(&self.args))
+        function.format(ast, outer_template_parameters, Some(self.template_arguments()))
     }
 }

@@ -69,17 +69,67 @@ impl<T> UstrIndexMap<T> {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct ClassId(pub(crate) usize);
 
+impl ClassId {
+    pub fn new(id: usize) -> ClassId { ClassId(id) }
+}
+
+impl From<ClassId> for usize {
+    fn from(id: ClassId) -> Self {
+        id.0
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct MethodId(pub(crate) usize);
+
+impl MethodId {
+    pub fn new(id: usize) -> MethodId { MethodId(id) }
+}
+
+impl From<MethodId> for usize {
+    fn from(id: MethodId) -> Self {
+        id.0
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct NamespaceId(pub(crate) usize);
 
+impl NamespaceId {
+    pub fn new(id: usize) -> NamespaceId { NamespaceId(id) }
+}
+
+impl From<NamespaceId> for usize {
+    fn from(id: NamespaceId) -> Self {
+        id.0
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct FunctionId(pub(crate) usize);
 
+impl FunctionId {
+    pub fn new(id: usize) -> FunctionId { FunctionId(id) }
+}
+
+impl From<FunctionId> for usize {
+    fn from(id: FunctionId) -> Self {
+        id.0
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct TypeAliasId(pub(crate) usize);
+
+impl TypeAliasId {
+    pub fn new(id: usize) -> TypeAliasId { TypeAliasId(id) }
+}
+
+impl From<TypeAliasId> for usize {
+    fn from(id: TypeAliasId) -> Self {
+        id.0
+    }
+}
 
 pub struct AST {
     pub(crate) classes: UstrIndexMap<ClassDecl>,
@@ -97,6 +147,11 @@ impl AST {
             type_aliases: UstrIndexMap::new(),
         }
     }
+
+    pub fn classes(&self) -> &UstrIndexMap<ClassDecl> { &self.classes }
+    pub fn functions(&self) -> &UstrIndexMap<Function> { &self.functions }
+    pub fn type_aliases(&self) -> &UstrIndexMap<TypeAlias> { &self.type_aliases }
+    pub fn namespaces(&self) -> &UstrIndexMap<Namespace> { &self.namespaces }
 
     pub fn pretty_print(&self, depth: usize) {
         for namespace in self.namespaces.iter() {
@@ -127,7 +182,7 @@ impl AST {
             if namespace.name == name {
                 return self
                     .namespaces
-                    .get_id(&namespace.usr().0)
+                    .get_id(&namespace.usr().into())
                     .map(|i| NamespaceId(*i))
                     .ok_or(Error::NamespaceNotFound);
             }
@@ -141,7 +196,7 @@ impl AST {
             if class.name() == name {
                 return self
                     .classes
-                    .get_id(&class.usr().0)
+                    .get_id(&class.usr().into())
                     .map(|i| ClassId(*i))
                     .ok_or(Error::RecordNotFound);
             }
@@ -158,19 +213,19 @@ impl AST {
     ) -> Result<TypeAliasId> {
         let class_decl = self.classes.index(class_id.0);
 
-        let usr = USR(Ustr::from(&format!("{}_{name}", class_decl.usr().0)));
+        let usr = USR::new(&format!("{}_{name}", class_decl.usr().as_str()));
 
         let cts = ClassTemplateSpecialization {
             specialized_decl: class_decl.usr(),
             usr,
             name: name.into(),
-            args,
+            template_arguments: args,
             namespaces: Vec::new(),
         };
 
         let id = self
             .type_aliases
-            .insert(usr.0, TypeAlias::ClassTemplateSpecialization(cts));
+            .insert(usr.into(), TypeAlias::ClassTemplateSpecialization(cts));
 
         Ok(TypeAliasId(id))
     }
@@ -229,23 +284,23 @@ impl AST {
         &mut self,
         function_id: FunctionId,
         name: &str,
-        args: Vec<Option<TemplateType>>,
+        template_arguments: Vec<Option<TemplateType>>,
     ) -> Result<TypeAliasId> {
         let function_decl = self.functions.index(function_id.0);
 
-        let usr = USR(Ustr::from(&format!("{}_{name}", function_decl.usr().0)));
+        let usr = USR::new(&format!("{}_{name}", function_decl.usr().as_str()));
 
         let fts = FunctionTemplateSpecialization {
             specialized_decl: function_decl.usr(),
             usr,
             name: name.into(),
-            args,
+            template_arguments,
             namespaces: Vec::new(),
         };
 
         let id = self
             .type_aliases
-            .insert(usr.0, TypeAlias::FunctionTemplateSpecialization(fts));
+            .insert(usr.into(), TypeAlias::FunctionTemplateSpecialization(fts));
 
         Ok(TypeAliasId(id))
     }
@@ -300,37 +355,37 @@ impl AST {
     }
 
     pub fn insert_class(&mut self, class: ClassDecl) {
-        self.classes.insert(class.usr().0, class);
+        self.classes.insert(class.usr().into(), class);
     }
 
     pub fn get_class(&self, usr: USR) -> Option<&ClassDecl> {
-        self.classes.get(&usr.0)
+        self.classes.get(&usr.into())
     }
 
     pub fn insert_function(&mut self, function: Function) {
-        self.functions.insert(function.usr().0, function);
+        self.functions.insert(function.usr().into(), function);
     }
 
     pub fn insert_type_alias(&mut self, type_alias: TypeAlias) {
-        self.type_aliases.insert(type_alias.usr().0, type_alias);
+        self.type_aliases.insert(type_alias.usr().into(), type_alias);
     }
 
     pub fn get_function(&self, usr: USR) -> Option<&Function> {
-        self.functions.get(&usr.0)
+        self.functions.get(&usr.into())
     }
 
     pub fn insert_namespace(&mut self, namespace: Namespace) {
-        self.namespaces.insert(namespace.usr().0, namespace);
+        self.namespaces.insert(namespace.usr().into(), namespace);
     }
 
     pub fn get_namespace(&self, usr: USR) -> Option<&Namespace> {
-        self.namespaces.get(&usr.0)
+        self.namespaces.get(&usr.into())
     }
 
     pub fn get_class_or_namespace_names(&self, usr: USR) -> Result<(&str, Option<&String>)> {
-        if let Some(ns) = self.namespaces.get(&usr.0) {
+        if let Some(ns) = self.namespaces.get(&usr.into()) {
             Ok((&ns.name, ns.rename.as_ref()))
-        } else if let Some(class) = self.classes.get(&usr.0) {
+        } else if let Some(class) = self.classes.get(&usr.into()) {
             Ok((&class.name, class.rename.as_ref()))
         } else {
             Err(Error::ClassOrNamespaceNotFound(usr))
@@ -412,7 +467,7 @@ pub fn extract_ast(
     if let Ok(cr) = c.referenced() {
         if cr != c && !already_visited.contains(&cr.usr()) {
             // print!("{}-> ", indent);
-            if !cr.usr().0.is_empty() {
+            if !cr.usr().is_empty() {
                 already_visited.push(cr.usr());
             }
             extract_ast(

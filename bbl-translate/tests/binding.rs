@@ -1,9 +1,11 @@
 mod common;
 
-use bbl::{
+use bbl_extract::{
     error::Error, parse_string_and_extract_ast, qualtype::QualType,
-    template_argument::TemplateType, translate::translate_cpp_ast_to_c,
+    template_argument::TemplateType, 
 };
+
+use bbl_translate::translate_cpp_ast_to_c;
 
 #[test]
 fn test_binding_rename() -> Result<(), Error> {

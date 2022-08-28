@@ -22,7 +22,7 @@ impl Display for Argument {
 }
 
 impl Argument {
-    fn format(
+    pub fn format(
         &self,
         ast: &AST,
         class_template_parameters: &[TemplateParameterDecl],
@@ -34,6 +34,14 @@ impl Argument {
             self.qual_type
                 .format(ast, class_template_parameters, class_template_args)
         )
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn qual_type(&self) -> &QualType {
+        &self.qual_type
     }
 }
 
@@ -68,6 +76,26 @@ impl Function {
             namespaces,
             template_parameters,
         }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn result(&self) -> &QualType {
+        &self.result
+    }
+
+    pub fn arguments(&self) -> &[Argument] {
+        &self.arguments
+    }
+
+    pub fn replacement_name(&self) -> Option<&str> {
+        self.replacement_name.as_deref()
+    }
+
+    pub fn namespaces(&self) -> &[USR] {
+        &self.namespaces
     }
 
     pub fn template_parameters(&self) -> &[TemplateParameterDecl] {
@@ -199,6 +227,26 @@ impl Method {
         }
     }
 
+    pub fn name(&self) -> &str {
+        &self.function.name
+    }
+
+    pub fn result(&self) -> &QualType {
+        &self.function.result
+    }
+
+    pub fn arguments(&self) -> &[Argument] {
+        &self.function.arguments
+    }
+
+    pub fn replacement_name(&self) -> Option<&str> {
+        self.function.replacement_name.as_deref()
+    }
+
+    pub fn namespaces(&self) -> &[USR] {
+        &self.function.namespaces
+    }
+
 
     pub fn template_parameters(&self) -> &[TemplateParameterDecl] {
         self.function.template_parameters()
@@ -212,8 +260,20 @@ impl Method {
         self.function.usr
     }
 
-    pub fn name(&self) -> &str {
-        &self.function.name
+    pub fn is_const(&self) -> bool {
+        self.is_const
+    }
+
+    pub fn is_static(&self) -> bool {
+        self.is_static
+    }
+
+    pub fn is_virtual(&self) -> bool {
+        self.is_virtual
+    }
+
+    pub fn is_pure_virtual(&self) -> bool {
+        self.is_pure_virtual
     }
 
     pub fn rename(&mut self, new_name: &str) {
@@ -300,9 +360,33 @@ pub struct MethodTemplateSpecialization {
     /// ones.
     ///
     /// Revisit and maybe we want to make that a hard error
-    pub(crate) args: Vec<Option<TemplateType>>,
+    pub(crate) template_arguments: Vec<Option<TemplateType>>,
     /// The typedef itself is namespaced
     pub(crate) namespaces: Vec<USR>,
+}
+
+impl MethodTemplateSpecialization {
+    pub fn specialized_decl(&self) -> MethodId {
+        self.specialized_decl
+    }
+
+    pub fn usr(&self) -> USR {
+        self.usr
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn template_arguments(&self) -> &[Option<TemplateType>] {
+        &self.template_arguments
+    }
+
+    pub fn namespaces(&self) -> &[USR] {
+        &self.namespaces
+    }
+
+
 }
 
 pub fn extract_argument(c_arg: Cursor, template_parameters: &[String]) -> Result<Argument> {

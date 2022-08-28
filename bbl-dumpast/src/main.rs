@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use bbl::{cursor_kind::CursorKind, *, ast::dump};
+use bbl_extract::{cursor_kind::CursorKind, *, ast::dump};
 
 use clap::{Parser, ValueEnum};
 

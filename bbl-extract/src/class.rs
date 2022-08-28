@@ -29,6 +29,16 @@ pub enum ClassBindKind {
 
 pub struct MethodSpecializationId(pub(crate) usize);
 
+impl MethodSpecializationId {
+    pub fn new(id: usize) -> MethodSpecializationId { MethodSpecializationId(id) }
+}
+
+impl From<MethodSpecializationId> for usize {
+    fn from(id: MethodSpecializationId) -> Self {
+        id.0
+    }
+}
+
 pub struct ClassDecl {
     pub(crate) usr: USR,
     pub(crate) name: String,
@@ -73,6 +83,13 @@ impl ClassDecl {
     pub fn usr(&self) -> USR {
         self.usr
     }
+
+    pub fn fields(&self) -> &[Field] { &self.fields }
+    pub fn methods(&self) -> &[Method] { &self.methods }
+    pub fn namespaces(&self) -> &[USR] { &self.namespaces }
+    pub fn template_parameters(&self) -> &[TemplateParameterDecl] { &self.template_parameters }
+    pub fn bind_kind(&self) -> &ClassBindKind { &self.bind_kind }
+    pub fn specialized_methods(&self) -> &[MethodTemplateSpecialization] { &self.specialized_methods }
 
     pub fn set_ignore(&mut self, ignore: bool) {
         self.ignore = true;
@@ -258,6 +275,10 @@ impl ClassDecl {
         }
     }
 
+    pub fn get_method(&self, id: MethodId) -> &Method {
+        &self.methods[id.0]
+    }
+
     pub fn rename_method(&mut self, method_id: MethodId, new_name: &str) {
         self.methods[method_id.0].rename(new_name);
     }
@@ -270,11 +291,11 @@ impl ClassDecl {
         &mut self,
         method_id: MethodId,
         name: &str,
-        args: Vec<Option<TemplateType>>,
+        template_arguments: Vec<Option<TemplateType>>,
     ) -> Result<MethodSpecializationId> {
         let method_decl = &self.methods[method_id.0];
 
-        let usr = USR(Ustr::from(&format!("{}_{name}", method_decl.usr().0)));
+        let usr = USR::new(&format!("{}_{name}", method_decl.usr().as_str()));
 
         let id = self.specialized_methods.len();
 
@@ -282,7 +303,7 @@ impl ClassDecl {
             specialized_decl: method_id,
             usr,
             name: name.into(),
-            args,
+            template_arguments,
             namespaces: Vec::new(),
         };
 
@@ -473,6 +494,9 @@ impl Display for Field {
 }
 
 impl Field {
+    pub fn name(&self) -> &str { &self.name }
+    pub fn qual_type(&self) -> &QualType { &self.qual_type }
+
     fn format(
         &self,
         ast: &AST,

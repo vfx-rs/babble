@@ -1,0 +1,17 @@
+[package]
+name = "bbl-extract"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "bbl_extract"
+path = "src/lib.rs"
+
+[dependencies]
+clang-sys = { path = "../../clang-sys", features=["clang_13_0"] }
+clap = { version = "3.2.17", features = ["derive", "unstable-doc"] }
+env_logger = "0.9.0"
+hashbrown = "0.12.3"
+levenshtein = "1.0.5"
+log = "0.4.17"
+ustr = "0.9.0"

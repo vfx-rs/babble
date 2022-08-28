@@ -32,17 +32,31 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 use ustr::Ustr;
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct USR(pub(crate) Ustr);
+pub struct USR(Ustr);
 
 impl USR {
+    pub fn new(s: &str) -> USR {
+        USR(Ustr::from(s))
+    }
+
     pub fn is_empty(&self) -> bool {
         self.0.as_str().is_empty()
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
     }
 }
 
 impl Display for USR {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl From<USR> for Ustr {
+    fn from(u: USR) -> Self {
+        u.0
     }
 }
 

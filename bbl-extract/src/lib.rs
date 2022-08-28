@@ -17,7 +17,6 @@ pub mod qualtype;
 pub mod template_argument;
 pub mod type_alias;
 pub mod virtual_file;
-pub mod translate;
 use ast::{extract_ast, AST, dump, extract_ast_from_namespace};
 pub use cursor::{ChildVisitResult, Cursor};
 pub mod cursor_kind;

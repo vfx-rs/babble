@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use bbl::{*, ast::extract_ast_from_namespace};
+use bbl_extract::{*, ast::extract_ast_from_namespace};
 use log::*;
 
 use clap::{Parser, ValueEnum};
