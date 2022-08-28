@@ -19,6 +19,10 @@ pub enum Error {
     InvalidPath,
     IoError(std::io::Error),
     ParseError,
+    ClangBinaryNotFound,
+    FailedToRunClang(std::io::Error),
+    NonUTF8Output(std::string::FromUtf8Error),
+    FailedToParseOutput(String),
 }
 
 impl std::fmt::Display for Error {
@@ -46,6 +50,7 @@ impl std::error::Error for Error {
         match self {
             Self::NulError(e) => Some(e),
             Self::IoError(e) => Some(e),
+            Self::FailedToRunClang(e) => Some(e),
             _ => None,
         }
     }

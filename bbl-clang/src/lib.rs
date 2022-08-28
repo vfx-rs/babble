@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use diagnostic::Severity;
 
 pub mod access_specifier;
@@ -39,4 +41,97 @@ pub fn parse_string_to_tu<S1: AsRef<str>, S: AsRef<str>>(
     }
 
     Ok(tu)
+}
+
+pub fn get_clang_binary() -> Result<String, error::Error> {
+    use error::Error;
+    use std::process::Command;
+
+    // First check if we've specified it explicitly
+    if let Ok(path) = std::env::var("CLANG_PATH") {
+        if let Ok(_) = Command::new(&path).output() {
+            println!("Got clang from CLANG_PATH");
+            return Ok(path);
+        }
+    }
+
+    // Next check if there's a pointer to llvm-config
+    if let Ok(config_path) = std::env::var("LLVM_CONFIG_PATH") {
+        if let Ok(output) = Command::new(&config_path).arg("--bindir").output() {
+            let stdout =
+                String::from_utf8(output.stdout.clone()).map_err(|e| Error::NonUTF8Output(e))?;
+
+            let line = stdout
+                .lines()
+                .next()
+                .ok_or(Error::FailedToParseOutput(stdout.clone()))?;
+
+            println!("Got clang from LLVM_CONFIG_PATH");
+            return Ok(PathBuf::from(line).join("clang").display().to_string());
+        }
+    }
+
+    // Finally just check if it's in the PATH
+    if let Ok(_) = Command::new("clang").output() {
+        println!("Got clang from PATH");
+        return Ok("clang".to_string());
+    }
+
+    Err(Error::ClangBinaryNotFound)
+}
+
+/// Try and get the default cli arguments (clang resources, /usr/include etc) for the current OS
+pub fn get_default_cli_args() -> Result<Vec<String>, error::Error> {
+    use error::Error;
+    use std::process::Command;
+
+    let clang_bin = get_clang_binary()?;
+
+    dbg!(&clang_bin);
+
+    let output = Command::new(&clang_bin)
+        .arg("-print-resource-dir")
+        .output()
+        .map_err(|e| Error::FailedToRunClang(e))?;
+    let stdout = String::from_utf8(output.stdout.clone()).map_err(|e| Error::NonUTF8Output(e))?;
+
+    let line = stdout
+        .lines()
+        .next()
+        .ok_or(Error::FailedToParseOutput(stdout.clone()))?;
+
+    let mut result = Vec::new();
+    result.push("-resource-dir".to_string());
+    result.push(line.to_string());
+
+    #[cfg(windows)]
+    todo!();
+
+    #[cfg(unix)]
+    {
+        result.push("-I/usr/include".to_string());
+        result.push("-I/usr/local/include".to_string());
+    }
+
+    dbg!(&result);
+    Ok(result)
+}
+
+pub fn cli_args(args: &[&str]) -> Result<Vec<String>, error::Error> {
+    Ok(get_default_cli_args()?
+        .into_iter()
+        .chain(args.iter().map(|s| s.to_string()))
+        .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{error::Error, get_default_cli_args};
+
+    #[test]
+    fn test_default_cli_args() -> Result<(), Error> {
+        let _ = get_default_cli_args()?;
+
+        Ok(())
+    }
 }

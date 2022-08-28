@@ -1,5 +1,6 @@
 mod common;
 
+use bbl_clang::cli_args;
 use bbl_extract::{
     error::Error, parse_string_and_extract_ast, qualtype::QualType, template_argument::TemplateType,
 };
@@ -362,13 +363,7 @@ template <typename T>
 T function_template(T&& a, float*);
 }
         "#,
-        &[
-            "-resource-dir",
-            "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
-            "-std=c++14",
-            "-I/usr/include",
-            "-I/usr/local/include",
-        ],
+        &cli_args(&[])?,
         true,
         None,
     )?;
