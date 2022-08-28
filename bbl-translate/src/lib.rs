@@ -33,11 +33,33 @@ pub struct CQualType {
     is_const: bool,
     type_ref: CTypeRef,
     cpp_type_ref: TypeRef,
+    needs_deref: bool,
+    needs_move: bool,
 }
 
 impl CQualType {
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn type_ref(&self) -> &CTypeRef {
+        &self.type_ref
+    }
+
+    pub fn is_const(&self) -> bool {
+        self.is_const
+    }
+
+    pub fn is_pointer(&self) -> bool {
+        matches!(self.type_ref, CTypeRef::Pointer(_))
+    }
+
+    pub fn needs_deref(&self) -> bool {
+        self.needs_deref
+    }
+
+    pub fn needs_move(&self) -> bool {
+        self.needs_move
     }
 
     pub fn cpp_type_ref(&self) -> &TypeRef {
@@ -48,6 +70,8 @@ impl CQualType {
         CQualType {
             name: "UNKNOWN".to_string(),
             is_const: false,
+            needs_deref: false,
+            needs_move: false,
             type_ref: CTypeRef::Unknown(tk),
             cpp_type_ref: TypeRef::Unknown(tk),
         }
@@ -105,8 +129,9 @@ impl Display for CQualType {
 }
 
 pub struct CArgument {
-    pub(crate) name: String,
-    pub(crate) qual_type: CQualType,
+    pub name: String,
+    pub qual_type: CQualType,
+    pub is_self: bool,
 }
 
 impl Display for CArgument {
@@ -251,8 +276,10 @@ pub fn translate_qual_type(
             is_const: qual_type.is_const,
             type_ref: CTypeRef::Builtin(*tk),
             cpp_type_ref: qual_type.type_ref.clone(),
+            needs_deref: false,
+            needs_move: false,
         }),
-        TypeRef::Pointer(qt) | TypeRef::LValueReference(qt) | TypeRef::RValueReference(qt) => {
+        TypeRef::Pointer(qt) => {
             Ok(CQualType {
                 name: qual_type.name.clone(),
                 is_const: qual_type.is_const,
@@ -262,6 +289,36 @@ pub fn translate_qual_type(
                     template_args,
                 )?)),
                 cpp_type_ref: qual_type.type_ref.clone(),
+                needs_deref: false,
+                needs_move: false,
+            })
+        }
+        TypeRef::LValueReference(qt) => {
+            Ok(CQualType {
+                name: qual_type.name.clone(),
+                is_const: qual_type.is_const,
+                type_ref: CTypeRef::Pointer(Box::new(translate_qual_type(
+                    qt.as_ref(),
+                    template_parms,
+                    template_args,
+                )?)),
+                cpp_type_ref: qual_type.type_ref.clone(),
+                needs_deref: true,
+                needs_move: false,
+            })
+        }
+        TypeRef::RValueReference(qt) => {
+            Ok(CQualType {
+                name: qual_type.name.clone(),
+                is_const: qual_type.is_const,
+                type_ref: CTypeRef::Pointer(Box::new(translate_qual_type(
+                    qt.as_ref(),
+                    template_parms,
+                    template_args,
+                )?)),
+                cpp_type_ref: qual_type.type_ref.clone(),
+                needs_deref: false,
+                needs_move: true,
             })
         }
         TypeRef::Ref(usr) => Ok(CQualType {
@@ -269,6 +326,8 @@ pub fn translate_qual_type(
             is_const: qual_type.is_const,
             type_ref: CTypeRef::Ref(*usr),
             cpp_type_ref: qual_type.type_ref.clone(),
+            needs_deref: false,
+            needs_move: false,
         }),
         TypeRef::TemplateTypeParameter(parm_name) => {
             // find the parameter with the given name in the params list, then get the matching arg here
@@ -327,6 +386,7 @@ pub fn translate_arguments(
         result.push(CArgument {
             name: get_unique_argument_name(name, used_argument_names),
             qual_type,
+            is_self: false,
         });
     }
 
@@ -747,18 +807,23 @@ pub fn translate_method(
                 is_const: method.is_const(),
                 type_ref: CTypeRef::Ref(class.usr()),
                 cpp_type_ref: TypeRef::Ref(class.usr()),
+                needs_deref: false,
+                needs_move: false,
             })),
             cpp_type_ref: TypeRef::Pointer(Box::new(QualType {
                 name: class.name().to_string(),
                 is_const: method.is_const(),
                 type_ref: TypeRef::Ref(class.usr()),
             })),
+            needs_deref: false,
+            needs_move: false,
         };
         arguments.insert(
             0,
             CArgument {
                 name: get_unique_argument_name("self", &mut used_argument_names),
                 qual_type: qt,
+                is_self: true,
             },
         );
     }

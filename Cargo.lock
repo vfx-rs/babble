@@ -97,6 +97,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bbl-write"
+version = "0.1.0"
+dependencies = [
+ "bbl-clang",
+ "bbl-extract",
+ "bbl-translate",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

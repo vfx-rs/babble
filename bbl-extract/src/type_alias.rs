@@ -197,10 +197,7 @@ fn extract_template_args(
         }
 
         if current != non_type_indices.len() {
-            panic!(
-                "Could not reconcile all non-type template arguments for {:?}",
-                c_type_alias_decl
-            );
+            return Err(Error::TemplateArgExtraction(c_type_alias_decl.display_name()));
         }
     }
 

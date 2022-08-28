@@ -80,7 +80,7 @@ impl From<ClassId> for usize {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct MethodId(pub(crate) usize);
+pub struct MethodId(pub usize);
 
 impl MethodId {
     pub fn new(id: usize) -> MethodId {
@@ -393,6 +393,10 @@ impl AST {
 
     pub fn get_function(&self, usr: USR) -> Option<&Function> {
         self.functions.get(&usr.into())
+    }
+
+    pub fn function(&self, id: FunctionId) -> &Function {
+        &self.functions.index(id.0)
     }
 
     pub fn insert_namespace(&mut self, namespace: Namespace) {

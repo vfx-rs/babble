@@ -27,7 +27,7 @@ pub enum ClassBindKind {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct MethodSpecializationId(pub(crate) usize);
+pub struct MethodSpecializationId(pub usize);
 
 impl MethodSpecializationId {
     pub fn new(id: usize) -> MethodSpecializationId {
