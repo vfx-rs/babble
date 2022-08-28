@@ -7,7 +7,7 @@ use bbl_clang::cursor::USR;
 pub enum Error {
     ClangError(bbl_clang::error::Error),
     RecordNotFound,
-    NamespaceNotFound,
+    NamespaceNotFound(String),
     MethodNotFound,
     MultipleMatches,
     FunctionNotFound(String),

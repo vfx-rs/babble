@@ -18,6 +18,10 @@ impl Namespace {
         self.usr
     }
 
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     pub fn rename(&mut self, new_name: &str) {
         self.rename = Some(new_name.into());
     }

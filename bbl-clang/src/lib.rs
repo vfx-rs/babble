@@ -5,6 +5,7 @@ pub mod cursor;
 pub mod cursor_kind;
 pub mod diagnostic;
 pub mod error;
+pub mod exception;
 pub mod file;
 pub mod index;
 pub mod string;
@@ -13,15 +14,6 @@ pub mod token;
 pub mod translation_unit;
 pub mod ty;
 pub mod virtual_file;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
-}
 
 /// Convenience function to parse a C++ string with the given compiler arguments and optionally log diagnostics
 ///

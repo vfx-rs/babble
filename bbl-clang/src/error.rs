@@ -1,3 +1,6 @@
+#![allow(non_upper_case_globals)]
+#![allow(non_snake_case)]
+
 use clang_sys::{CXErrorCode, CXError_Success};
 
 #[derive(Debug)]
@@ -6,6 +9,7 @@ pub enum Error {
     InvalidType,
     InvalidTemplateArgumentKind,
     InvalidAccessSpecifier,
+    InvalidExceptionSpecificationKind,
     TypeUnexposed,
     Failure,
     Crashed,

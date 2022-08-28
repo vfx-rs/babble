@@ -1,6 +1,6 @@
 use crate::{
     access_specifier::AccessSpecifier, template_argument::TemplateArgumentKind,
-    token::SourceLocation,
+    token::SourceLocation, exception::ExceptionSpecificationKind,
 };
 
 use super::cursor_kind::CursorKind;
@@ -21,7 +21,7 @@ use clang_sys::{
     clang_getCursorSemanticParent, clang_getCursorSpelling, clang_getCursorType,
     clang_getCursorUSR, clang_getNullCursor, clang_isCursorDefinition, clang_isInvalid,
     clang_visitChildren, CXChildVisitResult, CXChildVisit_Break, CXChildVisit_Continue,
-    CXChildVisit_Recurse, CXClientData, CXCursor,
+    CXChildVisit_Recurse, CXClientData, CXCursor, clang_getCursorExceptionSpecificationType,
 };
 use std::{
     fmt::{Debug, Display},
@@ -311,6 +311,10 @@ impl Cursor {
 
     pub fn semantic_parent(&self) -> Result<Cursor> {
         unsafe { cursor(clang_getCursorSemanticParent(self.inner)) }
+    }
+
+    pub fn exception_specification_kind(&self) -> Result<ExceptionSpecificationKind> {
+        unsafe { clang_getCursorExceptionSpecificationType(self.inner).try_into() }
     }
 }
 

@@ -1,8 +1,10 @@
 use bbl_clang::cursor::{Cursor, USR};
+use bbl_clang::exception::ExceptionSpecificationKind;
 use log::*;
 use std::fmt::Display;
 
-use crate::ast::{get_namespaces_for_decl, MethodId};
+use crate::ast::{get_namespaces_for_decl, MethodId, TypeAliasId, get_qualified_name};
+use crate::class::MethodSpecializationId;
 use crate::qualtype::{extract_type, extract_type_from_typeref};
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
 use crate::{ast::AST, qualtype::QualType};
@@ -55,6 +57,8 @@ pub struct Function {
     pub(crate) ignored: bool,
     pub(crate) namespaces: Vec<USR>,
     pub(crate) template_parameters: Vec<TemplateParameterDecl>,
+    pub(crate) specializations: Vec<TypeAliasId>,
+    pub(crate) exception_specification_kind: ExceptionSpecificationKind,
 }
 
 impl Function {
@@ -66,6 +70,7 @@ impl Function {
         replacement_name: Option<String>,
         namespaces: Vec<USR>,
         template_parameters: Vec<TemplateParameterDecl>,
+        exception_specification_kind: ExceptionSpecificationKind,
     ) -> Self {
         Function {
             usr,
@@ -76,49 +81,77 @@ impl Function {
             ignored: false,
             namespaces,
             template_parameters,
+            specializations: Vec::new(),
+            exception_specification_kind,
         }
     }
 
+    /// Get the name of the function
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Build the qualified name of the function, i.e. with all parent namespace and class scopes
+    pub fn get_qualified_name(&self, ast: &AST) -> Result<String> {
+        get_qualified_name(self.name(), &self.namespaces, ast)
+    }
+
+    /// Get the return type of the function
     pub fn result(&self) -> &QualType {
         &self.result
     }
 
+    /// Get the function's arguments
     pub fn arguments(&self) -> &[Argument] {
         &self.arguments
     }
 
+    /// Get the replacement name, if one has been set
     pub fn replacement_name(&self) -> Option<&str> {
         self.replacement_name.as_deref()
     }
 
+    /// Get the list of parent namespaces (including classes if this is a method)
     pub fn namespaces(&self) -> &[USR] {
         &self.namespaces
     }
 
+    /// Get the list of template parameters
     pub fn template_parameters(&self) -> &[TemplateParameterDecl] {
         &self.template_parameters
     }
 
+    /// Is this a template function?
     pub fn is_templated(&self) -> bool {
         !self.template_parameters.is_empty()
     }
 
+    /// Has this function template had any specializations made from it?
+    pub fn is_specialized(&self) -> bool {
+        !self.specializations.is_empty()
+    }
+
+    /// What kind of exception specification does this function have?
+    pub fn exception_specification_kind(&self) -> ExceptionSpecificationKind {
+        self.exception_specification_kind
+    }
+
+    /// Get the unique identifier
     pub fn usr(&self) -> USR {
         self.usr
     }
 
+    /// Set a replacement name for this function to be used when translating
     pub fn rename(&mut self, new_name: &str) {
         self.replacement_name = Some(new_name.to_string());
     }
 
+    /// Set this function to be ignored when translating
     pub fn ignore(&mut self) {
         self.ignored = true;
     }
 
+    /// Get the function's signature
     pub fn signature(
         &self,
         ast: &AST,
@@ -201,6 +234,7 @@ pub struct Method {
     pub(crate) is_static: bool,
     pub(crate) is_virtual: bool,
     pub(crate) is_pure_virtual: bool,
+    pub(crate) specializations: Vec<MethodSpecializationId>,
 }
 
 impl Method {
@@ -212,6 +246,7 @@ impl Method {
         rename: Option<String>,
         namespaces: Vec<USR>,
         template_parameters: Vec<TemplateParameterDecl>,
+        exception_specification_kind: ExceptionSpecificationKind,
         is_const: bool,
         is_static: bool,
         is_virtual: bool,
@@ -226,16 +261,22 @@ impl Method {
                 rename,
                 namespaces,
                 template_parameters,
+                exception_specification_kind,
             ),
             is_const,
             is_static,
             is_virtual,
             is_pure_virtual,
+            specializations: Vec::new(),
         }
     }
 
     pub fn name(&self) -> &str {
         &self.function.name
+    }
+
+    pub fn get_qualified_name(&self, ast: &AST) -> Result<String> {
+        self.function.get_qualified_name(ast)
     }
 
     pub fn result(&self) -> &QualType {
@@ -260,6 +301,15 @@ impl Method {
 
     pub fn is_templated(&self) -> bool {
         self.function.is_templated()
+    }
+
+    pub fn is_specialized(&self) -> bool {
+        !self.specializations.is_empty()
+    }
+
+    /// What kind of exception specification does this method have?
+    pub fn exception_specification_kind(&self) -> ExceptionSpecificationKind {
+        self.function.exception_specification_kind()
     }
 
     pub fn usr(&self) -> USR {
@@ -547,17 +597,19 @@ pub fn extract_function(
     }
 
     let replacement_name = get_default_replacement_name(c_function);
-
     let namespaces = get_namespaces_for_decl(c_function);
+    let name = c_function.spelling();
+    let exception_specification_kind = c_function.exception_specification_kind()?;
 
     Ok(Function::new(
         c_function.usr(),
-        c_function.spelling(),
+        name,
         result,
         arguments,
         replacement_name,
         namespaces,
         template_parameters,
+        exception_specification_kind,
     ))
 }
 
@@ -586,6 +638,7 @@ pub fn extract_method(
         is_static: c_method.cxx_method_is_static(),
         is_virtual: c_method.cxx_method_is_virtual(),
         is_pure_virtual: c_method.cxx_method_is_pure_virtual(),
+        specializations: Vec::new(),
     })
 }
 

@@ -8,7 +8,7 @@ use log::*;
 use std::fmt::Display;
 use ustr::Ustr;
 
-use crate::ast::{get_namespaces_for_decl, MethodId, AST};
+use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST};
 use crate::error;
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::qualtype::extract_type;
@@ -26,6 +26,7 @@ pub enum ClassBindKind {
     ValueType,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct MethodSpecializationId(pub(crate) usize);
 
 impl MethodSpecializationId {
@@ -47,6 +48,8 @@ pub struct ClassDecl {
     pub(crate) methods: Vec<Method>,
     pub(crate) namespaces: Vec<USR>,
     pub(crate) template_parameters: Vec<TemplateParameterDecl>,
+    /// List of the specializations made from this class if it is templated
+    pub(crate) specializations: Vec<TypeAliasId>,
 
     pub(crate) ignore: bool,
     pub(crate) rename: Option<String>,
@@ -70,6 +73,7 @@ impl ClassDecl {
             methods,
             namespaces,
             template_parameters,
+            specializations: Vec::new(),
             ignore: false,
             rename: None,
             bind_kind: ClassBindKind::OpaquePtr,
@@ -81,6 +85,10 @@ impl ClassDecl {
         &self.name
     }
 
+    pub fn get_qualified_name(&self, ast: &AST) -> Result<String> {
+        get_qualified_name(self.name(), &self.namespaces, ast)
+    }
+
     pub fn usr(&self) -> USR {
         self.usr
     }
@@ -88,18 +96,31 @@ impl ClassDecl {
     pub fn fields(&self) -> &[Field] {
         &self.fields
     }
+
     pub fn methods(&self) -> &[Method] {
         &self.methods
     }
+
     pub fn namespaces(&self) -> &[USR] {
         &self.namespaces
     }
+
     pub fn template_parameters(&self) -> &[TemplateParameterDecl] {
         &self.template_parameters
     }
+
+    pub fn is_templated(&self) -> bool {
+        !self.template_parameters.is_empty()
+    }
+
+    pub fn is_specialized(&self) -> bool {
+        !self.specializations.is_empty()
+    }
+
     pub fn bind_kind(&self) -> &ClassBindKind {
         &self.bind_kind
     }
+
     pub fn specialized_methods(&self) -> &[MethodTemplateSpecialization] {
         &self.specialized_methods
     }
@@ -306,7 +327,7 @@ impl ClassDecl {
         name: &str,
         template_arguments: Vec<Option<TemplateType>>,
     ) -> Result<MethodSpecializationId> {
-        let method_decl = &self.methods[method_id.0];
+        let method_decl = &mut self.methods[method_id.0];
 
         let usr = USR::new(&format!("{}_{name}", method_decl.usr().as_str()));
 
@@ -322,7 +343,11 @@ impl ClassDecl {
 
         self.specialized_methods.push(mts);
 
-        Ok(MethodSpecializationId(id))
+        let id = MethodSpecializationId(id);
+
+        method_decl.specializations.push(id);
+
+        Ok(id)
     }
 }
 
@@ -337,7 +362,7 @@ pub fn extract_class_decl(
     depth: usize,
     tu: &TranslationUnit,
     namespaces: &Vec<USR>,
-) -> ClassDecl {
+) -> Result<ClassDecl> {
     let indent = format!("{:width$}", "", width = depth * 2);
 
     debug!("{indent}extract_class_decl({})", class_template.usr());
@@ -387,10 +412,14 @@ pub fn extract_class_decl(
             | CursorKind::FunctionTemplate => {
                 if let Ok(access) = member.cxx_access_specifier() {
                     if access == AccessSpecifier::Public {
-                        if let Ok(method) = extract_method(member, depth + 1, &template_parameters)
-                        {
-                            methods.push(method);
-                        }
+                        match extract_method(member, depth + 1, &template_parameters) {
+                            Ok(method) => methods.push(method),
+                            Err(e) => {
+                                error!(
+                                    "Could not extract method {member:?} from class {class_template:?}: {e:?}"
+                                );
+                            }
+                        } 
                     }
                 } else {
                     error!(
@@ -443,14 +472,16 @@ pub fn extract_class_decl(
         }
     }
 
-    ClassDecl::new(
+    let name = class_template.spelling();
+
+    Ok(ClassDecl::new(
         class_template.usr(),
         class_template.spelling(),
         fields,
         methods,
         namespaces.clone(),
         template_parameters,
-    )
+    ))
 }
 
 pub fn extract_field(

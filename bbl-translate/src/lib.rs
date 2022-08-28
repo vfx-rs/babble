@@ -36,6 +36,14 @@ pub struct CQualType {
 }
 
 impl CQualType {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn cpp_type_ref(&self) -> &TypeRef {
+        &self.cpp_type_ref
+    }
+
     pub fn unknown(tk: TypeKind) -> Self {
         CQualType {
             name: "UNKNOWN".to_string(),
@@ -62,7 +70,7 @@ impl CQualType {
             CTypeRef::Ref(usr) => {
                 let name = ast
                     .get_struct(*usr)
-                    .map(|r| r.format(ast))
+                    .map(|r| r.format())
                     .unwrap_or(usr.to_string());
                 format!("{result}{}", name)
             }
@@ -135,7 +143,7 @@ pub struct CFunction {
 }
 
 impl CFunction {
-    pub fn pretty_print(&self, depth: usize, ast: &CAST) {
+    pub fn pretty_print(&self, _depth: usize, ast: &CAST) {
         let args = self
             .arguments
             .iter()
@@ -184,11 +192,11 @@ pub struct CStruct {
 }
 
 impl CStruct {
-    pub fn format(&self, ast: &CAST) -> String {
+    pub fn format(&self) -> String {
         format!("struct {}", self.name_private)
     }
 
-    pub fn pretty_print(&self, depth: usize, ast: &CAST) {
+    pub fn pretty_print(&self, _depth: usize, ast: &CAST) {
         println!("typedef struct {{");
 
         for field in self.fields.iter() {
@@ -380,7 +388,13 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
     for (class_id, class) in ast.classes().iter().enumerate() {
         // if this is a template class, we'll ignore it and translate its specializations instead
         // TODO (AL): do we want to use a separate type for ClassTemplate again?
-        if !class.template_parameters().is_empty() {
+        if class.is_templated() {
+            if !class.is_specialized() {
+                warn!(
+                    "class {} is templated but has no specializations and so will be ignored",
+                    class.get_qualified_name(ast).expect(&format!("Could not get qualified name for {}", class.usr()))
+                );
+            }
             continue;
         }
 
@@ -417,6 +431,16 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
     }
 
     for (function_id, function) in ast.functions().iter().enumerate() {
+        if function.is_templated() {
+            if !function.is_specialized() {
+                warn!(
+                    "function {} is templated but has no specializations and so will be ignored",
+                    function.get_qualified_name(ast).expect(&format!("Could not get qualified name for {}", function.usr()))
+                );
+            }
+            continue;
+        }
+
         translate_function(
             ast,
             FunctionId::new(function_id),
@@ -424,7 +448,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
             &mut functions,
             &mut used_names,
             &[],
-        );
+        )?;
     }
 
     Ok(CAST { structs, functions })
@@ -449,7 +473,7 @@ fn translate_function_template_specialization(
         functions,
         used_names,
         fts.template_arguments(),
-    );
+    )?;
 
     Ok(())
 }
@@ -475,7 +499,7 @@ fn translate_class_template_specialization(
         structs,
         functions,
         used_names,
-    );
+    )?;
 
     Ok(())
 }
@@ -543,12 +567,16 @@ pub fn translate_class(
         if method.is_templated() {
             // if the method itself has template parameters, then skip it and we'll deal with specializations
             // separately
+            if !method.is_specialized() {
+                warn!(
+                    "method {} is templated but has no specializations and so will be ignored",
+                    method.get_qualified_name(ast).expect(&format!("Could not get qualified name for {}", method.usr()))
+                );
+            }
             continue;
         }
 
         let c_function = translate_method(
-            ast,
-            class_id,
             class,
             class.template_parameters(),
             template_args,
@@ -556,7 +584,6 @@ pub fn translate_class(
             method,
             &st_prefix_public,
             &st_prefix_private,
-            &st_c_name_public,
             &st_c_name_private,
             used_names,
         )?;
@@ -577,8 +604,6 @@ pub fn translate_class(
         let method = class.get_method(spec_method.specialized_decl());
 
         let c_function = translate_method(
-            ast,
-            class_id,
             class,
             class.template_parameters(),
             &combined_template_args,
@@ -586,7 +611,6 @@ pub fn translate_class(
             method,
             &st_prefix_public,
             &st_prefix_private,
-            &st_c_name_public,
             &st_c_name_private,
             used_names,
         )?;
@@ -636,7 +660,7 @@ fn translate_function(
 
     let mut used_argument_names = HashSet::new();
 
-    let mut arguments = translate_arguments(
+    let arguments = translate_arguments(
         function.arguments(),
         function.template_parameters(),
         template_args,
@@ -671,8 +695,6 @@ fn translate_function(
 }
 
 pub fn translate_method(
-    ast: &AST,
-    class_id: ClassId,
     class: &ClassDecl,
     class_template_parms: &[TemplateParameterDecl],
     template_args: &[Option<TemplateType>],
@@ -680,7 +702,6 @@ pub fn translate_method(
     method: &Method,
     st_prefix_public: &str,
     st_prefix_private: &str,
-    st_c_name_public: &str,
     st_c_name_private: &str,
     used_names: &mut HashSet<String>,
 ) -> Result<CFunction> {

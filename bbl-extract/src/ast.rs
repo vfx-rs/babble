@@ -200,7 +200,7 @@ impl AST {
                     .namespaces
                     .get_id(&namespace.usr().into())
                     .map(|i| NamespaceId(*i))
-                    .ok_or(Error::NamespaceNotFound);
+                    .ok_or(Error::NamespaceNotFound(name.to_string()));
             }
         }
 
@@ -221,13 +221,14 @@ impl AST {
         Err(Error::RecordNotFound)
     }
 
+    /// Make a new [`ClassTemplateSpecialization`] from this class with the given template arguments
     pub fn specialize_class(
         &mut self,
         class_id: ClassId,
         name: &str,
         args: Vec<Option<TemplateType>>,
     ) -> Result<TypeAliasId> {
-        let class_decl = self.classes.index(class_id.0);
+        let class_decl = self.classes.index_mut(class_id.0);
 
         let usr = USR::new(&format!("{}_{name}", class_decl.usr().as_str()));
 
@@ -243,7 +244,11 @@ impl AST {
             .type_aliases
             .insert(usr.into(), TypeAlias::ClassTemplateSpecialization(cts));
 
-        Ok(TypeAliasId(id))
+        let id = TypeAliasId(id);
+
+        class_decl.specializations.push(id);
+
+        Ok(id)
     }
 
     pub fn find_function(&self, signature: &str) -> Result<FunctionId> {
@@ -290,13 +295,14 @@ impl AST {
         }
     }
 
+    /// Create a new [`FunctionTemplateSpecialization`] from this template function with the given template arguments
     pub fn specialize_function(
         &mut self,
         function_id: FunctionId,
         name: &str,
         template_arguments: Vec<Option<TemplateType>>,
     ) -> Result<TypeAliasId> {
-        let function_decl = self.functions.index(function_id.0);
+        let function_decl = self.functions.index_mut(function_id.0);
 
         let usr = USR::new(&format!("{}_{name}", function_decl.usr().as_str()));
 
@@ -312,7 +318,11 @@ impl AST {
             .type_aliases
             .insert(usr.into(), TypeAlias::FunctionTemplateSpecialization(fts));
 
-        Ok(TypeAliasId(id))
+        let id = TypeAliasId(id);
+
+        function_decl.specializations.push(id);
+
+        Ok(id)
     }
 
     pub fn rename_namespace(&mut self, namespace_id: NamespaceId, new_name: &str) {
@@ -404,6 +414,23 @@ impl AST {
     }
 }
 
+pub fn get_qualified_name(decl: &str, namespaces: &[USR], ast: &AST) -> Result<String> {
+    let mut result = String::new();
+    for uns in namespaces {
+        if let Some(ns) = ast.get_namespace(*uns) {
+            result = format!("{result}{}::", ns.name());
+        } else if let Some(class) = ast.get_class(*uns) {
+            result = format!("{result}{}::", class.name());
+        } else {
+            return Err(Error::ClassOrNamespaceNotFound(*uns))
+        }
+    }
+
+    result = format!("{result}{decl}");
+
+    Ok(result)
+}
+
 /// Main recursive function to walk the AST and extract the pieces we're interested in
 pub fn extract_ast(
     c: Cursor,
@@ -430,7 +457,8 @@ pub fn extract_ast(
                 // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
                 // (for opaque types in the API)
                 if c.is_definition() {
-                    let cd = extract_class_decl(c, depth + 1, tu, &namespaces);
+                    let cd = extract_class_decl(c, depth + 1, tu, &namespaces)
+                        .expect(&format!("Failed to extract ClassDecl {c:?}"));
                     ast.insert_class(cd);
                     already_visited.push(c.usr());
                 }

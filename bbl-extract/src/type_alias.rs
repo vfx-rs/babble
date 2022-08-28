@@ -104,7 +104,7 @@ pub fn extract_class_template_specialization(
                                 &local_namespaces
                             };
                             debug!("extracting class template {cref:?}");
-                            let cd = extract_class_decl(cref, depth + 1, tu, ct_namespaes);
+                            let cd = extract_class_decl(cref, depth + 1, tu, ct_namespaes)?;
                             ast.insert_class(cd);
                             already_visited.push(cref.usr());
                         }
