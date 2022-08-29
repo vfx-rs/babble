@@ -107,7 +107,7 @@ pub fn parse_string_and_dump_ast<S1: AsRef<str>, S: AsRef<str>>(
     if let Some(namespace) = namespace {
         let children =
             tu.get_cursor()?
-                .children_of_kind_with_name(CursorKind::Namespace, &namespace, true);
+                .children_of_kind_with_name(CursorKind::Namespace, namespace, true);
         for child in children {
             dump(child, 0, 20, &mut already_visited, &tu);
         }

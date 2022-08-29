@@ -167,8 +167,7 @@ impl Function {
         outer_template_parameters: &[TemplateParameterDecl],
         template_args: Option<&[Option<TemplateType>]>,
     ) -> String {
-        let mut s = String::new();
-        s += &self.name;
+        let mut s = self.name.to_string();
 
         let args = self
             .arguments
@@ -176,10 +175,10 @@ impl Function {
             .map(|p| p.format(ast, outer_template_parameters, template_args))
             .collect::<Vec<String>>()
             .join(", ");
-        s += &format!("({})", args);
+        s = format!("{s}({})", args);
 
-        s += &format!(
-            " -> {}",
+        s = format!(
+            "{s} -> {}",
             self.result
                 .format(ast, outer_template_parameters, template_args)
         );
@@ -511,7 +510,7 @@ pub fn extract_function(
         })
         .map(|c| {
             debug!("Taking {} as template type", c.display_name());
-            c.clone()
+            *c
         })
         .collect();
 
@@ -537,12 +536,12 @@ pub fn extract_function(
     let result = if ty_result.is_builtin() || ty_result.is_pointer() {
         extract_type(ty_result, &string_template_parameters)?
     } else {
-        let c_result = children.iter().skip(skip).next().ok_or(Error::FailedToGetCursor)?;
+        let c_result = children.get(skip).ok_or(Error::FailedToGetCursor)?;
 
         skip += 1;
 
         if c_result.kind() == CursorKind::TypeRef || c_result.kind() == CursorKind::TemplateRef {
-            extract_type_from_typeref(c_result.clone())?
+            extract_type_from_typeref(*c_result)?
         } else {
             QualType::unknown(ty_result.kind())
         }
@@ -561,7 +560,7 @@ pub fn extract_function(
         }
 
         arguments.push(extract_argument(
-            c_arg.clone(),
+            *c_arg,
             &string_template_parameters,
         )?);
     }

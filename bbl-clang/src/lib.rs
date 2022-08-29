@@ -49,7 +49,7 @@ pub fn get_clang_binary() -> Result<String, error::Error> {
 
     // First check if we've specified it explicitly
     if let Ok(path) = std::env::var("CLANG_PATH") {
-        if let Ok(_) = Command::new(&path).output() {
+        if Command::new(&path).output().is_ok() {
             println!("Got clang from CLANG_PATH");
             return Ok(path);
         }
@@ -59,12 +59,12 @@ pub fn get_clang_binary() -> Result<String, error::Error> {
     if let Ok(config_path) = std::env::var("LLVM_CONFIG_PATH") {
         if let Ok(output) = Command::new(&config_path).arg("--bindir").output() {
             let stdout =
-                String::from_utf8(output.stdout.clone()).map_err(|e| Error::NonUTF8Output(e))?;
+                String::from_utf8(output.stdout).map_err(Error::NonUTF8Output)?;
 
             let line = stdout
                 .lines()
                 .next()
-                .ok_or(Error::FailedToParseOutput(stdout.clone()))?;
+                .ok_or_else(|| Error::FailedToParseOutput(stdout.clone()))?;
 
             println!("Got clang from LLVM_CONFIG_PATH");
             return Ok(PathBuf::from(line).join("clang").display().to_string());
@@ -72,7 +72,7 @@ pub fn get_clang_binary() -> Result<String, error::Error> {
     }
 
     // Finally just check if it's in the PATH
-    if let Ok(_) = Command::new("clang").output() {
+    if Command::new("clang").output().is_ok() {
         println!("Got clang from PATH");
         return Ok("clang".to_string());
     }
@@ -92,17 +92,18 @@ pub fn get_default_cli_args() -> Result<Vec<String>, error::Error> {
     let output = Command::new(&clang_bin)
         .arg("-print-resource-dir")
         .output()
-        .map_err(|e| Error::FailedToRunClang(e))?;
-    let stdout = String::from_utf8(output.stdout.clone()).map_err(|e| Error::NonUTF8Output(e))?;
+        .map_err( Error::FailedToRunClang)?;
+    let stdout = String::from_utf8(output.stdout).map_err(Error::NonUTF8Output)?;
 
     let line = stdout
         .lines()
         .next()
-        .ok_or(Error::FailedToParseOutput(stdout.clone()))?;
+        .ok_or_else(|| Error::FailedToParseOutput(stdout.clone()))?;
 
-    let mut result = Vec::new();
-    result.push("-resource-dir".to_string());
-    result.push(line.to_string());
+    let mut result = vec![
+        "-resource-dir".to_string(),
+        line.to_string(),
+    ];
 
     #[cfg(windows)]
     todo!();

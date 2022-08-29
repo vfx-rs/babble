@@ -85,6 +85,7 @@ dependencies = [
  "clang-sys",
  "env_logger",
  "log",
+ "thiserror",
  "ustr",
 ]
 

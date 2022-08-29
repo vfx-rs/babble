@@ -8,24 +8,27 @@ use error::{ArgumentError, Error, FunctionGenerationError, TypeError};
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Generate the c library code (itself c++ but with a c header)
-/// 
+///
 /// # Returns
 /// A tuple containing two [`String`]s, the first of which is the header source, the second is the implementation source
 pub fn gen_c(ast: &AST, c_ast: &CAST) -> Result<(String, String)> {
     let mut header = String::new();
     let mut source = String::new();
 
+    // Generate the declaration for each struct
     for st in c_ast.structs.iter() {
-        let decl = generate_struct_declaration(st, ast, c_ast)?;
+        let decl = generate_struct_declaration(st, c_ast)?;
         header = format!("{header}{decl}\n")
     }
 
+    // Generate the declaration and definition for each function
     for fun in c_ast.functions.iter() {
-        let decl =
-            gen_function_declaration(fun, c_ast).map_err(|source| Error::FailedToGenerateFunction {
+        let decl = gen_function_declaration(fun, c_ast).map_err(|source| {
+            Error::FailedToGenerateFunction {
                 name: fun.name_private.clone(),
                 source,
-            })?;
+            }
+        })?;
 
         let defn = gen_function_definition(fun, ast, c_ast).map_err(|source| {
             Error::FailedToGenerateFunction {
@@ -69,13 +72,16 @@ fn gen_function_signature(
 }
 
 /// Generate the declaration of this function
-/// 
+///
 /// This is both the function signature and the #define to give it a public name
-fn gen_function_declaration(fun: &CFunction, c_ast: &CAST) -> Result<String, FunctionGenerationError> {
+fn gen_function_declaration(
+    fun: &CFunction,
+    c_ast: &CAST,
+) -> Result<String, FunctionGenerationError> {
     let mut result = format!(
         "{};\n",
         gen_function_signature(fun, c_ast, true)
-            .map_err(|e| FunctionGenerationError::FailedToGenerateSignature(e))?
+            .map_err(FunctionGenerationError::FailedToGenerateSignature)?
     );
 
     if fun.name_private != fun.name_public {
@@ -93,7 +99,7 @@ fn gen_cast(qual_type: &CQualType, ast: &AST, c_ast: &CAST) -> Result<Option<Str
     match qual_type.type_ref() {
         CTypeRef::Builtin(_) => Ok(None),
         CTypeRef::Pointer(pointee_qt) => {
-            if let Some(s) = gen_cast(&pointee_qt, ast, c_ast)? {
+            if let Some(s) = gen_cast(pointee_qt, ast, c_ast)? {
                 Ok(Some(format!("{s}*")))
             } else {
                 Ok(None)
@@ -103,15 +109,12 @@ fn gen_cast(qual_type: &CQualType, ast: &AST, c_ast: &CAST) -> Result<Option<Str
             let class = ast
                 .get_class(*usr)
                 .ok_or(TypeError::TypeRefNotFound(*usr))?;
-            Ok(Some(format!(
-                "{}",
-                class.get_qualified_name(ast).map_err(|source| {
-                    TypeError::FailedToGetQualifiedName {
-                        name: class.name().to_string(),
-                        source,
-                    }
-                })?
-            )))
+            Ok(Some(class.get_qualified_name(ast).map_err(|source| {
+                TypeError::FailedToGetQualifiedName {
+                    name: class.name().to_string(),
+                    source,
+                }
+            })?))
         }
         CTypeRef::Unknown(tk) => Err(TypeError::UnknownType(*tk)),
     }
@@ -146,7 +149,7 @@ fn generate_arg_pass(
             if let Some(cast) = gen_cast(qual_type, ast, c_ast)? {
                 Ok(format!("*({cast}*)&{arg_name}"))
             } else {
-                Ok(format!("{arg_name}"))
+                Ok(arg_name.to_string())
             }
         }
         CTypeRef::Unknown(tk) => Err(TypeError::UnknownType(*tk))?,
@@ -158,13 +161,12 @@ fn gen_cpp_call(fun: &CFunction, ast: &AST) -> Result<String, TypeError> {
     match fun.source {
         CFunctionSource::Function(cpp_fun_id) => {
             let cpp_fun = ast.functions().index(cpp_fun_id.into());
-            Ok(cpp_fun
-                .get_qualified_name(ast)
-                .map_err(|e| TypeError::FailedToGetQualifiedName {
+            Ok(cpp_fun.get_qualified_name(ast).map_err(|e| {
+                TypeError::FailedToGetQualifiedName {
                     name: cpp_fun.name().to_string(),
                     source: e,
-                })?
-                .to_string())
+                }
+            })?)
         }
         CFunctionSource::Method((class_id, method_id)) => {
             let class = ast.classes().index(class_id.into());
@@ -205,7 +207,7 @@ fn gen_cpp_call(fun: &CFunction, ast: &AST) -> Result<String, TypeError> {
 }
 
 /// Generate the definition of this function
-/// 
+///
 /// This means calling its cpp counterpart and generating all necessary casting
 fn gen_function_definition(
     fun: &CFunction,
@@ -215,7 +217,7 @@ fn gen_function_definition(
     let mut result = format!(
         "{} {{\n",
         gen_function_signature(fun, c_ast, false)
-            .map_err(|e| FunctionGenerationError::FailedToGenerateSignature(e))?
+            .map_err(FunctionGenerationError::FailedToGenerateSignature)?
     );
     let indent = "    ";
 
@@ -226,12 +228,12 @@ fn gen_function_definition(
             source: ArgumentError::TypeError(e),
         })?
         .map(|s| format!("({s})"))
-        .unwrap_or("".to_string());
+        .unwrap_or_else(|| "".to_string());
 
     // Append the call to the cpp function
     result = format!(
         "{result}{indent}return {cast}{}",
-        gen_cpp_call(fun, ast).map_err(|e| FunctionGenerationError::FailedToGenerateCall(e))?
+        gen_cpp_call(fun, ast).map_err(FunctionGenerationError::FailedToGenerateCall)?
     );
 
     // Get all the arguments for the call
@@ -291,18 +293,18 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> String {
 }
 
 /// Generate the declaration of this struct
-fn generate_struct_declaration(st: &CStruct, ast: &AST, c_ast: &CAST) -> Result<String> {
+fn generate_struct_declaration(st: &CStruct, c_ast: &CAST) -> Result<String> {
     match &st.bind_kind {
-        ClassBindKind::OpaquePtr => generate_opaqueptr_declaration(st, ast),
-        ClassBindKind::ValueType => generate_valuetype_declaration(st, ast, c_ast),
+        ClassBindKind::OpaquePtr => generate_opaqueptr_declaration(st),
+        ClassBindKind::ValueType => generate_valuetype_declaration(st, c_ast),
         _ => todo!(),
     }
 }
 
 /// Generate the declaration for a valuetype struct
-/// 
+///
 /// This means generating all fields
-fn generate_valuetype_declaration(st: &CStruct, ast: &AST, c_ast: &CAST) -> Result<String> {
+fn generate_valuetype_declaration(st: &CStruct, c_ast: &CAST) -> Result<String> {
     let ind = "    ";
     let mut result = format!("struct {} {{\n", st.name_private);
 
@@ -321,9 +323,9 @@ fn generate_valuetype_declaration(st: &CStruct, ast: &AST, c_ast: &CAST) -> Resu
 }
 
 /// Generate the declaration for an opaqueptr struct
-/// 
+///
 /// This is basically just a forward declaration since the type is only ever represented by a pointer to it
-fn generate_opaqueptr_declaration(st: &CStruct, ast: &AST) -> Result<String> {
+fn generate_opaqueptr_declaration(st: &CStruct) -> Result<String> {
     Ok(format!(
         "struct {0};\ntypedef {0} {1};\n",
         st.name_private, st.name_public
@@ -333,7 +335,7 @@ fn generate_opaqueptr_declaration(st: &CStruct, ast: &AST) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use bbl_clang::cli_args;
-    use bbl_extract::{class::ClassBindKind, parse_string_and_extract_ast};
+    use bbl_extract::parse_string_and_extract_ast;
     use bbl_translate::translate_cpp_ast_to_c;
 
     use crate::{gen_c, Error};
@@ -343,13 +345,11 @@ mod tests {
         let mut ast = parse_string_and_extract_ast(
             r#"
 namespace Test_1_0 {
-
 class Class {
 public:
     int method1();
     void method2(const Class& c);
 };
-
 }
             "#,
             &cli_args(&[])?,

@@ -50,7 +50,11 @@ pub enum Error {
 #[derive(Debug, thiserror::Error)]
 pub enum ExtractClassError {
     #[error("Failed to extract field \"{name}\" from class \"{class}\"")]
-    FailedToExtractField { class: String, name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>}
+    FailedToExtractField {
+        class: String,
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -75,9 +79,7 @@ impl std::error::Error for TranslateTypeError {}
 
 impl std::fmt::Display for TranslateTypeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            _ => write!(f, "{:?}", self),
-        }
+        write!(f, "{:?}", self)
     }
 }
 

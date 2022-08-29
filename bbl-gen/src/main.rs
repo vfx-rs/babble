@@ -55,12 +55,6 @@ impl Display for Verbosity {
     }
 }
 
-impl Verbosity {
-    fn to_string(&self) -> String {
-        format!("{}", self)
-    }
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
@@ -89,7 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cur = tu.get_cursor()?;
 
-    let ast = extract_ast_from_namespace(&args.namespace.unwrap_or("".to_string()), cur, &tu)?;
+    let ast = extract_ast_from_namespace(&args.namespace.unwrap_or_else(|| "".to_string()), cur, &tu)?;
 
     debug!("\n\n");
     ast.pretty_print(0);

@@ -97,7 +97,7 @@ impl CQualType {
                 let name = ast
                     .get_struct(*usr)
                     .map(|r| r.format(use_public_names))
-                    .unwrap_or(usr.to_string());
+                    .unwrap_or_else(|| usr.to_string());
                 format!("{result}{}", name)
             }
             CTypeRef::Unknown(tk) => {
@@ -144,7 +144,11 @@ impl Display for CArgument {
 
 impl CArgument {
     fn format(&self, ast: &CAST, use_public_names: bool) -> String {
-        format!("{}: {}", self.name, self.qual_type.format(ast, use_public_names))
+        format!(
+            "{}: {}",
+            self.name,
+            self.qual_type.format(ast, use_public_names)
+        )
     }
 }
 
@@ -210,7 +214,11 @@ impl CField {
     }
 
     fn format(&self, ast: &CAST, use_public_names: bool) -> String {
-        format!("{}: {}", self.name, self.qual_type.format(ast, use_public_names))
+        format!(
+            "{}: {}",
+            self.name,
+            self.qual_type.format(ast, use_public_names)
+        )
     }
 }
 
@@ -228,14 +236,12 @@ pub struct CStruct {
 
 impl CStruct {
     pub fn format(&self, use_public_name: bool) -> String {
-        format!(
-            "{}",
-            if use_public_name {
-                &self.name_public
-            } else {
-                &self.name_private
-            }
-        )
+        if use_public_name {
+            &self.name_public
+        } else {
+            &self.name_private
+        }
+        .to_string()
     }
 
     pub fn pretty_print(&self, _depth: usize, ast: &CAST) {
@@ -267,12 +273,12 @@ impl CAST {
         for st in self.structs.iter() {
             st.pretty_print(depth, self);
         }
-        println!("");
+        println!();
 
         for fun in self.functions.iter() {
             fun.pretty_print(depth, self);
         }
-        println!("");
+        println!();
 
         println!(
             "{} structs and {} functions",
@@ -345,7 +351,7 @@ pub fn translate_qual_type(
             let parm_index = template_parms
                 .iter()
                 .position(|p| p.name() == parm_name)
-                .ok_or(TranslateTypeError::TemplateParmNotFound(parm_name.into()))?;
+                .ok_or_else(|| TranslateTypeError::TemplateParmNotFound(parm_name.into()))?;
 
             if parm_index >= template_args.len() {
                 Err(TranslateTypeError::TemplateArgNotFound(parm_name.into()))
@@ -354,11 +360,11 @@ pub fn translate_qual_type(
                     Some(TemplateType::Type(tty)) => {
                         translate_qual_type(tty, template_parms, template_args)
                     }
-                    Some(TemplateType::Integer(n)) => {
+                    Some(TemplateType::Integer(_n)) => {
                         todo!()
                     }
                     None => {
-                        return Err(TranslateTypeError::InvalidTemplateArgumentKind(
+                        Err(TranslateTypeError::InvalidTemplateArgumentKind(
                             parm_name.into(),
                         ))
                     }
@@ -379,7 +385,7 @@ pub fn translate_arguments(
     let mut result = Vec::new();
 
     for arg in arguments {
-        let mut qual_type = translate_qual_type(&arg.qual_type(), template_parms, template_args)
+        let mut qual_type = translate_qual_type(arg.qual_type(), template_parms, template_args)
             .map_err(|e| {
                 error!("Error translating argument {}: {e}", arg.name());
                 TranslateArgumentError::FailedToTranslateType {
@@ -395,11 +401,7 @@ pub fn translate_arguments(
                 .get_class(*usr)
                 .ok_or(TranslateArgumentError::FailedToGetClassFromRef(*usr))?;
 
-            if !matches!(class.bind_kind(), ClassBindKind::ValueType) {
-                true
-            } else {
-                false
-            }
+            !matches!(class.bind_kind(), ClassBindKind::ValueType)
         } else {
             false
         };
@@ -407,7 +409,6 @@ pub fn translate_arguments(
         if do_pass_by_pointer {
             let name = qual_type.name().to_string();
             let is_const = qual_type.is_const();
-            let type_ref = qual_type.type_ref().clone();
             let cpp_type_ref = qual_type.cpp_type_ref().clone();
 
             qual_type = CQualType {
@@ -514,7 +515,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
         )?;
     }
 
-    for (type_alias_id, type_alias) in ast.type_aliases().iter().enumerate() {
+    for (_type_alias_id, type_alias) in ast.type_aliases().iter().enumerate() {
         match type_alias {
             TypeAlias::ClassTemplateSpecialization(cts) => translate_class_template_specialization(
                 ast,
@@ -568,7 +569,7 @@ fn translate_function_template_specialization(
     let function_id = ast
         .functions()
         .get_id(&fts.specialized_decl().into())
-        .ok_or(Error::FunctionNotFound(fts.specialized_decl().to_string()))?;
+        .ok_or_else(|| Error::FunctionNotFound(fts.specialized_decl().to_string()))?;
     let function = ast.functions().index(*function_id);
 
     translate_function(
@@ -593,7 +594,7 @@ fn translate_class_template_specialization(
     let class_id =
         ast.classes()
             .get_id(&cts.specialized_decl().into())
-            .ok_or(Error::ClassNotFound(
+            .ok_or_else(|| Error::ClassNotFound(
                 cts.specialized_decl().as_str().to_string(),
             ))?;
     let class = ast.classes().index(*class_id);
@@ -621,7 +622,7 @@ pub fn translate_class(
     used_names: &mut HashSet<String>,
 ) -> Result<()> {
     // build the namespace prefix
-    let (ns_prefix_public, ns_prefix_private) = build_namespace_prefix(ast, &class.namespaces())?;
+    let (ns_prefix_public, ns_prefix_private) = build_namespace_prefix(ast, class.namespaces())?;
 
     // get unique, prefixed names for the struct
     let (st_c_name_public, st_c_name_private) = get_c_names(
@@ -637,7 +638,7 @@ pub fn translate_class(
         let name = field.name().to_string();
         let qual_type = match translate_qual_type(
             field.qual_type(),
-            &class.template_parameters(),
+            class.template_parameters(),
             template_args,
         ) {
             Ok(qt) => qt,
@@ -660,7 +661,7 @@ pub fn translate_class(
             name_private: st_c_name_private.clone(),
             fields,
             bind_kind: *class.bind_kind(),
-            class_id: class_id,
+            class_id,
             usr: class.usr(),
         },
     );
@@ -825,7 +826,7 @@ pub fn translate_method(
         .collect::<Vec<_>>();
 
     let result =
-        translate_qual_type(&method.result(), &template_parms, template_args).map_err(|e| {
+        translate_qual_type(method.result(), &template_parms, template_args).map_err(|e| {
             Error::TranslateFunction {
                 name: format!("{}::{}", class.name(), method.name()),
                 source: TranslateArgumentError::FailedToTranslateType {

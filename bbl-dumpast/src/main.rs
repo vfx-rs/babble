@@ -100,9 +100,3 @@ impl Display for Verbosity {
         }
     }
 }
-
-impl Verbosity {
-    fn to_string(&self) -> String {
-        format!("{}", self)
-    }
-}

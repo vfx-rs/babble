@@ -247,7 +247,7 @@ impl ClassDecl {
                 "<{}>",
                 self.template_parameters
                     .iter()
-                    .map(|t| specialize_template_parameter(t, template_args).to_string())
+                    .map(|t| specialize_template_parameter(t, template_args))
                     .collect::<Vec<_>>()
                     .join(", ")
             )
@@ -279,7 +279,7 @@ impl ClassDecl {
                 "template <{}>\n{indent}",
                 self.template_parameters
                     .iter()
-                    .map(|t| specialize_template_parameter(t, template_args).to_string())
+                    .map(|t| specialize_template_parameter(t, template_args))
                     .collect::<Vec<_>>()
                     .join(", ")
             )
@@ -292,7 +292,7 @@ impl ClassDecl {
                 "<{}>",
                 self.template_parameters
                     .iter()
-                    .map(|t| specialize_template_parameter(t, template_args).to_string())
+                    .map(|t| specialize_template_parameter(t, template_args))
                     .collect::<Vec<_>>()
                     .join(", ")
             )
@@ -411,7 +411,7 @@ pub fn extract_class_decl(
     class_template: Cursor,
     depth: usize,
     tu: &TranslationUnit,
-    namespaces: &Vec<USR>,
+    namespaces: &[USR],
 ) -> Result<ClassDecl> {
     let indent = format!("{:width$}", "", width = depth * 2);
 
@@ -544,7 +544,7 @@ pub fn extract_class_decl(
         class_template.spelling(),
         fields,
         methods,
-        namespaces.clone(),
+        namespaces,
         template_parameters,
         is_pod,
     ))

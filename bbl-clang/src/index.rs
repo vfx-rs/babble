@@ -34,7 +34,7 @@ impl Index {
 
         let cargs = args
             .iter()
-            .map(|a| CString::new(a.as_ref()).map_err(|e| Error::from(e)))
+            .map(|a| CString::new(a.as_ref()).map_err(Error::from))
             .collect::<Result<Vec<_>>>()?;
 
         let cstrargs: Vec<_> = cargs.iter().map(|a| a.as_ptr()).collect();
@@ -60,6 +60,12 @@ impl Index {
         } else {
             Ok(TranslationUnit { inner: tu })
         }
+    }
+}
+
+impl Default for Index {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

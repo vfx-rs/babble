@@ -4,7 +4,7 @@ use ustr::{Ustr, UstrMap};
 
 use log::*;
 
-use crate::class::{ClassDecl, MethodSpecializationId, ClassBindKind};
+use crate::class::{ClassBindKind, ClassDecl, MethodSpecializationId};
 use crate::function::{extract_function, Function, Method};
 use crate::namespace::{self, extract_namespace, Namespace};
 use crate::template_argument::{TemplateArgument, TemplateType};
@@ -18,6 +18,12 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 pub struct UstrIndexMap<T> {
     storage: Vec<T>,
     map: UstrMap<usize>,
+}
+
+impl<T> Default for UstrIndexMap<T> {
+    fn default() -> Self {
+        UstrIndexMap::<T>::new()
+    }
 }
 
 impl<T> UstrIndexMap<T> {
@@ -54,6 +60,10 @@ impl<T> UstrIndexMap<T> {
 
     pub fn len(&self) -> usize {
         self.storage.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn insert(&mut self, key: Ustr, value: T) -> usize {
@@ -146,6 +156,12 @@ pub struct AST {
     pub(crate) type_aliases: UstrIndexMap<TypeAlias>,
 }
 
+impl Default for AST {
+    fn default() -> Self {
+        AST::new()
+    }
+}
+
 impl AST {
     pub fn new() -> Self {
         AST {
@@ -176,7 +192,7 @@ impl AST {
                     .namespaces
                     .get_id(&namespace.usr().into())
                     .map(|i| NamespaceId(*i))
-                    .ok_or(Error::NamespaceNotFound(name.to_string()));
+                    .ok_or_else(|| Error::NamespaceNotFound(name.to_string()));
             }
         }
 
@@ -190,7 +206,7 @@ impl AST {
                     .classes
                     .get_id(&class.usr().into())
                     .map(|i| ClassId(*i))
-                    .ok_or(Error::ClassNotFound(name.to_string()));
+                    .ok_or_else(|| Error::ClassNotFound(name.to_string()));
             }
         }
 
@@ -227,7 +243,12 @@ impl AST {
         Ok(id)
     }
 
-    pub fn class_set_bind_kind(&mut self, class_id: ClassId, bind_kind: ClassBindKind, force_members: bool) -> Result<()> {
+    pub fn class_set_bind_kind(
+        &mut self,
+        class_id: ClassId,
+        bind_kind: ClassBindKind,
+        force_members: bool,
+    ) -> Result<()> {
         let class_decl = self.classes.index_mut(class_id.0);
         class_decl.set_bind_kind(bind_kind, force_members)
     }
@@ -359,7 +380,7 @@ impl AST {
     }
 
     pub fn function(&self, id: FunctionId) -> &Function {
-        &self.functions.index(id.0)
+        self.functions.index(id.0)
     }
 
     pub fn insert_namespace(&mut self, namespace: Namespace) {
@@ -383,27 +404,26 @@ impl AST {
     pub fn pretty_print(&self, depth: usize) {
         for namespace in self.namespaces.iter() {
             namespace.pretty_print(depth + 1, self);
-            println!("");
+            println!();
         }
 
-        println!("");
+        println!();
         for class in self.classes.iter() {
             class.pretty_print(depth + 1, self, None);
-            println!("");
+            println!();
         }
 
-        println!("");
+        println!();
         for function in self.functions.iter() {
             function.pretty_print(depth + 1, self, &[], None);
-            println!("");
+            println!();
         }
 
         for type_alias in self.type_aliases.iter() {
             type_alias.pretty_print(depth + 1, self, &[]);
-            println!("");
+            println!();
         }
     }
-
 }
 
 pub fn get_qualified_name(decl: &str, namespaces: &[USR], ast: &AST) -> Result<String> {
@@ -514,7 +534,6 @@ pub fn extract_ast(
     }
 
     let children = c.children();
-    if children.len() > 0 {}
 
     for child in children {
         extract_ast(
@@ -583,11 +602,7 @@ pub fn dump(
         };
         let indent = format!("{:width$}", "", width = depth.saturating_sub(1) * 4 + 2);
 
-        let pod = if ty.is_pod() {
-            "[POD]"
-        } else {
-            ""
-        };
+        let pod = if ty.is_pod() { "[POD]" } else { "" };
 
         println!(
             "{indent}𝜏 {}: {} {} {pod}",
@@ -624,7 +639,6 @@ pub fn dump(
     }
 
     let children = c.children();
-    if children.len() > 0 {}
 
     for child in children {
         if !child.usr().is_empty() {
@@ -658,12 +672,12 @@ pub fn extract_ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit
     let mut already_visited = Vec::new();
     for cur in ns {
         extract_ast(
-            cur.clone(),
+            cur,
             0,
             100,
             &mut already_visited,
             &mut ast,
-            &tu,
+            tu,
             namespaces.clone(),
         )?;
     }

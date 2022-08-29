@@ -69,11 +69,7 @@ pub fn extract_class_template_specialization(
         let template_args = extract_template_args(&c_type_alias_decl, &ty, tu)?;
 
         debug!("Template args:");
-        for template_arg in &template_args {
-            if let Some(a) = template_arg {
-                debug!("    {a}");
-            }
-        }
+        template_args.iter().flatten().map(|a| debug!("    {a}"));
 
         // TODO: merge this loop with the one above
         // First child will be the namespace of the target, next will be the template ref which will point to the class template
@@ -88,7 +84,7 @@ pub fn extract_class_template_specialization(
                 if !already_visited.contains(&c_namespace.usr()) {
                     // extract the namespace here
                     let ns = extract_namespace(c_namespace, depth + 1, tu);
-                    let usr = ns.usr.clone();
+                    let usr = ns.usr;
                     ast.insert_namespace(ns);
                     already_visited.push(usr);
                 }
@@ -101,7 +97,7 @@ pub fn extract_class_template_specialization(
                             // if we've got namespaces defined on this ref then we /probably/ want to use them,
                             // otherwise use the ones passed in
                             let ct_namespaes = if local_namespaces.is_empty() {
-                                &namespaces
+                                namespaces
                             } else {
                                 &local_namespaces
                             };
@@ -124,7 +120,7 @@ pub fn extract_class_template_specialization(
         }
 
         Ok(ClassTemplateSpecialization {
-            specialized_decl: specialized_decl.ok_or(Error::FailedToGetTemplateRefFrom(
+            specialized_decl: specialized_decl.ok_or_else(|| Error::FailedToGetTemplateRefFrom(
                 c_type_alias_decl.display_name(),
             ))?,
             usr: c_type_alias_decl.usr(),

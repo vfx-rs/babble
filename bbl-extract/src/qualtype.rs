@@ -116,7 +116,7 @@ impl QualType {
                 let name = ast
                     .get_class(*usr)
                     .map(|r| r.format(ast, class_template_args))
-                    .unwrap_or(usr.to_string());
+                    .unwrap_or_else(|| usr.to_string());
                 format!("{result}{}", name)
             }
             TypeRef::TemplateTypeParameter(t) | TypeRef::TemplateNonTypeParameter(t) => {
@@ -283,7 +283,7 @@ pub fn extract_type(ty: Type, template_parameters: &[String]) -> Result<QualType
                     Ok(QualType {
                         name: name.clone(),
                         is_const,
-                        type_ref: TypeRef::TemplateTypeParameter(name.clone()),
+                        type_ref: TypeRef::TemplateTypeParameter(name),
                     })
                 } else {
                     error!(

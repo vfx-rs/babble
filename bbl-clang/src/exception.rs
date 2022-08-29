@@ -33,10 +33,7 @@ impl ExceptionSpecificationKind {
     /// Does this kind represent a definite noexcept?
     pub fn is_noexcept(&self) -> bool {
         use ExceptionSpecificationKind::*;
-        match self {
-            BasicNoexcept | NoThrow => true,
-            _ => false,
-        }
+        matches!(self, BasicNoexcept | NoThrow)
     }
 }
 

@@ -10,3 +10,4 @@ clang-sys = {version = "1.3.3", features = ["clang_13_0"] }
 ustr = "0.9.0"
 env_logger = "0.9.0"
 log = "0.4.17"
+thiserror = "1.0.32"
