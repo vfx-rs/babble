@@ -77,7 +77,7 @@ impl CQualType {
         }
     }
 
-    pub fn format(&self, ast: &CAST) -> String {
+    pub fn format(&self, ast: &CAST, use_public_names: bool) -> String {
         let result = String::new();
 
         let result = if self.is_const {
@@ -90,11 +90,13 @@ impl CQualType {
             CTypeRef::Builtin(tk) => {
                 format!("{result}{}", tk.spelling())
             }
-            CTypeRef::Pointer(pointee) => format!("{result}{}*", pointee.format(ast)),
+            CTypeRef::Pointer(pointee) => {
+                format!("{result}{}*", pointee.format(ast, use_public_names))
+            }
             CTypeRef::Ref(usr) => {
                 let name = ast
                     .get_struct(*usr)
-                    .map(|r| r.format())
+                    .map(|r| r.format(use_public_names))
                     .unwrap_or(usr.to_string());
                 format!("{result}{}", name)
             }
@@ -141,8 +143,8 @@ impl Display for CArgument {
 }
 
 impl CArgument {
-    fn format(&self, ast: &CAST) -> String {
-        format!("{}: {}", self.name, self.qual_type.format(ast))
+    fn format(&self, ast: &CAST, use_public_names: bool) -> String {
+        format!("{}: {}", self.name, self.qual_type.format(ast, use_public_names))
     }
 }
 
@@ -172,14 +174,14 @@ impl CFunction {
         let args = self
             .arguments
             .iter()
-            .map(|a| a.format(ast))
+            .map(|a| a.format(ast, false))
             .collect::<Vec<String>>();
         let arg_str = args.join(", ");
 
         println!(
             "{}({arg_str}) -> {};",
             self.name_private,
-            self.result.format(ast)
+            self.result.format(ast, false)
         );
         if self.name_private != self.name_public {
             println!("#define {} {}", self.name_public, self.name_private);
@@ -199,8 +201,16 @@ impl Display for CField {
 }
 
 impl CField {
-    fn format(&self, ast: &CAST) -> String {
-        format!("{}: {}", self.name, self.qual_type.format(ast))
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn qual_type(&self) -> &CQualType {
+        &self.qual_type
+    }
+
+    fn format(&self, ast: &CAST, use_public_names: bool) -> String {
+        format!("{}: {}", self.name, self.qual_type.format(ast, use_public_names))
     }
 }
 
@@ -217,15 +227,22 @@ pub struct CStruct {
 }
 
 impl CStruct {
-    pub fn format(&self) -> String {
-        format!("struct {}", self.name_private)
+    pub fn format(&self, use_public_name: bool) -> String {
+        format!(
+            "{}",
+            if use_public_name {
+                &self.name_public
+            } else {
+                &self.name_private
+            }
+        )
     }
 
     pub fn pretty_print(&self, _depth: usize, ast: &CAST) {
         println!("typedef struct {{");
 
         for field in self.fields.iter() {
-            println!("  {};", field.format(ast));
+            println!("  {};", field.format(ast, false));
         }
 
         println!("}} {};", self.name_private);
@@ -279,48 +296,42 @@ pub fn translate_qual_type(
             needs_deref: false,
             needs_move: false,
         }),
-        TypeRef::Pointer(qt) => {
-            Ok(CQualType {
-                name: qual_type.name.clone(),
-                is_const: qual_type.is_const,
-                type_ref: CTypeRef::Pointer(Box::new(translate_qual_type(
-                    qt.as_ref(),
-                    template_parms,
-                    template_args,
-                )?)),
-                cpp_type_ref: qual_type.type_ref.clone(),
-                needs_deref: false,
-                needs_move: false,
-            })
-        }
-        TypeRef::LValueReference(qt) => {
-            Ok(CQualType {
-                name: qual_type.name.clone(),
-                is_const: qual_type.is_const,
-                type_ref: CTypeRef::Pointer(Box::new(translate_qual_type(
-                    qt.as_ref(),
-                    template_parms,
-                    template_args,
-                )?)),
-                cpp_type_ref: qual_type.type_ref.clone(),
-                needs_deref: true,
-                needs_move: false,
-            })
-        }
-        TypeRef::RValueReference(qt) => {
-            Ok(CQualType {
-                name: qual_type.name.clone(),
-                is_const: qual_type.is_const,
-                type_ref: CTypeRef::Pointer(Box::new(translate_qual_type(
-                    qt.as_ref(),
-                    template_parms,
-                    template_args,
-                )?)),
-                cpp_type_ref: qual_type.type_ref.clone(),
-                needs_deref: false,
-                needs_move: true,
-            })
-        }
+        TypeRef::Pointer(qt) => Ok(CQualType {
+            name: qual_type.name.clone(),
+            is_const: qual_type.is_const,
+            type_ref: CTypeRef::Pointer(Box::new(translate_qual_type(
+                qt.as_ref(),
+                template_parms,
+                template_args,
+            )?)),
+            cpp_type_ref: qual_type.type_ref.clone(),
+            needs_deref: false,
+            needs_move: false,
+        }),
+        TypeRef::LValueReference(qt) => Ok(CQualType {
+            name: qual_type.name.clone(),
+            is_const: qual_type.is_const,
+            type_ref: CTypeRef::Pointer(Box::new(translate_qual_type(
+                qt.as_ref(),
+                template_parms,
+                template_args,
+            )?)),
+            cpp_type_ref: qual_type.type_ref.clone(),
+            needs_deref: true,
+            needs_move: false,
+        }),
+        TypeRef::RValueReference(qt) => Ok(CQualType {
+            name: qual_type.name.clone(),
+            is_const: qual_type.is_const,
+            type_ref: CTypeRef::Pointer(Box::new(translate_qual_type(
+                qt.as_ref(),
+                template_parms,
+                template_args,
+            )?)),
+            cpp_type_ref: qual_type.type_ref.clone(),
+            needs_deref: false,
+            needs_move: true,
+        }),
         TypeRef::Ref(usr) => Ok(CQualType {
             name: qual_type.name.clone(),
             is_const: qual_type.is_const,
@@ -363,18 +374,52 @@ pub fn translate_arguments(
     template_parms: &[TemplateParameterDecl],
     template_args: &[Option<TemplateType>],
     used_argument_names: &mut HashSet<String>,
+    ast: &AST,
 ) -> Result<Vec<CArgument>, TranslateArgumentError> {
     let mut result = Vec::new();
 
     for arg in arguments {
-        let qual_type = translate_qual_type(&arg.qual_type(), template_parms, template_args)
+        let mut qual_type = translate_qual_type(&arg.qual_type(), template_parms, template_args)
             .map_err(|e| {
                 error!("Error translating argument {}: {e}", arg.name());
-                TranslateArgumentError {
+                TranslateArgumentError::FailedToTranslateType {
                     name: arg.name().to_string(),
                     source: e,
                 }
             })?;
+
+        // if the argument is a pass-by-value of a non-POD type we need to force it to be passed as a pointer and
+        // deref'd on the other side
+        let do_pass_by_pointer = if let CTypeRef::Ref(usr) = &qual_type.type_ref {
+            let class = ast
+                .get_class(*usr)
+                .ok_or(TranslateArgumentError::FailedToGetClassFromRef(*usr))?;
+
+            if !matches!(class.bind_kind(), ClassBindKind::ValueType) {
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if do_pass_by_pointer {
+            let name = qual_type.name().to_string();
+            let is_const = qual_type.is_const();
+            let type_ref = qual_type.type_ref().clone();
+            let cpp_type_ref = qual_type.cpp_type_ref().clone();
+
+            qual_type = CQualType {
+                name,
+                is_const,
+                type_ref: CTypeRef::Pointer(Box::new(qual_type)),
+                cpp_type_ref,
+                needs_deref: true,
+                needs_move: false,
+            };
+        }
+        let qual_type = qual_type;
 
         // We need to create an argument name if none is specified in the header
         let name = if arg.name().is_empty() {
@@ -545,10 +590,12 @@ fn translate_class_template_specialization(
     functions: &mut UstrIndexMap<CFunction>,
     used_names: &mut HashSet<String>,
 ) -> Result<()> {
-    let class_id = ast
-        .classes()
-        .get_id(&cts.specialized_decl().into())
-        .ok_or(Error::RecordNotFound)?;
+    let class_id =
+        ast.classes()
+            .get_id(&cts.specialized_decl().into())
+            .ok_or(Error::ClassNotFound(
+                cts.specialized_decl().as_str().to_string(),
+            ))?;
     let class = ast.classes().index(*class_id);
 
     translate_class(
@@ -646,6 +693,7 @@ pub fn translate_class(
             &st_prefix_private,
             &st_c_name_private,
             used_names,
+            ast,
         )?;
 
         functions.insert(method.usr().into(), c_function);
@@ -673,6 +721,7 @@ pub fn translate_class(
             &st_prefix_private,
             &st_c_name_private,
             used_names,
+            ast,
         )?;
 
         functions.insert(method.usr().into(), c_function);
@@ -712,7 +761,7 @@ fn translate_function(
     )
     .map_err(|e| Error::TranslateFunction {
         name: function.name().to_string(),
-        source: TranslateArgumentError {
+        source: TranslateArgumentError::FailedToTranslateType {
             name: "[return]".into(),
             source: e,
         },
@@ -725,6 +774,7 @@ fn translate_function(
         function.template_parameters(),
         template_args,
         &mut used_argument_names,
+        ast,
     )
     .map_err(|e| Error::TranslateFunction {
         name: function.name().to_string(),
@@ -764,6 +814,7 @@ pub fn translate_method(
     st_prefix_private: &str,
     st_c_name_private: &str,
     used_names: &mut HashSet<String>,
+    ast: &AST,
 ) -> Result<CFunction> {
     // Concatenate both the class template parameters and any template parameters on the function
     let template_parms = method
@@ -777,7 +828,7 @@ pub fn translate_method(
         translate_qual_type(&method.result(), &template_parms, template_args).map_err(|e| {
             Error::TranslateFunction {
                 name: format!("{}::{}", class.name(), method.name()),
-                source: TranslateArgumentError {
+                source: TranslateArgumentError::FailedToTranslateType {
                     name: "[return]".into(),
                     source: e,
                 },
@@ -791,6 +842,7 @@ pub fn translate_method(
         &template_parms,
         template_args,
         &mut used_argument_names,
+        ast,
     )
     .map_err(|e| Error::TranslateFunction {
         name: format!("{}::{}", class.name(), method.name()),

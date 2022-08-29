@@ -9,7 +9,7 @@ use std::fmt::Display;
 use ustr::Ustr;
 
 use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST};
-use crate::error;
+use crate::error::{self, ExtractClassError};
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::qualtype::extract_type;
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
@@ -55,6 +55,7 @@ pub struct ClassDecl {
     pub(crate) rename: Option<String>,
     pub(crate) bind_kind: ClassBindKind,
     pub(crate) specialized_methods: Vec<MethodTemplateSpecialization>,
+    pub(crate) is_pod: bool,
 }
 
 impl ClassDecl {
@@ -65,6 +66,7 @@ impl ClassDecl {
         methods: Vec<Method>,
         namespaces: Vec<USR>,
         template_parameters: Vec<TemplateParameterDecl>,
+        is_pod: bool,
     ) -> ClassDecl {
         ClassDecl {
             usr,
@@ -76,13 +78,22 @@ impl ClassDecl {
             specializations: Vec::new(),
             ignore: false,
             rename: None,
-            bind_kind: ClassBindKind::OpaquePtr,
+            bind_kind: if is_pod {
+                ClassBindKind::ValueType
+            } else {
+                ClassBindKind::OpaquePtr
+            },
             specialized_methods: Vec::new(),
+            is_pod,
         }
     }
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn is_pod(&self) -> bool {
+        self.is_pod
     }
 
     pub fn get_qualified_name(&self, ast: &AST) -> Result<String> {
@@ -119,6 +130,45 @@ impl ClassDecl {
 
     pub fn bind_kind(&self) -> &ClassBindKind {
         &self.bind_kind
+    }
+
+    /// Set the [`ClassBindKind`] of this class, which affects how it is represented in C.
+    ///
+    /// # Params
+    /// * `bind_kind` - The [`ClassBindKind`] to use for this class
+    /// * `force_members` - If `true`, will try to set any [`Field`]s of this class that are themselves classes to the
+    /// same `bind_kind`.
+    ///
+    /// # Errors
+    /// * [`Error::ClassHasNonValueTypeFields`] if `bind_kind` is [`ClassBindKind::ValueType`], `force_members_to_match`
+    /// is false, and this class has fields which are non-value-type classes.
+    /// * [`Error::ClassHasIncompatibleFields`] if `bind_kind` is [`ClassBindKind::ValueType`], `force_members_to_match`
+    /// is true, but the field classes cannot be converted to value types.
+    pub fn set_bind_kind(
+        &mut self,
+        bind_kind: ClassBindKind,
+        force_members_to_match: bool,
+    ) -> Result<()> {
+        todo!("Not sure we actually want to implement this - check whether POD works first")
+        // match bind_kind {
+        //     ClassBindKind::OpaquePtr => {
+        //         self.bind_kind = bind_kind
+        //     }
+        //     ClassBindKind::OpaqueBytes => {
+        //         todo!()
+        //     }
+        //     ClassBindKind::ValueType => {
+        //         if force_members_to_match {
+
+        //         } else {
+        //             for field in &self.fields {
+
+        //             }
+        //         }
+        //     }
+        // }
+
+        // Ok(())
     }
 
     pub fn specialized_methods(&self) -> &[MethodTemplateSpecialization] {
@@ -368,7 +418,6 @@ pub fn extract_class_decl(
     debug!("{indent}extract_class_decl({})", class_template.usr());
 
     let namespaces = get_namespaces_for_decl(class_template);
-    println!("SEM NS: {namespaces:?}");
 
     let mut methods = Vec::new();
     let mut fields = Vec::new();
@@ -419,7 +468,7 @@ pub fn extract_class_decl(
                                     "Could not extract method {member:?} from class {class_template:?}: {e:?}"
                                 );
                             }
-                        } 
+                        }
                     }
                 } else {
                     error!(
@@ -431,7 +480,14 @@ pub fn extract_class_decl(
             CursorKind::FieldDecl => {
                 if let Ok(access) = member.cxx_access_specifier() {
                     if access == AccessSpecifier::Public {
-                        let field = extract_field(member, depth, &template_parameters)?;
+                        let field =
+                            extract_field(member, depth, &template_parameters).map_err(|e| {
+                                ExtractClassError::FailedToExtractField {
+                                    class: class_template.display_name(),
+                                    name: member.display_name(),
+                                    source: Box::new(e),
+                                }
+                            })?;
                         fields.push(field);
                     }
                 } else {
@@ -474,6 +530,15 @@ pub fn extract_class_decl(
 
     let name = class_template.spelling();
 
+    // If this is a template decl we won't be able to get a type from it so just set POD to false
+    let is_pod = if template_parameters.is_empty() {
+        class_template.ty()?.is_pod()
+    } else {
+        false
+    };
+
+    debug!("Got new ClassDecl {name}");
+
     Ok(ClassDecl::new(
         class_template.usr(),
         class_template.spelling(),
@@ -481,6 +546,7 @@ pub fn extract_class_decl(
         methods,
         namespaces.clone(),
         template_parameters,
+        is_pod,
     ))
 }
 

@@ -8,7 +8,7 @@ use std::fmt::Display;
 
 use crate::{
     ast::AST,
-    class::specialize_template_parameter,
+    class::{specialize_template_parameter, ClassBindKind},
     error::Error,
     template_argument::{TemplateParameterDecl, TemplateType},
 };
@@ -24,6 +24,36 @@ pub enum TypeRef {
     TemplateTypeParameter(String),
     TemplateNonTypeParameter(String),
     Unknown(TypeKind),
+}
+
+impl TypeRef {
+    pub fn is_builtin(&self) -> bool {
+        use TypeRef::*;
+        match self {
+            Builtin(_) => true,
+            Pointer(p) => p.type_ref.is_builtin(),
+            LValueReference(p) => p.type_ref.is_builtin(),
+            RValueReference(p) => p.type_ref.is_builtin(),
+            _ => false,
+        }
+    }
+
+    pub fn is_valuetype(&self, ast: &AST) -> Result<bool> {
+        use TypeRef::*;
+        let result = match self {
+            Builtin(_) => true,
+            Ref(usr) => {
+                let class = ast.get_class(*usr).ok_or(Error::ClassOrNamespaceNotFound(*usr))?;
+                *class.bind_kind() == ClassBindKind::ValueType
+            }
+            Pointer(p) => p.type_ref.is_valuetype(ast)?,
+            LValueReference(p) => p.type_ref.is_valuetype(ast)?,
+            RValueReference(p) => p.type_ref.is_valuetype(ast)?,
+            _ => false,
+        };
+
+        Ok(result)
+    }
 }
 
 #[derive(Clone)]

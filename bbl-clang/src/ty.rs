@@ -74,6 +74,10 @@ impl Type {
     pub fn named_type(&self) -> Result<Type> {
         unsafe { to_type(clang_Type_getNamedType(self.inner)) }
     }
+
+    pub fn is_pod(&self) -> bool {
+        unsafe { clang_isPODType(self.inner) != 0 }
+    }
 }
 
 impl Display for Type {

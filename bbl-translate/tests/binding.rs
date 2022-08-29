@@ -276,7 +276,7 @@ public:
 }
 
 #[test]
-fn test_binding_template() -> Result<(), Error> {
+fn test_binding_template() -> anyhow::Result<()> {
     common::init_log();
 
     let mut ast = parse_string_and_extract_ast(
@@ -295,16 +295,12 @@ public:
 }
     
         "#,
-        &[
-            "-resource-dir",
-            "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
-            "-std=c++14",
-            "-I/usr/include",
-            "-I/usr/local/include",
-        ],
+        &cli_args(&[])?,
         true,
         None,
     )?;
+
+    ast.pretty_print(0);
 
     let class = ast.find_class("Class")?;
     ast.specialize_class(

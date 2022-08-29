@@ -3,62 +3,65 @@
 
 use bbl_clang::cursor::USR;
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
-    ClangError(bbl_clang::error::Error),
-    RecordNotFound,
+    #[error("Clang error")]
+    ClangError(#[from] bbl_clang::error::Error),
+    #[error("Could not find class \"{0}\" in AST")]
+    ClassNotFound(String),
+    #[error("Could not find namespace \"{0}\" in AST")]
     NamespaceNotFound(String),
+    #[error("Could not find method")]
     MethodNotFound,
+    #[error("Multiple matches for the given method name were found")]
     MultipleMatches,
+    #[error("Could not find function \"{0}\" in AST")]
     FunctionNotFound(String),
+    #[error("Could not find a class or namespace with USR \"{0}\" in AST")]
     ClassOrNamespaceNotFound(USR),
+    #[error("Could not translate function \"{name}\"")]
     TranslateFunction {
         name: String,
         source: TranslateArgumentError,
     },
+    #[error("Could not translate field \"{name}\"")]
     TranslateField {
         name: String,
         source: TranslateTypeError,
     },
+    #[error("Failed to get the template reference from \"{0}\"")]
     FailedToGetTemplateRefFrom(String),
+    #[error("Failed to get the type from \"{0}\"")]
     FailedToGetTypeFrom(String),
+    #[error("Failed to get the namespace reference from \"{0}\"")]
     FailedToGetNamespaceRefFrom(String),
+    #[error("Failed to get cursor")]
     FailedToGetCursor,
+    #[error("Failed to extract the template argument from \"{0}\"")]
     TemplateArgExtraction(String),
+    #[error("Could not find a matching template parameter for template argument \"{0}\"")]
     NoMatchingTemplateParameter(String),
-    IoError(std::io::Error),
+    #[error("I/O error")]
+    IoError(#[from] std::io::Error),
+    #[error("Could not extract class")]
+    FailedToExtractClass(#[from] ExtractClassError),
 }
 
-impl From<bbl_clang::error::Error> for Error {
-    fn from(e: bbl_clang::error::Error) -> Self {
-        Error::ClangError(e)
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum ExtractClassError {
+    #[error("Failed to extract field \"{name}\" from class \"{class}\"")]
+    FailedToExtractField { class: String, name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>}
 }
 
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Error::IoError(e)
-    }
-}
-
-#[derive(Debug)]
-pub struct TranslateArgumentError {
-    pub name: String,
-    pub source: TranslateTypeError,
-}
-
-impl std::fmt::Display for TranslateArgumentError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            _ => write!(f, "{:?}", self),
-        }
-    }
-}
-
-impl std::error::Error for TranslateArgumentError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.source)
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum TranslateArgumentError {
+    #[error("Failed to translate type \"{name}\"")]
+    FailedToTranslateType {
+        name: String,
+        source: TranslateTypeError,
+    },
+    #[error("Failed to get class from ref \"{0}\"")]
+    FailedToGetClassFromRef(USR),
 }
 
 #[derive(Debug)]
@@ -78,6 +81,7 @@ impl std::fmt::Display for TranslateTypeError {
     }
 }
 
+/*
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -97,3 +101,4 @@ impl std::error::Error for Error {
         }
     }
 }
+*/

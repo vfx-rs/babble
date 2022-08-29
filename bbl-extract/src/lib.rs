@@ -74,9 +74,9 @@ pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
     let mut already_visited = Vec::new();
 
     if let Some(namespace) = namespace {
-        ast = extract_ast_from_namespace(namespace, cur, &tu);
+        ast = extract_ast_from_namespace(namespace, cur, &tu)?;
     } else {
-        extract_ast(cur, 0, 100, &mut already_visited, &mut ast, &tu, Vec::new());
+        extract_ast(cur, 0, 100, &mut already_visited, &mut ast, &tu, Vec::new())?;
     }
 
     Ok(ast)

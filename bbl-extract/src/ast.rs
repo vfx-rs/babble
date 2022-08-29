@@ -4,7 +4,7 @@ use ustr::{Ustr, UstrMap};
 
 use log::*;
 
-use crate::class::{ClassDecl, MethodSpecializationId};
+use crate::class::{ClassDecl, MethodSpecializationId, ClassBindKind};
 use crate::function::{extract_function, Function, Method};
 use crate::namespace::{self, extract_namespace, Namespace};
 use crate::template_argument::{TemplateArgument, TemplateType};
@@ -169,30 +169,6 @@ impl AST {
         &self.namespaces
     }
 
-    pub fn pretty_print(&self, depth: usize) {
-        for namespace in self.namespaces.iter() {
-            namespace.pretty_print(depth + 1, self);
-            println!("");
-        }
-
-        println!("");
-        for class in self.classes.iter() {
-            class.pretty_print(depth + 1, self, None);
-            println!("");
-        }
-
-        println!("");
-        for function in self.functions.iter() {
-            function.pretty_print(depth + 1, self, &[], None);
-            println!("");
-        }
-
-        for type_alias in self.type_aliases.iter() {
-            type_alias.pretty_print(depth + 1, self, &[]);
-            println!("");
-        }
-    }
-
     pub fn find_namespace(&self, name: &str) -> Result<NamespaceId> {
         for namespace in self.namespaces.iter() {
             if namespace.name == name {
@@ -204,7 +180,7 @@ impl AST {
             }
         }
 
-        Err(Error::RecordNotFound)
+        Err(Error::NamespaceNotFound(name.to_string()))
     }
 
     pub fn find_class(&self, name: &str) -> Result<ClassId> {
@@ -214,11 +190,11 @@ impl AST {
                     .classes
                     .get_id(&class.usr().into())
                     .map(|i| ClassId(*i))
-                    .ok_or(Error::RecordNotFound);
+                    .ok_or(Error::ClassNotFound(name.to_string()));
             }
         }
 
-        Err(Error::RecordNotFound)
+        Err(Error::ClassNotFound(name.to_string()))
     }
 
     /// Make a new [`ClassTemplateSpecialization`] from this class with the given template arguments
@@ -249,6 +225,11 @@ impl AST {
         class_decl.specializations.push(id);
 
         Ok(id)
+    }
+
+    pub fn class_set_bind_kind(&mut self, class_id: ClassId, bind_kind: ClassBindKind, force_members: bool) -> Result<()> {
+        let class_decl = self.classes.index_mut(class_id.0);
+        class_decl.set_bind_kind(bind_kind, force_members)
     }
 
     pub fn find_function(&self, signature: &str) -> Result<FunctionId> {
@@ -344,24 +325,6 @@ impl AST {
         self.classes
             .index_mut(class_id.0)
             .specialize_method(method_id, name, args)
-
-        // let function_decl = self.functions.index(function_id.0);
-
-        // let usr = USR(Ustr::from(&format!("{}_{name}", function_decl.usr().0)));
-
-        // let fts = FunctionTemplateSpecialization {
-        //     specialized_decl: function_decl.usr(),
-        //     usr,
-        //     name: name.into(),
-        //     args,
-        //     namespaces: Vec::new(),
-        // };
-
-        // let id = self
-        //     .type_aliases
-        //     .insert(usr.0, TypeAlias::FunctionTemplateSpecialization(fts));
-
-        // Ok(TypeAliasId(id))
     }
 
     pub fn rename_method(&mut self, class_id: ClassId, method_id: MethodId, new_name: &str) {
@@ -416,6 +379,31 @@ impl AST {
             Err(Error::ClassOrNamespaceNotFound(usr))
         }
     }
+
+    pub fn pretty_print(&self, depth: usize) {
+        for namespace in self.namespaces.iter() {
+            namespace.pretty_print(depth + 1, self);
+            println!("");
+        }
+
+        println!("");
+        for class in self.classes.iter() {
+            class.pretty_print(depth + 1, self, None);
+            println!("");
+        }
+
+        println!("");
+        for function in self.functions.iter() {
+            function.pretty_print(depth + 1, self, &[], None);
+            println!("");
+        }
+
+        for type_alias in self.type_aliases.iter() {
+            type_alias.pretty_print(depth + 1, self, &[]);
+            println!("");
+        }
+    }
+
 }
 
 pub fn get_qualified_name(decl: &str, namespaces: &[USR], ast: &AST) -> Result<String> {
@@ -519,7 +507,7 @@ pub fn extract_ast(
                 ast,
                 tu,
                 namespaces.clone(),
-            );
+            )?;
         } else {
             debug!("{indent} already visited {cr:?}, skipping...");
         }
@@ -537,7 +525,7 @@ pub fn extract_ast(
             ast,
             tu,
             namespaces.clone(),
-        );
+        )?;
     }
 
     Ok(())
@@ -594,8 +582,15 @@ pub fn dump(
             "".to_string()
         };
         let indent = format!("{:width$}", "", width = depth.saturating_sub(1) * 4 + 2);
+
+        let pod = if ty.is_pod() {
+            "[POD]"
+        } else {
+            ""
+        };
+
         println!(
-            "{indent}𝜏 {}: {} {}",
+            "{indent}𝜏 {}: {} {} {pod}",
             ty.spelling(),
             ty.kind(),
             template_args
@@ -651,7 +646,7 @@ pub fn dump(
     }
 }
 
-pub fn extract_ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit) -> AST {
+pub fn extract_ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit) -> Result<AST> {
     let ns = if name.is_empty() {
         c_tu.children()
     } else {
@@ -670,10 +665,10 @@ pub fn extract_ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit
             &mut ast,
             &tu,
             namespaces.clone(),
-        );
+        )?;
     }
 
-    ast
+    Ok(ast)
 }
 
 // walk back up through a cursor's semantic parents and add them as namespaces

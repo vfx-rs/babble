@@ -8,6 +8,7 @@ name = "bbl_translate"
 path = "src/lib.rs"
 
 [dependencies]
+anyhow = {version = "1.0.62", features = ["backtrace"]}
 bbl-clang = {path="../bbl-clang", version="0.1.0"}
 bbl-extract = {path="../bbl-extract", version="0.1.0"}
 env_logger = "0.9.0"
