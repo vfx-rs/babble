@@ -1,3 +1,6 @@
+use std::marker::PhantomData;
+use std::ops::{Index, IndexMut};
+
 use bbl_clang::cursor::Cursor;
 use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::TranslationUnit};
 use ustr::{Ustr, UstrMap};
@@ -15,22 +18,28 @@ use crate::{class::extract_class_decl, type_alias::extract_class_template_specia
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub struct UstrIndexMap<T> {
-    storage: Vec<T>,
-    map: UstrMap<usize>,
+pub trait IndexMapKey {
+    fn get(&self) -> usize;
 }
 
-impl<T> Default for UstrIndexMap<T> {
+pub struct UstrIndexMap<T, K: IndexMapKey> {
+    storage: Vec<T>,
+    map: UstrMap<usize>,
+    phantom: PhantomData<K>,
+}
+
+impl<T, K> Default for UstrIndexMap<T, K> where K: IndexMapKey {
     fn default() -> Self {
-        UstrIndexMap::<T>::new()
+        UstrIndexMap::<T, K>::new()
     }
 }
 
-impl<T> UstrIndexMap<T> {
-    pub fn new() -> UstrIndexMap<T> {
+impl<T, K> UstrIndexMap<T, K> where K: IndexMapKey {
+    pub fn new() -> UstrIndexMap<T, K> {
         UstrIndexMap {
             storage: Vec::new(),
             map: Default::default(),
+            phantom: PhantomData
         }
     }
 
@@ -50,14 +59,6 @@ impl<T> UstrIndexMap<T> {
         self.map.get(key)
     }
 
-    pub fn index(&self, id: usize) -> &T {
-        &self.storage[id]
-    }
-
-    pub fn index_mut(&mut self, id: usize) -> &mut T {
-        &mut self.storage[id]
-    }
-
     pub fn len(&self) -> usize {
         self.storage.len()
     }
@@ -74,8 +75,22 @@ impl<T> UstrIndexMap<T> {
     }
 }
 
+impl<T, K> Index<K> for UstrIndexMap<T, K> where K: IndexMapKey {
+    type Output = T;
+
+    fn index(&self, index: K) -> &Self::Output {
+        &self.storage[index.get()]
+    }
+}
+
+impl<T, K> IndexMut<K> for UstrIndexMap<T, K> where K: IndexMapKey {
+    fn index_mut(&mut self, index: K) -> &mut Self::Output {
+        &mut self.storage[index.get()]
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct ClassId(pub(crate) usize);
+pub struct ClassId(usize);
 
 impl ClassId {
     pub fn new(id: usize) -> ClassId {
@@ -83,14 +98,20 @@ impl ClassId {
     }
 }
 
-impl From<ClassId> for usize {
-    fn from(id: ClassId) -> Self {
-        id.0
+impl IndexMapKey for ClassId {
+    fn get(&self) -> usize {
+        self.0
     }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct MethodId(pub usize);
+pub struct MethodId(usize);
+
+impl IndexMapKey for MethodId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
 
 impl MethodId {
     pub fn new(id: usize) -> MethodId {
@@ -105,7 +126,13 @@ impl From<MethodId> for usize {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct NamespaceId(pub(crate) usize);
+pub struct NamespaceId(usize);
+
+impl IndexMapKey for NamespaceId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
 
 impl NamespaceId {
     pub fn new(id: usize) -> NamespaceId {
@@ -120,7 +147,13 @@ impl From<NamespaceId> for usize {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct FunctionId(pub(crate) usize);
+pub struct FunctionId(usize);
+
+impl IndexMapKey for FunctionId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
 
 impl FunctionId {
     pub fn new(id: usize) -> FunctionId {
@@ -135,7 +168,13 @@ impl From<FunctionId> for usize {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct TypeAliasId(pub(crate) usize);
+pub struct TypeAliasId(usize);
+
+impl IndexMapKey for TypeAliasId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
 
 impl TypeAliasId {
     pub fn new(id: usize) -> TypeAliasId {
@@ -150,10 +189,10 @@ impl From<TypeAliasId> for usize {
 }
 
 pub struct AST {
-    pub(crate) classes: UstrIndexMap<ClassDecl>,
-    pub(crate) functions: UstrIndexMap<Function>,
-    pub(crate) namespaces: UstrIndexMap<Namespace>,
-    pub(crate) type_aliases: UstrIndexMap<TypeAlias>,
+    pub(crate) classes: UstrIndexMap<ClassDecl, ClassId>,
+    pub(crate) functions: UstrIndexMap<Function, FunctionId>,
+    pub(crate) namespaces: UstrIndexMap<Namespace, NamespaceId>,
+    pub(crate) type_aliases: UstrIndexMap<TypeAlias, TypeAliasId>,
 }
 
 impl Default for AST {
@@ -172,16 +211,16 @@ impl AST {
         }
     }
 
-    pub fn classes(&self) -> &UstrIndexMap<ClassDecl> {
+    pub fn classes(&self) -> &UstrIndexMap<ClassDecl, ClassId> {
         &self.classes
     }
-    pub fn functions(&self) -> &UstrIndexMap<Function> {
+    pub fn functions(&self) -> &UstrIndexMap<Function, FunctionId> {
         &self.functions
     }
-    pub fn type_aliases(&self) -> &UstrIndexMap<TypeAlias> {
+    pub fn type_aliases(&self) -> &UstrIndexMap<TypeAlias, TypeAliasId> {
         &self.type_aliases
     }
-    pub fn namespaces(&self) -> &UstrIndexMap<Namespace> {
+    pub fn namespaces(&self) -> &UstrIndexMap<Namespace, NamespaceId> {
         &self.namespaces
     }
 
@@ -220,7 +259,7 @@ impl AST {
         name: &str,
         args: Vec<Option<TemplateType>>,
     ) -> Result<TypeAliasId> {
-        let class_decl = self.classes.index_mut(class_id.0);
+        let class_decl = self.classes.index_mut(class_id);
 
         let usr = USR::new(&format!("{}_{name}", class_decl.usr().as_str()));
 
@@ -249,7 +288,7 @@ impl AST {
         bind_kind: ClassBindKind,
         force_members: bool,
     ) -> Result<()> {
-        let class_decl = self.classes.index_mut(class_id.0);
+        let class_decl = self.classes.index_mut(class_id);
         class_decl.set_bind_kind(bind_kind, force_members)
     }
 
@@ -304,7 +343,7 @@ impl AST {
         name: &str,
         template_arguments: Vec<Option<TemplateType>>,
     ) -> Result<TypeAliasId> {
-        let function_decl = self.functions.index_mut(function_id.0);
+        let function_decl = self.functions.index_mut(function_id);
 
         let usr = USR::new(&format!("{}_{name}", function_decl.usr().as_str()));
 
@@ -328,11 +367,11 @@ impl AST {
     }
 
     pub fn rename_namespace(&mut self, namespace_id: NamespaceId, new_name: &str) {
-        self.namespaces.index_mut(namespace_id.0).rename(new_name);
+        self.namespaces.index_mut(namespace_id).rename(new_name);
     }
 
     pub fn find_method(&self, class_id: ClassId, signature: &str) -> Result<MethodId> {
-        let class = self.classes.index(class_id.0);
+        let class = self.classes.index(class_id);
         class.find_method(self, signature).map(|t| t.0)
     }
 
@@ -344,18 +383,18 @@ impl AST {
         args: Vec<Option<TemplateType>>,
     ) -> Result<MethodSpecializationId> {
         self.classes
-            .index_mut(class_id.0)
+            .index_mut(class_id)
             .specialize_method(method_id, name, args)
     }
 
     pub fn rename_method(&mut self, class_id: ClassId, method_id: MethodId, new_name: &str) {
         self.classes
-            .index_mut(class_id.0)
+            .index_mut(class_id)
             .rename_method(method_id, new_name);
     }
 
     pub fn ignore_method(&mut self, class_id: ClassId, method_id: MethodId) {
-        self.classes.index_mut(class_id.0).ignore_method(method_id);
+        self.classes.index_mut(class_id).ignore_method(method_id);
     }
 
     pub fn insert_class(&mut self, class: ClassDecl) {
@@ -380,7 +419,7 @@ impl AST {
     }
 
     pub fn function(&self, id: FunctionId) -> &Function {
-        self.functions.index(id.0)
+        self.functions.index(id)
     }
 
     pub fn insert_namespace(&mut self, namespace: Namespace) {

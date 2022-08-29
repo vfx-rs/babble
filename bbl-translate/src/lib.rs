@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use bbl_clang::cursor::USR;
 use bbl_clang::ty::TypeKind;
+use bbl_extract::ast::IndexMapKey;
 use bbl_extract::function::Function;
 use bbl_extract::type_alias::{ClassTemplateSpecialization, FunctionTemplateSpecialization};
 use hashbrown::HashSet;
@@ -259,9 +260,39 @@ impl CStruct {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct CStructId(usize);
+
+impl CStructId {
+    pub fn new(id: usize) -> CStructId {
+        CStructId(id)
+    }
+}
+
+impl IndexMapKey for CStructId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct CFunctionId(usize);
+
+impl CFunctionId {
+    pub fn new(id: usize) -> CFunctionId {
+        CFunctionId(id)
+    }
+}
+
+impl IndexMapKey for CFunctionId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
+
 pub struct CAST {
-    pub structs: UstrIndexMap<CStruct>,
-    pub functions: UstrIndexMap<CFunction>,
+    pub structs: UstrIndexMap<CStruct, CStructId>,
+    pub functions: UstrIndexMap<CFunction, CFunctionId>,
 }
 
 impl CAST {
@@ -563,18 +594,19 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
 fn translate_function_template_specialization(
     ast: &AST,
     fts: &FunctionTemplateSpecialization,
-    functions: &mut UstrIndexMap<CFunction>,
+    functions: &mut UstrIndexMap<CFunction, CFunctionId>,
     used_names: &mut HashSet<String>,
 ) -> Result<()> {
     let function_id = ast
         .functions()
         .get_id(&fts.specialized_decl().into())
+        .map(|id| FunctionId::new(*id))
         .ok_or_else(|| Error::FunctionNotFound(fts.specialized_decl().to_string()))?;
-    let function = ast.functions().index(*function_id);
+    let function = &ast.functions()[function_id];
 
     translate_function(
         ast,
-        FunctionId::new(*function_id),
+        function_id,
         function,
         functions,
         used_names,
@@ -587,21 +619,22 @@ fn translate_function_template_specialization(
 fn translate_class_template_specialization(
     ast: &AST,
     cts: &ClassTemplateSpecialization,
-    structs: &mut UstrIndexMap<CStruct>,
-    functions: &mut UstrIndexMap<CFunction>,
+    structs: &mut UstrIndexMap<CStruct, CStructId>,
+    functions: &mut UstrIndexMap<CFunction, CFunctionId>,
     used_names: &mut HashSet<String>,
 ) -> Result<()> {
     let class_id =
         ast.classes()
             .get_id(&cts.specialized_decl().into())
+            .map(|id| ClassId::new(*id))
             .ok_or_else(|| Error::ClassNotFound(
                 cts.specialized_decl().as_str().to_string(),
             ))?;
-    let class = ast.classes().index(*class_id);
+    let class = &ast.classes()[class_id];
 
     translate_class(
         ast,
-        ClassId::new(*class_id),
+        class_id,
         class,
         cts.template_arguments(),
         structs,
@@ -617,8 +650,8 @@ pub fn translate_class(
     class_id: ClassId,
     class: &ClassDecl,
     template_args: &[Option<TemplateType>],
-    structs: &mut UstrIndexMap<CStruct>,
-    functions: &mut UstrIndexMap<CFunction>,
+    structs: &mut UstrIndexMap<CStruct, CStructId>,
+    functions: &mut UstrIndexMap<CFunction, CFunctionId>,
     used_names: &mut HashSet<String>,
 ) -> Result<()> {
     // build the namespace prefix
@@ -747,7 +780,7 @@ fn translate_function(
     ast: &AST,
     function_id: FunctionId,
     function: &Function,
-    functions: &mut UstrIndexMap<CFunction>,
+    functions: &mut UstrIndexMap<CFunction, CFunctionId>,
     used_names: &mut HashSet<String>,
     template_args: &[Option<TemplateType>],
 ) -> Result<()> {
@@ -805,6 +838,7 @@ fn translate_function(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn translate_method(
     class: &ClassDecl,
     class_template_parms: &[TemplateParameterDecl],

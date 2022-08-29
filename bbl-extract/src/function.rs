@@ -61,6 +61,7 @@ pub struct Function {
     pub(crate) exception_specification_kind: ExceptionSpecificationKind,
 }
 
+#[allow(clippy::too_many_arguments)]
 impl Function {
     pub fn new(
         usr: USR,
@@ -236,6 +237,7 @@ pub struct Method {
     pub(crate) specializations: Vec<MethodSpecializationId>,
 }
 
+#[allow(clippy::too_many_arguments)]
 impl Method {
     pub fn new(
         usr: USR,

@@ -8,7 +8,7 @@ use log::*;
 use std::fmt::Display;
 use ustr::Ustr;
 
-use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST};
+use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST, IndexMapKey};
 use crate::error::{self, ExtractClassError};
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::qualtype::extract_type;
@@ -343,7 +343,7 @@ impl ClassDecl {
 
                 Err(Error::MethodNotFound)
             }
-            1 => Ok((MethodId(matches[0].0), matches[0].1)),
+            1 => Ok((MethodId::new(matches[0].0), matches[0].1)),
             _ => {
                 error!("Multiple matches found for signature \"{signature}\":");
 
@@ -360,15 +360,15 @@ impl ClassDecl {
     }
 
     pub fn get_method(&self, id: MethodId) -> &Method {
-        &self.methods[id.0]
+        &self.methods[id.get()]
     }
 
     pub fn rename_method(&mut self, method_id: MethodId, new_name: &str) {
-        self.methods[method_id.0].rename(new_name);
+        self.methods[method_id.get()].rename(new_name);
     }
 
     pub fn ignore_method(&mut self, method_id: MethodId) {
-        self.methods[method_id.0].ignore();
+        self.methods[method_id.get()].ignore();
     }
 
     pub fn specialize_method(
@@ -377,7 +377,7 @@ impl ClassDecl {
         name: &str,
         template_arguments: Vec<Option<TemplateType>>,
     ) -> Result<MethodSpecializationId> {
-        let method_decl = &mut self.methods[method_id.0];
+        let method_decl = &mut self.methods[method_id.get()];
 
         let usr = USR::new(&format!("{}_{name}", method_decl.usr().as_str()));
 

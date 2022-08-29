@@ -1,5 +1,9 @@
 use bbl_clang::ty::TypeKind;
-use bbl_extract::{ast::AST, class::ClassBindKind, function::Method};
+use bbl_extract::{
+    ast::{IndexMapKey, AST},
+    class::ClassBindKind,
+    function::Method,
+};
 use bbl_translate::{CFunction, CFunctionSource, CQualType, CStruct, CTypeRef, CAST};
 
 pub mod error;
@@ -160,7 +164,7 @@ fn generate_arg_pass(
 fn gen_cpp_call(fun: &CFunction, ast: &AST) -> Result<String, TypeError> {
     match fun.source {
         CFunctionSource::Function(cpp_fun_id) => {
-            let cpp_fun = ast.functions().index(cpp_fun_id.into());
+            let cpp_fun = &ast.functions()[cpp_fun_id];
             Ok(cpp_fun.get_qualified_name(ast).map_err(|e| {
                 TypeError::FailedToGetQualifiedName {
                     name: cpp_fun.name().to_string(),
@@ -169,8 +173,8 @@ fn gen_cpp_call(fun: &CFunction, ast: &AST) -> Result<String, TypeError> {
             })?)
         }
         CFunctionSource::Method((class_id, method_id)) => {
-            let class = ast.classes().index(class_id.into());
-            let method: &Method = &class.methods()[method_id.0];
+            let class = &ast.classes()[class_id];
+            let method: &Method = &class.methods()[method_id.get()];
 
             let qname = method.get_qualified_name(ast).map_err(|e| {
                 TypeError::FailedToGetQualifiedName {
@@ -186,9 +190,9 @@ fn gen_cpp_call(fun: &CFunction, ast: &AST) -> Result<String, TypeError> {
             }
         }
         CFunctionSource::SpecializedMethod((class_id, method_id)) => {
-            let class = ast.classes().index(class_id.into());
+            let class = &ast.classes()[class_id];
             let spec_method = &class.specialized_methods()[method_id.0];
-            let temp_method = &class.methods()[spec_method.specialized_decl().0];
+            let temp_method = &class.methods()[spec_method.specialized_decl().get()];
 
             let qname = temp_method.get_qualified_name(ast).map_err(|e| {
                 TypeError::FailedToGetQualifiedName {
