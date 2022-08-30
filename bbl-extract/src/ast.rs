@@ -28,18 +28,24 @@ pub struct UstrIndexMap<T, K: IndexMapKey> {
     phantom: PhantomData<K>,
 }
 
-impl<T, K> Default for UstrIndexMap<T, K> where K: IndexMapKey {
+impl<T, K> Default for UstrIndexMap<T, K>
+where
+    K: IndexMapKey,
+{
     fn default() -> Self {
         UstrIndexMap::<T, K>::new()
     }
 }
 
-impl<T, K> UstrIndexMap<T, K> where K: IndexMapKey {
+impl<T, K> UstrIndexMap<T, K>
+where
+    K: IndexMapKey,
+{
     pub fn new() -> UstrIndexMap<T, K> {
         UstrIndexMap {
             storage: Vec::new(),
             map: Default::default(),
-            phantom: PhantomData
+            phantom: PhantomData,
         }
     }
 
@@ -75,7 +81,10 @@ impl<T, K> UstrIndexMap<T, K> where K: IndexMapKey {
     }
 }
 
-impl<T, K> Index<K> for UstrIndexMap<T, K> where K: IndexMapKey {
+impl<T, K> Index<K> for UstrIndexMap<T, K>
+where
+    K: IndexMapKey,
+{
     type Output = T;
 
     fn index(&self, index: K) -> &Self::Output {
@@ -83,7 +92,10 @@ impl<T, K> Index<K> for UstrIndexMap<T, K> where K: IndexMapKey {
     }
 }
 
-impl<T, K> IndexMut<K> for UstrIndexMap<T, K> where K: IndexMapKey {
+impl<T, K> IndexMut<K> for UstrIndexMap<T, K>
+where
+    K: IndexMapKey,
+{
     fn index_mut(&mut self, index: K) -> &mut Self::Output {
         &mut self.storage[index.get()]
     }
@@ -239,17 +251,60 @@ impl AST {
     }
 
     pub fn find_class(&self, name: &str) -> Result<ClassId> {
-        for class in self.classes.iter() {
-            if class.name() == name {
-                return self
-                    .classes
-                    .get_id(&class.usr().into())
-                    .map(|i| ClassId(*i))
-                    .ok_or_else(|| Error::ClassNotFound(name.to_string()));
+        // Iterate over all classes and check whether their qualified name fully or partially matches the provided name
+        let mut matches = Vec::new();
+        let mut qnames = Vec::new();
+        for (class_id, class) in self.classes.iter().enumerate() {
+            let qname =
+                class
+                    .get_qualified_name(self)
+                    .map_err(|e| Error::FailedToGetQualifiedNameFor {
+                        name: class.name().to_string(),
+                        source: Box::new(e),
+                    })?;
+
+            // Should only ever have one match for the qualified name or it would be a compile error on the cpp side
+            if qname == name {
+                return Ok(ClassId::new(class_id));
+            } else if qname.contains(name) {
+                matches.push((class_id, class, qname.clone()));
             }
+
+            qnames.push(qname);
         }
 
-        Err(Error::ClassNotFound(name.to_string()))
+        match matches.len() {
+            0 => {
+                let mut distances = Vec::with_capacity(self.classes.len());
+                for qname in &qnames {
+                    let dist = levenshtein::levenshtein(qname, name);
+                    distances.push((dist, qname));
+                }
+
+                distances.sort_by(|a, b| a.0.cmp(&b.0));
+
+                error!(
+                    "Could not find class matching qualified name: \"{}\"",
+                    name,
+                );
+                error!("Did you mean one of:");
+                for (_, sug) in distances.iter().take(3) {
+                    error!("  {sug}");
+                }
+
+                Err(Error::ClassNotFound(name.into()))
+            }
+            1 => Ok(ClassId::new(matches[0].0)),
+            _ => {
+                error!("Multiple matches found for class \"{name}\":");
+
+                for (_, _, qname) in matches {
+                    error!("  {}", qname);
+                }
+
+                Err(Error::MultipleMatches)
+            }
+        }
     }
 
     /// Make a new [`ClassTemplateSpecialization`] from this class with the given template arguments
@@ -286,10 +341,28 @@ impl AST {
         &mut self,
         class_id: ClassId,
         bind_kind: ClassBindKind,
-        force_members: bool,
     ) -> Result<()> {
+        let could_be = self.classes.index(class_id).could_be_valuetype(self)?;
+
         let class_decl = self.classes.index_mut(class_id);
-        class_decl.set_bind_kind(bind_kind, force_members)
+        if could_be {
+            match bind_kind {
+                ClassBindKind::OpaquePtr => {
+                    class_decl.set_bind_kind(bind_kind);
+                    Ok(())
+                }
+                ClassBindKind::OpaqueBytes => todo!(),
+                ClassBindKind::ValueType => {
+                    if could_be {
+                        class_decl.set_bind_kind(bind_kind);
+                    }
+
+                    Ok(())
+                }
+            }
+        } else {
+            Err(Error::ClassCannotBeValueType(class_decl.name().to_string()))
+        }
     }
 
     pub fn find_function(&self, signature: &str) -> Result<FunctionId> {

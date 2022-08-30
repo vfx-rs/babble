@@ -61,8 +61,8 @@ pub struct Function {
     pub(crate) exception_specification_kind: ExceptionSpecificationKind,
 }
 
-#[allow(clippy::too_many_arguments)]
 impl Function {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         usr: USR,
         name: String,

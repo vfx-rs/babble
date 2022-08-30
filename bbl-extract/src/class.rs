@@ -8,7 +8,9 @@ use log::*;
 use std::fmt::Display;
 use ustr::Ustr;
 
-use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST, IndexMapKey};
+use crate::ast::{
+    get_namespaces_for_decl, get_qualified_name, IndexMapKey, MethodId, TypeAliasId, AST,
+};
 use crate::error::{self, ExtractClassError};
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::qualtype::extract_type;
@@ -144,31 +146,18 @@ impl ClassDecl {
     /// is false, and this class has fields which are non-value-type classes.
     /// * [`Error::ClassHasIncompatibleFields`] if `bind_kind` is [`ClassBindKind::ValueType`], `force_members_to_match`
     /// is true, but the field classes cannot be converted to value types.
-    pub fn set_bind_kind(
-        &mut self,
-        bind_kind: ClassBindKind,
-        force_members_to_match: bool,
-    ) -> Result<()> {
-        todo!("Not sure we actually want to implement this - check whether POD works first")
-        // match bind_kind {
-        //     ClassBindKind::OpaquePtr => {
-        //         self.bind_kind = bind_kind
-        //     }
-        //     ClassBindKind::OpaqueBytes => {
-        //         todo!()
-        //     }
-        //     ClassBindKind::ValueType => {
-        //         if force_members_to_match {
+    pub(crate) fn set_bind_kind(&mut self, bind_kind: ClassBindKind) {
+        self.bind_kind = bind_kind
+    }
 
-        //         } else {
-        //             for field in &self.fields {
+    pub fn could_be_valuetype(&self, ast: &AST) -> Result<bool> {
+        for field in &self.fields {
+            if !field.qual_type().is_valuetype(ast)? {
+                return Ok(false);
+            }
+        }
 
-        //             }
-        //         }
-        //     }
-        // }
-
-        // Ok(())
+        Ok(true)
     }
 
     pub fn specialized_methods(&self) -> &[MethodTemplateSpecialization] {
@@ -196,7 +185,9 @@ impl ClassDecl {
 
         let indent = format!("{:width$}", "", width = depth * 2);
 
-        println!("+ ClassDecl {}", self.usr);
+        let pod = if self.is_pod { "[POD]" } else { "" };
+
+        println!("+ ClassDecl {} {}", self.usr, pod);
 
         let ns_string = self
             .namespaces

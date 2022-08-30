@@ -339,7 +339,7 @@ fn generate_opaqueptr_declaration(st: &CStruct) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use bbl_clang::cli_args;
-    use bbl_extract::parse_string_and_extract_ast;
+    use bbl_extract::{class::ClassBindKind, parse_string_and_extract_ast};
     use bbl_translate::translate_cpp_ast_to_c;
 
     use crate::{gen_c, Error};
@@ -443,9 +443,6 @@ void fun(Class c);
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
 
-        // let class = ast.find_class("Test_1_0::Class")?;
-        // ast.class_set_bind_kind(class, ClassBindKind::ValueType)?;
-
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         c_ast.pretty_print(0);
 
@@ -492,5 +489,95 @@ void fun(Class c);
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
         Ok(())
+    }
+
+    #[test]
+    fn write_nested_valuetype() -> Result<(), Error> {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
+namespace Test_1_0 {
+class A {
+public:
+    int a;
+    float b;
+};
+
+class B {
+public:
+    A a;
+};
+}
+            "#,
+            &cli_args(&[])?,
+            true,
+            None,
+        )?;
+
+        ast.pretty_print(0);
+
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
+
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        c_ast.pretty_print(0);
+
+        assert_eq!(c_ast.structs.len(), 2);
+        assert_eq!(c_ast.functions.len(), 0);
+
+        let (c_header, c_source) = gen_c(&ast, &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+
+        Ok(())
+    }
+
+    #[test]
+    fn write_nested_valuetype_with_forced_member() -> Result<(), Error> {
+        init_log();
+        let mut ast = parse_string_and_extract_ast(
+            r#"
+namespace Test_1_0 {
+class A {
+public:
+    A(const A&); // presence of copy ctor means no POD any more, but we *know* it's a trivial constructor
+    int a;
+    float b;
+};
+
+class B {
+public:
+    A a;
+};
+}
+            "#,
+            &cli_args(&[])?,
+            true,
+            None,
+        )?;
+
+        ast.pretty_print(0);
+
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
+
+        let class = ast.find_class("Test_1_0::A")?;
+        ast.class_set_bind_kind(class, ClassBindKind::ValueType)?;
+
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        c_ast.pretty_print(0);
+
+        assert_eq!(c_ast.structs.len(), 2);
+        assert_eq!(c_ast.functions.len(), 1);
+
+        let (c_header, c_source) = gen_c(&ast, &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+
+        Ok(())
+    }
+
+    pub fn init_log() {
+        let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
+            .format_timestamp(None)
+            // .is_test(true)
+            .try_init();
     }
 }

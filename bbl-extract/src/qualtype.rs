@@ -43,7 +43,9 @@ impl TypeRef {
         let result = match self {
             Builtin(_) => true,
             Ref(usr) => {
-                let class = ast.get_class(*usr).ok_or(Error::ClassOrNamespaceNotFound(*usr))?;
+                let class = ast
+                    .get_class(*usr)
+                    .ok_or(Error::ClassOrNamespaceNotFound(*usr))?;
                 *class.bind_kind() == ClassBindKind::ValueType
             }
             Pointer(p) => p.type_ref.is_valuetype(ast)?,
@@ -77,6 +79,22 @@ impl QualType {
             name: "float".into(),
             is_const: false,
             type_ref: TypeRef::Builtin(TypeKind::Float),
+        }
+    }
+
+    pub fn is_valuetype(&self, ast: &AST) -> Result<bool> {
+        match self.type_ref {
+            TypeRef::Builtin(_)
+            | TypeRef::Pointer(_)
+            | TypeRef::LValueReference(_)
+            | TypeRef::RValueReference(_) => Ok(true),
+            TypeRef::Ref(usr) => Ok(matches!(
+                ast.get_class(usr)
+                    .ok_or_else(|| Error::ClassNotFound(usr.as_str().to_string()))?
+                    .bind_kind(),
+                ClassBindKind::ValueType
+            )),
+            _ => Ok(false),
         }
     }
 

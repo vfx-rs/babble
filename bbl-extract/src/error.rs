@@ -45,6 +45,13 @@ pub enum Error {
     IoError(#[from] std::io::Error),
     #[error("Could not extract class")]
     FailedToExtractClass(#[from] ExtractClassError),
+    #[error("Failed to get qualified name for \"{name}\"")]
+    FailedToGetQualifiedNameFor {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    #[error("Cannot set class \"{0}\" to value type as one of its fields is not value type. Try fixing that first.")]
+    ClassCannotBeValueType(String),
 }
 
 #[derive(Debug, thiserror::Error)]
