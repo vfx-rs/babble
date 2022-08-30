@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use bbl_clang::cursor::USR;
 use bbl_clang::ty::TypeKind;
-use bbl_extract::ast::IndexMapKey;
+use bbl_extract::index_map::{IndexMapKey, UstrIndexMap};
 use bbl_extract::function::Function;
 use bbl_extract::type_alias::{ClassTemplateSpecialization, FunctionTemplateSpecialization};
 use hashbrown::HashSet;
@@ -14,7 +14,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 use bbl_extract::template_argument::TemplateParameterDecl;
 use bbl_extract::{
-    ast::{ClassId, FunctionId, MethodId, UstrIndexMap, AST},
+    ast::{ClassId, FunctionId, MethodId, AST},
     class::{ClassBindKind, ClassDecl},
     function::{Argument, Method},
     qualtype::{QualType, TypeRef},

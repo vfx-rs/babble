@@ -9,10 +9,11 @@ use std::fmt::Display;
 use ustr::Ustr;
 
 use crate::ast::{
-    get_namespaces_for_decl, get_qualified_name, IndexMapKey, MethodId, TypeAliasId, AST,
+    get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST,
 };
 use crate::error::{self, ExtractClassError};
 use crate::function::{extract_method, MethodTemplateSpecialization};
+use crate::index_map::IndexMapKey;
 use crate::qualtype::extract_type;
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
 use crate::{function::Method, qualtype::QualType};

@@ -9,6 +9,7 @@ use log::*;
 
 use crate::class::{ClassBindKind, ClassDecl, MethodSpecializationId};
 use crate::function::{extract_function, Function, Method};
+use crate::index_map::{IndexMapKey, UstrIndexMap};
 use crate::namespace::{self, extract_namespace, Namespace};
 use crate::template_argument::{TemplateArgument, TemplateType};
 use crate::type_alias;
@@ -17,90 +18,6 @@ use crate::{class::extract_class_decl, type_alias::extract_class_template_specia
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
-
-pub trait IndexMapKey {
-    fn get(&self) -> usize;
-}
-
-pub struct UstrIndexMap<T, K: IndexMapKey> {
-    storage: Vec<T>,
-    map: UstrMap<usize>,
-    phantom: PhantomData<K>,
-}
-
-impl<T, K> Default for UstrIndexMap<T, K>
-where
-    K: IndexMapKey,
-{
-    fn default() -> Self {
-        UstrIndexMap::<T, K>::new()
-    }
-}
-
-impl<T, K> UstrIndexMap<T, K>
-where
-    K: IndexMapKey,
-{
-    pub fn new() -> UstrIndexMap<T, K> {
-        UstrIndexMap {
-            storage: Vec::new(),
-            map: Default::default(),
-            phantom: PhantomData,
-        }
-    }
-
-    pub fn iter(&self) -> std::slice::Iter<'_, T> {
-        self.storage.iter()
-    }
-
-    pub fn get(&self, key: &Ustr) -> Option<&T> {
-        self.map.get(key).map(|id| &self.storage[*id])
-    }
-
-    pub fn get_mut(&mut self, key: &Ustr) -> Option<&mut T> {
-        self.map.get(key).map(|id| &mut self.storage[*id])
-    }
-
-    pub fn get_id(&self, key: &Ustr) -> Option<&usize> {
-        self.map.get(key)
-    }
-
-    pub fn len(&self) -> usize {
-        self.storage.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    pub fn insert(&mut self, key: Ustr, value: T) -> usize {
-        let id = self.storage.len();
-        self.storage.push(value);
-        self.map.insert(key, id);
-        id
-    }
-}
-
-impl<T, K> Index<K> for UstrIndexMap<T, K>
-where
-    K: IndexMapKey,
-{
-    type Output = T;
-
-    fn index(&self, index: K) -> &Self::Output {
-        &self.storage[index.get()]
-    }
-}
-
-impl<T, K> IndexMut<K> for UstrIndexMap<T, K>
-where
-    K: IndexMapKey,
-{
-    fn index_mut(&mut self, index: K) -> &mut Self::Output {
-        &mut self.storage[index.get()]
-    }
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct ClassId(usize);
 

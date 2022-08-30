@@ -1,8 +1,8 @@
 use bbl_clang::ty::TypeKind;
 use bbl_extract::{
-    ast::{IndexMapKey, AST},
+    ast::{AST},
     class::ClassBindKind,
-    function::Method,
+    function::Method, index_map::IndexMapKey,
 };
 use bbl_translate::{CFunction, CFunctionSource, CQualType, CStruct, CTypeRef, CAST};
 
