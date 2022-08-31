@@ -28,6 +28,7 @@ pub struct AST {
     pub(crate) includes: Vec<Include>,
 }
 
+#[derive(Debug, Clone)]
 pub struct Include {
     name: String,
     bracket: String,
@@ -47,7 +48,7 @@ impl Include {
     }
 
     pub fn get_statement(&self) -> String {
-        format!("#include {0}{1}{0}", self.bracket(), self.name())
+        format!("#include {}{}{}", self.bracket(), self.name(), if self.bracket() == "<" { ">" } else { "\"" })
     }
 }
 
@@ -67,6 +68,8 @@ impl AST {
             includes: Vec::new(),
         }
     }
+
+    pub fn includes(&self) -> &[Include] { &self.includes }
 
     pub fn classes(&self) -> &UstrIndexMap<ClassDecl, ClassId> {
         &self.classes
@@ -359,6 +362,10 @@ impl AST {
     }
 
     pub fn pretty_print(&self, depth: usize) {
+        for inc in self.includes.iter() {
+            println!("{}", inc.get_statement());
+        }
+
         for namespace in self.namespaces.iter() {
             namespace.pretty_print(depth + 1, self);
             println!();
@@ -624,7 +631,21 @@ pub fn extract_ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit
         c_tu.children_of_kind_with_name(CursorKind::Namespace, name, true)
     };
 
+
     let mut ast = AST::new();
+
+    tu.get_inclusions(|file, locations| {
+        if locations.len() == 1 {
+            for location in locations {
+                let name = tu.get_cursor_at_location(location).unwrap().display_name();
+                ast.includes.push(Include::new(
+                    name,
+                    tu.token(*location).spelling().get(0..1).unwrap().to_string(),
+                ));
+            }
+        }
+    });
+
     let namespaces = Vec::new();
     let mut already_visited = Vec::new();
     for cur in ns {

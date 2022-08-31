@@ -1,9 +1,5 @@
 use bbl_clang::ty::TypeKind;
-use bbl_extract::{
-    ast::{AST},
-    class::ClassBindKind,
-    function::Method, index_map::IndexMapKey,
-};
+use bbl_extract::{ast::AST, class::ClassBindKind, function::Method, index_map::IndexMapKey};
 use bbl_translate::{CFunction, CFunctionSource, CQualType, CStruct, CTypeRef, CAST};
 
 pub mod error;
@@ -15,9 +11,20 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 ///
 /// # Returns
 /// A tuple containing two [`String`]s, the first of which is the header source, the second is the implementation source
-pub fn gen_c(ast: &AST, c_ast: &CAST) -> Result<(String, String)> {
-    let mut header = String::new();
-    let mut source = String::new();
+pub fn gen_c(module_name: &str, ast: &AST, c_ast: &CAST) -> Result<(String, String)> {
+    let mut header = format!("#ifndef __{}_H__\n", module_name.to_uppercase());
+    header = format!("{header}#define __{}_H__\n\n", module_name.to_uppercase());
+    header = format!("{header}#ifdef __cplusplus\nextern \"C\" {{\n#endif\n\n");
+
+    let mut source = c_ast
+        .includes
+        .iter()
+        .map(|i| i.get_statement())
+        .collect::<Vec<_>>()
+        .join("\n");
+    if !source.is_empty() {
+        source = format!("{source}\n\n");
+    }
 
     // Generate the declaration for each struct
     for st in c_ast.structs.iter() {
@@ -44,6 +51,10 @@ pub fn gen_c(ast: &AST, c_ast: &CAST) -> Result<(String, String)> {
         header = format!("{header}{decl}\n");
         source = format!("{source}{defn}\n");
     }
+
+    header = format!("{header}\n#ifdef __cplusplus\n}}\n#endif\n\n");
+
+    header = format!("{header}\n#endif /* ifdef __{}_H__ */\n", module_name.to_uppercase());
 
     Ok((header, source))
 }
@@ -372,7 +383,7 @@ public:
         assert_eq!(c_ast.structs.len(), 1);
         assert_eq!(c_ast.functions.len(), 2);
 
-        let (c_header, c_source) = gen_c(&ast, &c_ast)?;
+        let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
         println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
 
         Ok(())
@@ -411,7 +422,7 @@ public:
         assert_eq!(c_ast.structs.len(), 1);
         assert_eq!(c_ast.functions.len(), 0);
 
-        let (c_header, c_source) = gen_c(&ast, &c_ast)?;
+        let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
         println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
 
         Ok(())
@@ -449,7 +460,7 @@ void fun(Class c);
         assert_eq!(c_ast.structs.len(), 1);
         assert_eq!(c_ast.functions.len(), 1);
 
-        let (c_header, c_source) = gen_c(&ast, &c_ast)?;
+        let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
         println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
 
         Ok(())
@@ -485,7 +496,7 @@ void fun(Class c);
         assert_eq!(c_ast.structs.len(), 1);
         assert_eq!(c_ast.functions.len(), 1);
 
-        let (c_header, c_source) = gen_c(&ast, &c_ast)?;
+        let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
         Ok(())
@@ -524,7 +535,7 @@ public:
         assert_eq!(c_ast.structs.len(), 2);
         assert_eq!(c_ast.functions.len(), 0);
 
-        let (c_header, c_source) = gen_c(&ast, &c_ast)?;
+        let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
         Ok(())
@@ -568,7 +579,56 @@ public:
         assert_eq!(c_ast.structs.len(), 2);
         assert_eq!(c_ast.functions.len(), 1);
 
-        let (c_header, c_source) = gen_c(&ast, &c_ast)?;
+        let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+
+        Ok(())
+    }
+
+    #[test]
+    fn write_includes() -> Result<(), Error> {
+        init_log();
+        let mut ast = parse_string_and_extract_ast(
+            r#"
+#include <stddef.h>
+#include <string>
+
+namespace Test_1_0 {
+class A {
+public:
+    A(const A&); // presence of copy ctor means no POD any more, but we *know* it's a trivial constructor
+    int a;
+    float b;
+};
+
+class B {
+public:
+    A a;
+};
+}
+            "#,
+            &cli_args(&[])?,
+            true,
+            Some("Test_1_0"),
+        )?;
+
+        ast.pretty_print(0);
+
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
+
+        let class = ast.find_class("Test_1_0::A")?;
+        ast.class_set_bind_kind(class, ClassBindKind::ValueType)?;
+
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("ast has {} includes", ast.includes().len());
+        println!("cast has {} includes", c_ast.includes.len());
+        c_ast.pretty_print(0);
+
+        assert_eq!(c_ast.structs.len(), 2);
+        assert_eq!(c_ast.functions.len(), 1);
+
+        let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
         Ok(())

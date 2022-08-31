@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use bbl_clang::cursor::USR;
 use bbl_clang::ty::TypeKind;
+use bbl_extract::ast::Include;
 use bbl_extract::index_map::{IndexMapKey, UstrIndexMap};
 use bbl_extract::function::Function;
 use bbl_extract::type_alias::{ClassTemplateSpecialization, FunctionTemplateSpecialization};
@@ -293,6 +294,7 @@ impl IndexMapKey for CFunctionId {
 pub struct CAST {
     pub structs: UstrIndexMap<CStruct, CStructId>,
     pub functions: UstrIndexMap<CFunction, CFunctionId>,
+    pub includes: Vec<Include>,
 }
 
 impl CAST {
@@ -301,6 +303,10 @@ impl CAST {
     }
 
     pub fn pretty_print(&self, depth: usize) {
+        for inc in self.includes.iter() {
+            println!("{}", inc.get_statement());
+        }
+
         for st in self.structs.iter() {
             st.pretty_print(depth, self);
         }
@@ -588,7 +594,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
         )?;
     }
 
-    Ok(CAST { structs, functions })
+    Ok(CAST { structs, functions, includes: ast.includes().to_vec() })
 }
 
 fn translate_function_template_specialization(

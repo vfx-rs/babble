@@ -56,7 +56,7 @@ pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
 ) -> Result<AST> {
     let path = virtual_file::write_temp_file(contents.as_ref())?;
     let index = Index::new();
-    let tu = index.parse_translation_unit(path, cli_args)?;
+    let tu = index.create_translation_unit(path, cli_args)?;
 
     if log_diagnostics {
         for d in tu.diagnostics() {
@@ -76,13 +76,16 @@ pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
     tu.get_inclusions(|file, locations| {
         if locations.len() == 1 {
             for location in locations {
+                let name = tu.get_cursor_at_location(location).unwrap().display_name();
                 ast.includes.push(Include::new(
-                    tu.get_cursor_at_location(location).unwrap().display_name(),
+                    name,
                     tu.token(*location).spelling().get(0..1).unwrap().to_string(),
                 ));
             }
         }
     });
+
+    dbg!(ast.includes().len());
 
     let mut already_visited = Vec::new();
 
@@ -92,6 +95,7 @@ pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
         extract_ast(cur, 0, 100, &mut already_visited, &mut ast, &tu, Vec::new())?;
     }
 
+    dbg!(ast.includes().len());
     Ok(ast)
 }
 
