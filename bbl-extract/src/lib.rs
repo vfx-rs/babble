@@ -12,12 +12,12 @@ use log::*;
 pub mod ast;
 pub mod class;
 pub mod function;
+pub mod index_map;
 pub mod namespace;
 pub mod qualtype;
 pub mod template_argument;
 pub mod type_alias;
-pub mod index_map;
-use ast::{dump, extract_ast, extract_ast_from_namespace, AST};
+use ast::{dump, extract_ast, extract_ast_from_namespace, AST, Include};
 pub mod error;
 use error::Error;
 
@@ -32,7 +32,7 @@ pub fn parse_file<P: AsRef<Path>, S: AsRef<str>>(
     log_diagnostics: bool,
 ) -> Result<TranslationUnit> {
     let index = Index::new();
-    let tu = index.parse_translation_unit(filename, cli_args)?;
+    let tu = index.create_translation_unit(filename, cli_args)?;
 
     if log_diagnostics {
         for d in tu.diagnostics() {
@@ -72,6 +72,18 @@ pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
     let cur = tu.get_cursor()?;
 
     let mut ast = AST::new();
+
+    tu.get_inclusions(|file, locations| {
+        if locations.len() == 1 {
+            for location in locations {
+                ast.includes.push(Include::new(
+                    tu.get_cursor_at_location(location).unwrap().display_name(),
+                    tu.token(*location).spelling().get(0..1).unwrap().to_string(),
+                ));
+            }
+        }
+    });
+
     let mut already_visited = Vec::new();
 
     if let Some(namespace) = namespace {

@@ -1,6 +1,6 @@
-use std::fmt::Display;
+use std::fmt::{Display, Debug};
 
-use clang_sys::{clang_getSpellingLocation, clang_getTokenSpelling, CXSourceLocation, CXToken};
+use clang_sys::{clang_getSpellingLocation, clang_getTokenSpelling, CXSourceLocation, CXToken, CXSourceRange, clang_getTokenExtent};
 
 use crate::{file::File, string::CXStringEx, translation_unit::TranslationUnit};
 
@@ -13,10 +13,29 @@ impl<'tu> Token<'tu> {
     pub fn spelling(&self) -> String {
         unsafe { clang_getTokenSpelling(self.tu.inner, self.inner).to_string() }
     }
+
+    pub fn extent(&self) -> SourceRange {
+        SourceRange {
+            inner: unsafe { clang_getTokenExtent(self.tu.inner, self.inner)}
+        }
+    }
 }
 
+#[repr(C)]
+pub struct SourceRange {
+    pub(crate) inner: CXSourceRange,
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
 pub struct SourceLocation {
     pub(crate) inner: CXSourceLocation,
+}
+
+impl Debug for SourceLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.spelling_location())
+    }
 }
 
 impl SourceLocation {
@@ -43,6 +62,7 @@ impl SourceLocation {
     }
 }
 
+#[derive(Debug)]
 pub struct FileLocation {
     file: File,
     line: u32,

@@ -53,6 +53,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ],
         true)?;
 
+    println!("INCLUDES");
+    tu.get_inclusions(|file, locations| {
+        if locations.len() == 1 {
+            for location in locations {
+                println!("    {:?}", tu.get_cursor_at_location(location));
+                println!("    {}", tu.token(*location).spelling());
+            }
+        }
+    });
+
     let max_depth = args.max_depth.unwrap_or(6);
 
     let mut already_visited = Vec::new();

@@ -1,6 +1,6 @@
 use crate::{
     access_specifier::AccessSpecifier, template_argument::TemplateArgumentKind,
-    token::SourceLocation, exception::ExceptionSpecificationKind,
+    token::SourceLocation, exception::ExceptionSpecificationKind, file::File,
 };
 
 use super::cursor_kind::CursorKind;
@@ -21,11 +21,11 @@ use clang_sys::{
     clang_getCursorSemanticParent, clang_getCursorSpelling, clang_getCursorType,
     clang_getCursorUSR, clang_getNullCursor, clang_isCursorDefinition, clang_isInvalid,
     clang_visitChildren, CXChildVisitResult, CXChildVisit_Break, CXChildVisit_Continue,
-    CXChildVisit_Recurse, CXClientData, CXCursor, clang_getCursorExceptionSpecificationType,
+    CXChildVisit_Recurse, CXClientData, CXCursor, clang_getCursorExceptionSpecificationType, CXSourceLocation, CXFile,
 };
 use std::{
     fmt::{Debug, Display},
-    os::raw::{c_longlong, c_ulonglong, c_void},
+    os::raw::{c_longlong, c_ulonglong, c_void, c_uint},
 };
 
 use crate::ty::{to_type, Type};
@@ -89,7 +89,7 @@ impl Cursor {
         F: FnMut(Cursor, Cursor) -> ChildVisitResult,
     {
         unsafe {
-            let (closure, trampoline) = unpack_closure(callback);
+            let (closure, trampoline) = unpack_cursor_visitor_closure(callback);
             clang_visitChildren(self.inner, trampoline, closure);
         }
     }
@@ -346,7 +346,7 @@ pub type CursorVisitor = extern "C" fn(CXCursor, CXCursor, CXClientData) -> CXCh
 /// The closure should guarantee that it never panics, seeing as panicking
 /// across the FFI barrier is *Undefined Behaviour*. You may find
 /// `std::panic::catch_unwind()` useful.
-unsafe fn unpack_closure<F>(closure: F) -> (*mut c_void, CursorVisitor)
+unsafe fn unpack_cursor_visitor_closure<F>(closure: F) -> (*mut c_void, CursorVisitor)
 where
     F: FnMut(Cursor, Cursor) -> ChildVisitResult,
 {

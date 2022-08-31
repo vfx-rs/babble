@@ -18,110 +18,37 @@ use crate::{class::extract_class_decl, type_alias::extract_class_template_specia
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct ClassId(usize);
 
-impl ClassId {
-    pub fn new(id: usize) -> ClassId {
-        ClassId(id)
-    }
-}
-
-impl IndexMapKey for ClassId {
-    fn get(&self) -> usize {
-        self.0
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct MethodId(usize);
-
-impl IndexMapKey for MethodId {
-    fn get(&self) -> usize {
-        self.0
-    }
-}
-
-impl MethodId {
-    pub fn new(id: usize) -> MethodId {
-        MethodId(id)
-    }
-}
-
-impl From<MethodId> for usize {
-    fn from(id: MethodId) -> Self {
-        id.0
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct NamespaceId(usize);
-
-impl IndexMapKey for NamespaceId {
-    fn get(&self) -> usize {
-        self.0
-    }
-}
-
-impl NamespaceId {
-    pub fn new(id: usize) -> NamespaceId {
-        NamespaceId(id)
-    }
-}
-
-impl From<NamespaceId> for usize {
-    fn from(id: NamespaceId) -> Self {
-        id.0
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct FunctionId(usize);
-
-impl IndexMapKey for FunctionId {
-    fn get(&self) -> usize {
-        self.0
-    }
-}
-
-impl FunctionId {
-    pub fn new(id: usize) -> FunctionId {
-        FunctionId(id)
-    }
-}
-
-impl From<FunctionId> for usize {
-    fn from(id: FunctionId) -> Self {
-        id.0
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct TypeAliasId(usize);
-
-impl IndexMapKey for TypeAliasId {
-    fn get(&self) -> usize {
-        self.0
-    }
-}
-
-impl TypeAliasId {
-    pub fn new(id: usize) -> TypeAliasId {
-        TypeAliasId(id)
-    }
-}
-
-impl From<TypeAliasId> for usize {
-    fn from(id: TypeAliasId) -> Self {
-        id.0
-    }
-}
 
 pub struct AST {
     pub(crate) classes: UstrIndexMap<ClassDecl, ClassId>,
     pub(crate) functions: UstrIndexMap<Function, FunctionId>,
     pub(crate) namespaces: UstrIndexMap<Namespace, NamespaceId>,
     pub(crate) type_aliases: UstrIndexMap<TypeAlias, TypeAliasId>,
+    pub(crate) includes: Vec<Include>,
+}
+
+pub struct Include {
+    name: String,
+    bracket: String,
+}
+
+impl Include {
+    pub fn new(name: String, bracket: String) -> Include {
+        Include { name, bracket }
+    }
+
+    pub fn name(&self) -> &str { &self.name }
+
+    pub fn bracket(&self) -> &str { &self.bracket }
+
+    pub fn get_bracketed_name(&self) -> String {
+        format!("{0}{1}{0}", self.bracket(), self.name())
+    }
+
+    pub fn get_statement(&self) -> String {
+        format!("#include {0}{1}{0}", self.bracket(), self.name())
+    }
 }
 
 impl Default for AST {
@@ -137,6 +64,7 @@ impl AST {
             functions: UstrIndexMap::new(),
             namespaces: UstrIndexMap::new(),
             type_aliases: UstrIndexMap::new(),
+            includes: Vec::new(),
         }
     }
 
@@ -729,4 +657,103 @@ pub fn get_namespaces_for_decl(c: Cursor) -> Vec<USR> {
     walk_namespaces(c.semantic_parent(), &mut namespaces);
     namespaces.reverse();
     namespaces
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct ClassId(usize);
+
+impl ClassId {
+    pub fn new(id: usize) -> ClassId {
+        ClassId(id)
+    }
+}
+
+impl IndexMapKey for ClassId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct MethodId(usize);
+
+impl IndexMapKey for MethodId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
+
+impl MethodId {
+    pub fn new(id: usize) -> MethodId {
+        MethodId(id)
+    }
+}
+
+impl From<MethodId> for usize {
+    fn from(id: MethodId) -> Self {
+        id.0
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct NamespaceId(usize);
+
+impl IndexMapKey for NamespaceId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
+
+impl NamespaceId {
+    pub fn new(id: usize) -> NamespaceId {
+        NamespaceId(id)
+    }
+}
+
+impl From<NamespaceId> for usize {
+    fn from(id: NamespaceId) -> Self {
+        id.0
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct FunctionId(usize);
+
+impl IndexMapKey for FunctionId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
+
+impl FunctionId {
+    pub fn new(id: usize) -> FunctionId {
+        FunctionId(id)
+    }
+}
+
+impl From<FunctionId> for usize {
+    fn from(id: FunctionId) -> Self {
+        id.0
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct TypeAliasId(usize);
+
+impl IndexMapKey for TypeAliasId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
+
+impl TypeAliasId {
+    pub fn new(id: usize) -> TypeAliasId {
+        TypeAliasId(id)
+    }
+}
+
+impl From<TypeAliasId> for usize {
+    fn from(id: TypeAliasId) -> Self {
+        id.0
+    }
 }

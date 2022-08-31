@@ -4,103 +4,26 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'bbl'",
+            "name": "Debug 'dumpast' with size_t.cpp",
             "cargo": {
                 "args": [
-                    "test",
-                    "--no-run",
-                    "--lib",
-                    "--package=bbl-write"
+                    "run",
+                    "--bin=dumpast",
                 ],
                 "filter": {
-                    "name": "bbl",
-                    "kind": "lib"
+                    "name": "dumpast",
+                    "kind": "bin"
                 }
             },
-            "args": [],
+            "args": ["testdata/test_size_t.cpp"],
             "env": {
-                "LLVM_CONFIG_PATH": "/home/anders/packages/llvm/14.0.0/bin/llvm-config",
-                "LD_LIBRARY_PATH": "/home/anders/packages/llvm/14.0.0/lib",
-                "PATH": "/home/anders/packages/llvm/14.0.0/bin:$PATH"
+                // "LLVM_CONFIG_PATH": "/home/anders/packages/llvm/14.0.0/bin/llvm-config",
+                // "PATH": "/home/anders/packages/llvm/14.0.0/bin:$PATH",
+                "LD_LIBRARY_PATH": "/home/anders/packages/llvm/14.0.0/lib"
             },
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug executable 'bblgen'",
-            "cargo": {
-                "args": [
-                    "build",
-                    "--bin=bblgen",
-                    "--package=bbl"
-                ],
-                "filter": {
-                    "name": "bblgen",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug unit tests in executable 'bblgen'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--bin=bblgen",
-                    "--package=bbl"
-                ],
-                "filter": {
-                    "name": "bblgen",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug executable 'dumpast'",
-            "cargo": {
-                "args": [
-                    "build",
-                    "--bin=dumpast",
-                    "--package=bbl"
-                ],
-                "filter": {
-                    "name": "dumpast",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug unit tests in executable 'dumpast'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--bin=dumpast",
-                    "--package=bbl"
-                ],
-                "filter": {
-                    "name": "dumpast",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
             "cwd": "${workspaceFolder}"
         }
     ]
