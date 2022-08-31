@@ -3,6 +3,8 @@
 
 use clang_sys::{CXErrorCode, CXError_Success};
 
+use crate::compilation_database::CompilationDatabaseError;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     InvalidCursor,
@@ -23,6 +25,8 @@ pub enum Error {
     FailedToRunClang(std::io::Error),
     NonUTF8Output(std::string::FromUtf8Error),
     FailedToParseOutput(String),
+    CMakeError,
+    CompilationDatabaseError(#[from] CompilationDatabaseError)
 }
 
 impl std::fmt::Display for Error {

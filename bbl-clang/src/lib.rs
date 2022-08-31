@@ -16,6 +16,7 @@ pub mod token;
 pub mod translation_unit;
 pub mod ty;
 pub mod virtual_file;
+pub mod compilation_database;
 
 /// Convenience function to parse a C++ string with the given compiler arguments and optionally log diagnostics
 ///
