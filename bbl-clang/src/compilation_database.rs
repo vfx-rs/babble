@@ -2,7 +2,7 @@ use std::{ffi::CString, path::Path};
 
 use clang_sys::*;
 
-use crate::{string::CXStringEx, error::Error};
+use crate::{string::CXStringEx};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CompilationDatabaseError {
@@ -70,7 +70,7 @@ impl CompileCommands {
             result.push({
                 CompileCommand {
                     inner: unsafe { clang_CompileCommands_getCommand(self.inner, i) },
-                    commands: self,
+                    _commands: self,
                 }
             });
         }
@@ -87,7 +87,7 @@ impl Drop for CompileCommands {
 
 pub struct CompileCommand<'a> {
     inner: CXCompileCommand,
-    commands: &'a CompileCommands,
+    _commands: &'a CompileCommands,
 }
 
 impl<'a> CompileCommand<'a> {

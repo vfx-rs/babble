@@ -1,8 +1,10 @@
 mod common;
 
-use bbl_clang::cli_args;
+use std::path::{PathBuf, Path};
+
+use bbl_clang::{cli_args, virtual_file::write_temp_cmake_project, cli_args_with};
 use bbl_extract::{
-    error::Error, parse_string_and_extract_ast, qualtype::QualType, template_argument::TemplateType,
+    error::Error, parse_string_and_extract_ast, qualtype::QualType, template_argument::TemplateType, parse_file_and_extract_ast,
 };
 
 use bbl_translate::translate_cpp_ast_to_c;
@@ -295,7 +297,7 @@ public:
 }
     
         "#,
-        &cli_args(&[])?,
+        &cli_args()?,
         true,
         None,
     )?;
@@ -359,7 +361,7 @@ template <typename T>
 T function_template(T&& a, float*);
 }
         "#,
-        &cli_args(&[])?,
+        &cli_args()?,
         true,
         None,
     )?;
@@ -428,3 +430,84 @@ public:
 
     Ok(())
 }
+
+#[test]
+fn use_cmake_for_args() -> Result<(), crate::Error> {
+    common::init_log();
+
+    let contents = r#"
+#include <string>
+#include <Imath/ImathVec.h>
+
+namespace Test {
+class A {
+public:
+    int b;
+};
+}
+        "#;
+
+    let cmake_prefix_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("testdata")
+        .join("imath");
+
+    let (filename, args) = write_temp_cmake_project::<&Path>(
+        contents,
+        &["Imath 3.1 REQUIRED"],
+        &["Imath::Imath"],
+        // Some(cmake_prefix_path),
+        None,
+    )?;
+
+    let mut ast =
+        parse_file_and_extract_ast(&filename, &cli_args_with(&args)?, true, Some("Test"))?;
+    ast.pretty_print(0);
+
+    Ok(())
+}
+
+
+/*
+#[test]
+fn take_std_string() -> Result<(), Error> {
+    common::init_log();
+
+    let mut ast = parse_string_and_extract_ast(
+        r#"
+#include <string>
+
+namespace Test {
+class Class {
+public:
+    std::string take_string(const std::string& s);
+};
+}
+        "#,
+        &cli_args()?,
+        true,
+        None,
+    )?;
+
+    ast.pretty_print(0);
+    // let class = ast.find_class("Class")?;
+    // let method = ast.find_method(class, "method_template")?;
+    // ast.specialize_method(
+    //     class,
+    //     method,
+    //     "method_float",
+    //     vec![Some(TemplateType::Type(QualType::float()))],
+    // )?;
+
+    // ast.pretty_print(0);
+
+    let c_ast = translate_cpp_ast_to_c(&ast)?;
+    c_ast.pretty_print(0);
+
+    assert_eq!(c_ast.structs.len(), 1);
+    assert_eq!(c_ast.functions.len(), 1);
+
+    Ok(())
+}
+*/

@@ -1,6 +1,6 @@
 use crate::{
     access_specifier::AccessSpecifier, template_argument::TemplateArgumentKind,
-    token::SourceLocation, exception::ExceptionSpecificationKind, file::File,
+    token::SourceLocation, exception::ExceptionSpecificationKind,
 };
 
 use super::cursor_kind::CursorKind;
@@ -21,11 +21,11 @@ use clang_sys::{
     clang_getCursorSemanticParent, clang_getCursorSpelling, clang_getCursorType,
     clang_getCursorUSR, clang_getNullCursor, clang_isCursorDefinition, clang_isInvalid,
     clang_visitChildren, CXChildVisitResult, CXChildVisit_Break, CXChildVisit_Continue,
-    CXChildVisit_Recurse, CXClientData, CXCursor, clang_getCursorExceptionSpecificationType, CXSourceLocation, CXFile,
+    CXChildVisit_Recurse, CXClientData, CXCursor, clang_getCursorExceptionSpecificationType,
 };
 use std::{
     fmt::{Debug, Display},
-    os::raw::{c_longlong, c_ulonglong, c_void, c_uint},
+    os::raw::{c_longlong, c_ulonglong, c_void},
 };
 
 use crate::ty::{to_type, Type};

@@ -367,7 +367,7 @@ public:
 };
 }
             "#,
-            &cli_args(&[])?,
+            &cli_args()?,
             true,
             None,
         )?;
@@ -403,7 +403,7 @@ public:
 
 }
             "#,
-            &cli_args(&[])?,
+            &cli_args()?,
             true,
             None,
         )?;
@@ -444,7 +444,7 @@ void fun(Class c);
 
 }
             "#,
-            &cli_args(&[])?,
+            &cli_args()?,
             true,
             None,
         )?;
@@ -480,7 +480,7 @@ public:
 void fun(Class c);
 }
             "#,
-            &cli_args(&[])?,
+            &cli_args()?,
             true,
             None,
         )?;
@@ -519,7 +519,7 @@ public:
 };
 }
             "#,
-            &cli_args(&[])?,
+            &cli_args()?,
             true,
             None,
         )?;
@@ -560,7 +560,7 @@ public:
 };
 }
             "#,
-            &cli_args(&[])?,
+            &cli_args()?,
             true,
             None,
         )?;
@@ -607,7 +607,7 @@ public:
 };
 }
             "#,
-            &cli_args(&[])?,
+            &cli_args()?,
             true,
             Some("Test_1_0"),
         )?;

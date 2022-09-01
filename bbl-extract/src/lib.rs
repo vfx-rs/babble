@@ -48,13 +48,12 @@ pub fn parse_file<P: AsRef<Path>, S: AsRef<str>>(
     Ok(tu)
 }
 
-pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
-    contents: S1,
+pub fn parse_file_and_extract_ast<P: AsRef<Path>, S: AsRef<str>>(
+    path: P,
     cli_args: &[S],
     log_diagnostics: bool,
-    namespace: Option<&str>,
+    namespace: Option<&str>
 ) -> Result<AST> {
-    let path = virtual_file::write_temp_file(contents.as_ref())?;
     let index = Index::new();
     let tu = index.create_translation_unit(path, cli_args)?;
 
@@ -85,8 +84,6 @@ pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
         }
     });
 
-    dbg!(ast.includes().len());
-
     let mut already_visited = Vec::new();
 
     if let Some(namespace) = namespace {
@@ -95,8 +92,18 @@ pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
         extract_ast(cur, 0, 100, &mut already_visited, &mut ast, &tu, Vec::new())?;
     }
 
-    dbg!(ast.includes().len());
     Ok(ast)
+
+}
+
+pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
+    contents: S1,
+    cli_args: &[S],
+    log_diagnostics: bool,
+    namespace: Option<&str>,
+) -> Result<AST> {
+    let path = virtual_file::write_temp_file(contents.as_ref())?;
+    parse_file_and_extract_ast(&path, cli_args, log_diagnostics, namespace)
 }
 
 pub fn parse_string_and_dump_ast<S1: AsRef<str>, S: AsRef<str>>(

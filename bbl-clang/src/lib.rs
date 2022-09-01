@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use diagnostic::Severity;
 
 pub mod access_specifier;
+pub mod compilation_database;
 pub mod cursor;
 pub mod cursor_kind;
 pub mod diagnostic;
@@ -16,7 +17,6 @@ pub mod token;
 pub mod translation_unit;
 pub mod ty;
 pub mod virtual_file;
-pub mod compilation_database;
 
 /// Convenience function to parse a C++ string with the given compiler arguments and optionally log diagnostics
 ///
@@ -59,8 +59,7 @@ pub fn get_clang_binary() -> Result<String, error::Error> {
     // Next check if there's a pointer to llvm-config
     if let Ok(config_path) = std::env::var("LLVM_CONFIG_PATH") {
         if let Ok(output) = Command::new(&config_path).arg("--bindir").output() {
-            let stdout =
-                String::from_utf8(output.stdout).map_err(Error::NonUTF8Output)?;
+            let stdout = String::from_utf8(output.stdout).map_err(Error::NonUTF8Output)?;
 
             let line = stdout
                 .lines()
@@ -88,12 +87,10 @@ pub fn get_default_cli_args() -> Result<Vec<String>, error::Error> {
 
     let clang_bin = get_clang_binary()?;
 
-    dbg!(&clang_bin);
-
     let output = Command::new(&clang_bin)
         .arg("-print-resource-dir")
         .output()
-        .map_err( Error::FailedToRunClang)?;
+        .map_err(Error::FailedToRunClang)?;
     let stdout = String::from_utf8(output.stdout).map_err(Error::NonUTF8Output)?;
 
     let line = stdout
@@ -101,10 +98,7 @@ pub fn get_default_cli_args() -> Result<Vec<String>, error::Error> {
         .next()
         .ok_or_else(|| Error::FailedToParseOutput(stdout.clone()))?;
 
-    let mut result = vec![
-        "-resource-dir".to_string(),
-        line.to_string(),
-    ];
+    let mut result = vec!["-resource-dir".to_string(), line.to_string()];
 
     #[cfg(windows)]
     todo!();
@@ -115,14 +109,17 @@ pub fn get_default_cli_args() -> Result<Vec<String>, error::Error> {
         result.push("-I/usr/local/include".to_string());
     }
 
-    dbg!(&result);
     Ok(result)
 }
 
-pub fn cli_args(args: &[&str]) -> Result<Vec<String>, error::Error> {
+pub fn cli_args() -> Result<Vec<String>, error::Error> {
+    Ok(get_default_cli_args()?.into_iter().collect())
+}
+
+pub fn cli_args_with<S: AsRef<str>>(args: &[S]) -> Result<Vec<String>, error::Error> {
     Ok(get_default_cli_args()?
         .into_iter()
-        .chain(args.iter().map(|s| s.to_string()))
+        .chain(args.iter().map(|s| s.as_ref().to_string()))
         .collect())
 }
 

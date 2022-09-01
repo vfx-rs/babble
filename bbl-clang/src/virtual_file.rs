@@ -2,7 +2,6 @@ use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
-    process::ExitStatus,
 };
 
 use log::error;
@@ -39,7 +38,7 @@ pub fn write_temp_cmake_project<P: AsRef<Path>>(
     find_packages: &[&str],
     link_libraries: &[&str],
     cmake_prefix_path: Option<P>,
-) -> Result<PathBuf> {
+) -> Result<(PathBuf, Vec<String>)> {
     let mut dirname = if let Ok(dir) = std::env::var("OUT_DIR") {
         PathBuf::from(&dir)
     } else {
@@ -140,10 +139,43 @@ target_link_libraries(babble_get_args {link_libraries_str})
     let compilation_db = CompilationDatabase::from_directory(&build_dir)?;
     let commands = compilation_db.get_compile_commands(&source_filename);
     let command_vec = commands.get_commands();
-    let args = command_vec[0].get_arguments();
-    dbg!(&args);
+    let mut it_raw_args = command_vec[0].get_arguments().into_iter().skip(1);
 
-    Ok(dirname)
+    let mut args = Vec::new();
+    'outer: while let Some(arg) = it_raw_args.next() {
+        for pattern in ["-c", "-o"] {
+            if arg.starts_with(pattern) {
+                // skip this arg and its value
+                it_raw_args.nth(1);
+                continue 'outer;
+            }
+        }
+
+        if arg.starts_with("--driver-mode") || arg == source_filename.as_os_str().to_string_lossy()
+        {
+            continue;
+        }
+
+        args.push(arg);
+    }
+
+    // let mut args = Vec::new();
+    // let mut i = 0;
+    // loop {
+    //     if i == raw_args.len() {
+    //         break;
+    //     }
+
+    //     if ["-c", "-o", "--driver-mode"].contains(&raw_args[i].as_str()) {
+    //         i += 1;
+    //     } else {
+    //         args.push(raw_args[i].clone());
+    //     }
+
+    //     i += 1;
+    // }
+
+    Ok((source_filename, args))
 }
 
 #[cfg(test)]
@@ -206,7 +238,7 @@ public:
             .join("testdata")
             .join("imath");
 
-        write_temp_cmake_project(
+        let (_, _args) = write_temp_cmake_project(
             contents,
             &["Imath 3.1 REQUIRED"],
             &["Imath::Imath"],

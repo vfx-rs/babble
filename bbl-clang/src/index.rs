@@ -53,7 +53,7 @@ impl Index {
 
         if tu.is_null() {
             error!(
-                "translation unit {} failed to parse",
+                "translation unit {} failed to parse. We don't have any good diagnostics here. Maybe check the args: {cargs:?}",
                 filename.as_ref().display()
             );
             Err(Error::ParseError)
@@ -95,7 +95,7 @@ impl Index {
 
         if tu.is_null() {
             error!(
-                "translation unit {} failed to parse",
+                "translation unit {} failed to parse. We don't have any good diagnostics here. Maybe check the args: {cargs:?}",
                 filename.as_ref().display()
             );
             Err(Error::ParseError)
