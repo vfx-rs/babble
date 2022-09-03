@@ -408,7 +408,10 @@ pub fn translate_qual_type(
                 }
             }
         }
-        _ => todo!(),
+        _ => {
+            error!("Not yet implemented qual_type translation for {:?}", qual_type.type_ref);
+            todo!()
+        }
     }
 }
 

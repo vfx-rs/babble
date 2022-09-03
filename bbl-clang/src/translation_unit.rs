@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::os::raw::{c_uint, c_void};
 
 use crate::diagnostic::Diagnostic;
@@ -64,6 +65,12 @@ impl TranslationUnit {
             let (closure, trampoline) = unpack_inclusion_visitor_closure(callback);
             clang_getInclusions(self.inner, trampoline, closure);
         }
+    }
+}
+
+impl Debug for TranslationUnit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.spelling())
     }
 }
 

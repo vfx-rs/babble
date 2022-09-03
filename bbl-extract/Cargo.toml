@@ -15,4 +15,5 @@ hashbrown = "0.12.3"
 levenshtein = "1.0.5"
 log = "0.4.17"
 thiserror = "1.0.32"
+tracing = { version = "0.1.36", features = ["log"] }
 ustr = "0.9.0"

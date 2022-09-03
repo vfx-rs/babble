@@ -1,5 +1,6 @@
 use crate::ast::AST;
 use bbl_clang::{cursor::Cursor, cursor::USR, translation_unit::TranslationUnit};
+use tracing::instrument;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Namespace {
@@ -27,6 +28,7 @@ impl Namespace {
     }
 }
 
+#[instrument(skip(depth, tu))]
 pub fn extract_namespace(c_namespace: Cursor, depth: usize, tu: &TranslationUnit) -> Namespace {
     let indent = format!("{:width$}", "", width = depth * 2);
     Namespace {

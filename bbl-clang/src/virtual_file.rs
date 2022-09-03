@@ -25,7 +25,6 @@ pub fn write_temp_file(file_contents: &str) -> Result<PathBuf, std::io::Error> {
     file_contents.hash(&mut s);
     let base = format!("{:x}.cpp", s.finish());
     filename.push(base);
-    println!("Writing file {}", filename.display());
     std::fs::write(&filename, file_contents)?;
 
     Ok(filename)

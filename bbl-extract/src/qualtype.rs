@@ -1,9 +1,10 @@
 use bbl_clang::{
     cursor::{Cursor, USR},
     cursor_kind::CursorKind,
+    translation_unit::TranslationUnit,
     ty::{Type, TypeKind},
 };
-use log::*;
+use tracing::{error, warn, info, debug, trace, instrument};
 use std::fmt::Display;
 
 use crate::{
@@ -11,10 +12,11 @@ use crate::{
     class::{specialize_template_parameter, ClassBindKind},
     error::Error,
     template_argument::{TemplateParameterDecl, TemplateType},
+    type_alias::{extract_type_alias_type, extract_typedef_decl},
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TypeRef {
     Builtin(TypeKind),
     Ref(USR),
@@ -58,7 +60,7 @@ impl TypeRef {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct QualType {
     pub name: String,
     pub is_const: bool,
@@ -154,6 +156,7 @@ impl QualType {
 
 /// Given a template parameter in type position for which we only know the name, try to look up the type to replace it
 /// with
+#[instrument]
 fn specialize_template_type(
     t: &str,
     class_template_parameters: &[TemplateParameterDecl],
@@ -201,7 +204,8 @@ impl Display for QualType {
 }
 
 /// Get a qualified type from a reference to a type
-pub fn extract_type_from_typeref(c_tr: Cursor) -> Result<QualType> {
+#[instrument(skip(depth))]
+pub fn extract_type_from_typeref(c_tr: Cursor, depth: usize) -> Result<QualType> {
     if let Ok(c_ref) = c_tr.referenced() {
         let c_ref =
             if c_ref.kind() == CursorKind::ClassDecl || c_ref.kind() == CursorKind::ClassTemplate {
@@ -231,7 +235,16 @@ pub fn extract_type_from_typeref(c_tr: Cursor) -> Result<QualType> {
                 type_ref: TypeRef::TemplateTypeParameter(c_ref.spelling()),
             }),
             _ => {
-                error!("unhandled type {}", c_tr.display_name());
+                let loc = c_tr.location().spelling_location();
+                error!(
+                    "{:width$}[{file}:{line}] unhandled type {c_tr:?} is a {c_ref:?}",
+                    "",
+                    width = depth * 2,
+                    file = loc.file.file_name(),
+                    line = loc.line,
+                    c_tr = c_tr,
+                    c_ref = c_ref
+                );
                 Ok(QualType::unknown(c_ref.ty()?.kind()))
             }
         }
@@ -245,18 +258,45 @@ pub fn extract_type_from_typeref(c_tr: Cursor) -> Result<QualType> {
 }
 
 /// Extract a qualified type from a clang Type
-pub fn extract_type(ty: Type, template_parameters: &[String]) -> Result<QualType> {
+#[instrument(skip(depth, already_visited, ast, tu))]
+pub fn extract_type(
+    ty: Type,
+    depth: usize,
+    template_parameters: &[String],
+    already_visited: &mut Vec<USR>,
+    ast: &mut AST,
+    tu: &TranslationUnit,
+) -> Result<QualType> {
     let is_const = ty.is_const_qualified();
     let name = ty.spelling();
 
     if ty.is_builtin() {
+        trace!("got builtin {:?}", ty);
         Ok(QualType {
             name,
             is_const,
             type_ref: TypeRef::Builtin(ty.kind()),
         })
     } else if let Ok(c_ref) = ty.type_declaration() {
-        debug!("type {name} has decl {} {}", c_ref.spelling(), c_ref.usr());
+        trace!(
+            "{:width$}type {name} has decl {spelling} {usr}",
+            "",
+            width = 2 * depth,
+            spelling = c_ref.spelling(),
+            usr = c_ref.usr()
+        );
+        // extract here if we need to
+        match c_ref.kind() {
+            CursorKind::TypedefDecl => {
+                extract_typedef_decl(c_ref, depth + 1, already_visited, ast, tu)?;
+            }
+            CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
+                extract_type_alias_type(c_ref, depth + 1, already_visited, ast, tu)?;
+            }
+            CursorKind::TypeRef => warn!("Should extract class here"),
+            _ => warn!("Unhandled type kind {}", c_ref.kind()),
+        }
+
         Ok(QualType {
             name,
             is_const,
@@ -266,7 +306,7 @@ pub fn extract_type(ty: Type, template_parameters: &[String]) -> Result<QualType
         match ty.kind() {
             TypeKind::Pointer => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(pointee, template_parameters)?;
+                let ty_ref = extract_type(pointee, depth + 1, template_parameters, already_visited, ast, tu)?;
                 Ok(QualType {
                     name,
                     is_const,
@@ -275,7 +315,7 @@ pub fn extract_type(ty: Type, template_parameters: &[String]) -> Result<QualType
             }
             TypeKind::LValueReference => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(pointee, template_parameters)?;
+                let ty_ref = extract_type(pointee, depth + 1, template_parameters, already_visited, ast, tu)?;
                 Ok(QualType {
                     name,
                     is_const,
@@ -284,7 +324,7 @@ pub fn extract_type(ty: Type, template_parameters: &[String]) -> Result<QualType
             }
             TypeKind::RValueReference => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(pointee, template_parameters)?;
+                let ty_ref = extract_type(pointee, depth + 1, template_parameters, already_visited, ast, tu)?;
                 Ok(QualType {
                     name,
                     is_const,

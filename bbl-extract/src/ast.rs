@@ -1,8 +1,10 @@
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
 use bbl_clang::cursor::Cursor;
 use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::TranslationUnit};
+use tracing::instrument;
 use ustr::{Ustr, UstrMap};
 
 use log::*;
@@ -19,13 +21,26 @@ use crate::{class::extract_class_decl, type_alias::extract_class_template_specia
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-
 pub struct AST {
     pub(crate) classes: UstrIndexMap<ClassDecl, ClassId>,
     pub(crate) functions: UstrIndexMap<Function, FunctionId>,
     pub(crate) namespaces: UstrIndexMap<Namespace, NamespaceId>,
     pub(crate) type_aliases: UstrIndexMap<TypeAlias, TypeAliasId>,
     pub(crate) includes: Vec<Include>,
+}
+
+impl Debug for AST {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "AST({} classes, {} functions, {} namespaces, {} type aliases, {} includes)",
+            self.classes().len(),
+            self.functions().len(),
+            self.namespaces().len(),
+            self.type_aliases().len(),
+            self.includes().len()
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -39,16 +54,25 @@ impl Include {
         Include { name, bracket }
     }
 
-    pub fn name(&self) -> &str { &self.name }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 
-    pub fn bracket(&self) -> &str { &self.bracket }
+    pub fn bracket(&self) -> &str {
+        &self.bracket
+    }
 
     pub fn get_bracketed_name(&self) -> String {
         format!("{0}{1}{0}", self.bracket(), self.name())
     }
 
     pub fn get_statement(&self) -> String {
-        format!("#include {}{}{}", self.bracket(), self.name(), if self.bracket() == "<" { ">" } else { "\"" })
+        format!(
+            "#include {}{}{}",
+            self.bracket(),
+            self.name(),
+            if self.bracket() == "<" { ">" } else { "\"" }
+        )
     }
 }
 
@@ -69,7 +93,9 @@ impl AST {
         }
     }
 
-    pub fn includes(&self) -> &[Include] { &self.includes }
+    pub fn includes(&self) -> &[Include] {
+        &self.includes
+    }
 
     pub fn classes(&self) -> &UstrIndexMap<ClassDecl, ClassId> {
         &self.classes
@@ -131,10 +157,7 @@ impl AST {
 
                 distances.sort_by(|a, b| a.0.cmp(&b.0));
 
-                error!(
-                    "Could not find class matching qualified name: \"{}\"",
-                    name,
-                );
+                error!("Could not find class matching qualified name: \"{}\"", name,);
                 error!("Did you mean one of:");
                 for (_, sug) in distances.iter().take(3) {
                     error!("  {sug}");
@@ -322,6 +345,10 @@ impl AST {
         self.classes.insert(class.usr().into(), class);
     }
 
+    pub fn get_type_alias(&self, usr: USR) -> Option<&TypeAlias> {
+        self.type_aliases.get(&usr.into())
+    }
+
     pub fn get_class(&self, usr: USR) -> Option<&ClassDecl> {
         self.classes.get(&usr.into())
     }
@@ -330,9 +357,9 @@ impl AST {
         self.functions.insert(function.usr().into(), function);
     }
 
-    pub fn insert_type_alias(&mut self, type_alias: TypeAlias) {
+    pub fn insert_type_alias(&mut self, type_alias: TypeAlias) -> usize {
         self.type_aliases
-            .insert(type_alias.usr().into(), type_alias);
+            .insert(type_alias.usr().into(), type_alias)
     }
 
     pub fn get_function(&self, usr: USR) -> Option<&Function> {
@@ -408,6 +435,7 @@ pub fn get_qualified_name(decl: &str, namespaces: &[USR], ast: &AST) -> Result<S
 }
 
 /// Main recursive function to walk the AST and extract the pieces we're interested in
+#[instrument(skip(depth, max_depth, tu, namespaces, already_visited))]
 pub fn extract_ast(
     c: Cursor,
     depth: usize,
@@ -433,7 +461,8 @@ pub fn extract_ast(
                 // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
                 // (for opaque types in the API)
                 if c.is_definition() {
-                    let cd = extract_class_decl(c, depth + 1, tu, &namespaces)?;
+                    let cd =
+                        extract_class_decl(c, depth + 1, tu, &namespaces, ast, already_visited)?;
                     ast.insert_class(cd);
                     already_visited.push(c.usr());
                 }
@@ -449,7 +478,13 @@ pub fn extract_ast(
                     ast,
                     tu,
                     &namespaces,
-                )?;
+                )
+                .map_err(|e| {
+                    Error::FailedToExtractClassTemplateSpecialization {
+                        name: c.display_name(),
+                        source: Box::new(e),
+                    }
+                })?;
                 ast.insert_type_alias(TypeAlias::ClassTemplateSpecialization(cts));
             } else {
                 debug!(
@@ -460,12 +495,35 @@ pub fn extract_ast(
         }
         CursorKind::Namespace => {
             let ns = extract_namespace(c, depth, tu);
+            let name = ns.name().to_string();
             let usr = ns.usr;
             ast.insert_namespace(ns);
             already_visited.push(usr);
+
+            // We bail out on std and will insert manual AST for the types we support because fuck dealing with that
+            // horror show
+            if name == "std" {
+                let children = c.children_of_kind(CursorKind::Namespace, true);
+
+                for child in children {
+                    let ns = extract_namespace(c, depth, tu);
+                    let usr = ns.usr;
+                    ast.insert_namespace(ns);
+                    already_visited.push(usr);
+                }
+
+                debug!("Found std namespace, bailing early");
+                return Ok(());
+            }
         }
         CursorKind::FunctionDecl | CursorKind::FunctionTemplate => {
-            let fun = extract_function(c, depth + 1, &[])?;
+            let fun =
+                extract_function(c, depth + 1, &[], already_visited, tu, ast).map_err(|e| {
+                    Error::FailedToExtractFunction {
+                        name: c.display_name(),
+                        source: Box::new(e),
+                    }
+                })?;
             ast.insert_function(fun);
             already_visited.push(c.usr());
         }
@@ -624,13 +682,21 @@ pub fn dump(
     }
 }
 
-pub fn extract_ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit) -> Result<AST> {
-    let ns = if name.is_empty() {
-        c_tu.children()
+#[instrument]
+pub fn extract_ast_from_namespace(
+    name: Option<&str>,
+    c_tu: Cursor,
+    tu: &TranslationUnit,
+) -> Result<AST> {
+    let ns = if let Some(name) = name {
+        if name.is_empty() {
+            c_tu.children()
+        } else {
+            c_tu.children_of_kind_with_name(CursorKind::Namespace, name, true)
+        }
     } else {
-        c_tu.children_of_kind_with_name(CursorKind::Namespace, name, true)
+        c_tu.children()
     };
-
 
     let mut ast = AST::new();
 
@@ -640,7 +706,11 @@ pub fn extract_ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit
                 let name = tu.get_cursor_at_location(location).unwrap().display_name();
                 ast.includes.push(Include::new(
                     name,
-                    tu.token(*location).spelling().get(0..1).unwrap().to_string(),
+                    tu.token(*location)
+                        .spelling()
+                        .get(0..1)
+                        .unwrap()
+                        .to_string(),
                 ));
             }
         }
@@ -664,18 +734,30 @@ pub fn extract_ast_from_namespace(name: &str, c_tu: Cursor, tu: &TranslationUnit
 }
 
 // walk back up through a cursor's semantic parents and add them as namespaces
-pub fn walk_namespaces(c: Result<Cursor, bbl_clang::error::Error>, namespaces: &mut Vec<USR>) {
+pub fn walk_namespaces(
+    c: Result<Cursor, bbl_clang::error::Error>,
+    namespaces: &mut Vec<USR>,
+    tu: &TranslationUnit,
+    ast: &mut AST,
+) {
     if let Ok(c) = c {
         if c.kind() != CursorKind::TranslationUnit {
+            if ast.get_namespace(c.usr()).is_none() {
+                let ns = extract_namespace(c, 0, tu);
+                let name = ns.name().to_string();
+                let usr = ns.usr;
+                ast.insert_namespace(ns);
+            }
+
             namespaces.push(c.usr());
-            walk_namespaces(c.semantic_parent(), namespaces);
+            walk_namespaces(c.semantic_parent(), namespaces, tu, ast);
         }
     }
 }
 
-pub fn get_namespaces_for_decl(c: Cursor) -> Vec<USR> {
+pub fn get_namespaces_for_decl(c: Cursor, tu: &TranslationUnit, ast: &mut AST) -> Vec<USR> {
     let mut namespaces = Vec::new();
-    walk_namespaces(c.semantic_parent(), &mut namespaces);
+    walk_namespaces(c.semantic_parent(), &mut namespaces, tu, ast);
     namespaces.reverse();
     namespaces
 }

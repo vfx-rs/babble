@@ -1,9 +1,9 @@
 use bbl_clang::cursor_kind::CursorKind;
 use bbl_clang::translation_unit::TranslationUnit;
-use log::*;
+use tracing::{error, warn, info, debug, trace, instrument};
 use std::fmt::Display;
 
-use crate::ast::AST;
+use crate::ast::{TypeAliasId, AST, get_qualified_name, get_namespaces_for_decl};
 use crate::class::extract_class_decl;
 use crate::namespace::extract_namespace;
 use crate::qualtype::extract_type;
@@ -43,8 +43,144 @@ impl TypeAlias {
             }
         }
     }
+
+    pub fn name(&self) -> &str {
+        match self {
+            TypeAlias::ClassTemplateSpecialization(cts) => cts.name(),
+            _ => unimplemented!()
+        }
+    }
+
+    pub fn namespaces(&self) -> &[USR] {
+        match self {
+            TypeAlias::ClassTemplateSpecialization(cts) => cts.namespaces(),
+            _ => unimplemented!()
+        }
+    }
+
+    pub fn get_qualified_name(&self, ast: &AST) -> Result<String> {
+        get_qualified_name(self.name(), self.namespaces(), ast)
+    }
 }
 
+#[instrument(skip(depth, already_visited, ast, tu))]
+pub fn extract_typedef_decl<'a>(
+    c_typedef: Cursor,
+    depth: usize,
+    already_visited: &mut Vec<USR>,
+    ast: &'a mut AST,
+    tu: &TranslationUnit,
+) -> Result<&'a TypeAlias> {
+    if already_visited.contains(&c_typedef.usr()) {
+        trace!("already visiting. skipping.");
+        return ast
+            .get_type_alias(c_typedef.usr())
+            .ok_or_else(|| Error::TypeAliasNotFound(c_typedef.usr()));
+    }
+
+    // if it has a TemplateRef child it's a class template specialization
+    if c_typedef.has_child_of_kind(CursorKind::TemplateRef) {
+        trace!("Got ClassTemplateSpecialization {:?}", c_typedef);
+        let type_alias =
+            TypeAlias::ClassTemplateSpecialization(extract_class_template_specialization(
+                c_typedef,
+                depth + 1,
+                already_visited,
+                ast,
+                tu,
+                &Vec::new(),
+            )?);
+
+        already_visited.push(c_typedef.usr());
+
+        let id = ast.insert_type_alias(type_alias);
+        return Ok(&ast.type_aliases()[TypeAliasId::new(id)])
+    } else {
+        // dunno
+        unimplemented!();
+    }
+
+}
+
+#[instrument(skip(depth, already_visited, ast, tu))]
+pub fn extract_type_alias_type<'a>(
+    c_type_alias_decl: Cursor,
+    depth: usize,
+    already_visited: &mut Vec<USR>,
+    ast: &'a mut AST,
+    tu: &TranslationUnit,
+) -> Result<&'a TypeAlias> {
+    // recursively follow the chain of typedefs till we get to an actual decl we can extract
+    let c_ref = c_type_alias_decl
+        .referenced()
+        .map_err(|e| Error::FailedToExtractTypeAlias {
+            name: c_type_alias_decl.display_name(),
+            source: Box::new(e),
+        })?;
+    trace!(
+        "{:width$}type alias {name:?} points to {usr}",
+        "",
+        width = depth * 2,
+        name = c_type_alias_decl,
+        usr = c_ref.usr()
+    );
+
+    if already_visited.contains(&c_ref.usr()) {
+        return ast
+            .get_type_alias(c_ref.usr())
+            .ok_or_else(|| Error::TypeAliasNotFound(c_ref.usr()));
+    }
+
+    let decl = c_ref.ty()?.type_declaration()?.canonical()?;
+    debug!("has {} template args", c_ref.ty()?.num_template_arguments());
+    debug!("type declaration of {c_ref:?} is {decl:?} {}:{}", decl.location().spelling_location().file.file_name(), decl.location().spelling_location().line);
+    for child in decl.children() {
+        debug!("   child {child:?}");
+
+        if let Ok(r) = child.referenced() {
+            debug!("      -> {r:?}");
+        }
+
+        for c2 in child.children() {
+            debug!("         c2  {c2:?}");
+        }
+    }
+
+
+
+    debug!("{:?}", c_ref.ty()?.named_type()?);
+
+    if c_ref == c_type_alias_decl {
+        panic!("Recursive typedef");
+    }
+
+    let type_alias = match c_ref.kind() {
+        CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
+            extract_type_alias_type(c_ref, depth + 1, already_visited, ast, tu)?
+        }
+        CursorKind::TemplateRef => {
+            let type_alias =
+                TypeAlias::ClassTemplateSpecialization(extract_class_template_specialization(
+                    c_type_alias_decl,
+                    depth + 1,
+                    already_visited,
+                    ast,
+                    tu,
+                    &Vec::new(),
+                )?);
+
+            let id = ast.insert_type_alias(type_alias);
+            &ast.type_aliases()[TypeAliasId::new(id)]
+        }
+        _ => unimplemented!(),
+    };
+
+    already_visited.push(type_alias.usr());
+
+    Ok(type_alias)
+}
+
+#[instrument(skip(depth, tu, namespaces, ast, already_visited))]
 pub fn extract_class_template_specialization(
     c_type_alias_decl: Cursor,
     depth: usize,
@@ -61,12 +197,16 @@ pub fn extract_class_template_specialization(
         "{}TypeAliasDecl {} {} {}",
         indent,
         c_type_alias_decl.usr(),
-        c_type_alias_decl.pretty_printed(),
+        c_type_alias_decl.pretty_printed(c_type_alias_decl.printing_policy()),
         c_type_alias_decl.location().spelling_location()
     );
 
     if let Ok(ty) = c_type_alias_decl.ty() {
-        let template_args = extract_template_args(&c_type_alias_decl, &ty, tu)?;
+        let template_args =
+            extract_template_args(&c_type_alias_decl, depth + 1, &ty, tu, already_visited, ast)
+                .map_err(|e| Error::FailedToExtractTemplateArgs {
+                    source: Box::new(e),
+                })?;
 
         debug!("Template args:");
         template_args.iter().flatten().map(|a| debug!("    {a}"));
@@ -102,7 +242,14 @@ pub fn extract_class_template_specialization(
                                 &local_namespaces
                             };
                             debug!("extracting class template {cref:?}");
-                            let cd = extract_class_decl(cref, depth + 1, tu, ct_namespaes)?;
+                            let cd = extract_class_decl(
+                                cref,
+                                depth + 1,
+                                tu,
+                                ct_namespaes,
+                                ast,
+                                already_visited,
+                            )?;
                             ast.insert_class(cd);
                             already_visited.push(cref.usr());
                         }
@@ -119,10 +266,15 @@ pub fn extract_class_template_specialization(
             }
         }
 
+        let namespaces = get_namespaces_for_decl(c_type_alias_decl, tu, ast);
+
+        let specialized_decl = specialized_decl.ok_or_else(|| {
+                Error::FailedToGetTemplateRefFrom(c_type_alias_decl.display_name())
+            })?;
+
+        trace!("Storing CTS with name: {name}, usr: {}, specializing: {specialized_decl}, template_args: {:?}", c_type_alias_decl.usr(), template_args);
         Ok(ClassTemplateSpecialization {
-            specialized_decl: specialized_decl.ok_or_else(|| Error::FailedToGetTemplateRefFrom(
-                c_type_alias_decl.display_name(),
-            ))?,
+            specialized_decl,
             usr: c_type_alias_decl.usr(),
             name,
             template_arguments: template_args,
@@ -135,8 +287,11 @@ pub fn extract_class_template_specialization(
 
 fn extract_template_args(
     c_type_alias_decl: &Cursor,
+    depth: usize,
     ty: &Type,
     tu: &TranslationUnit,
+    already_visited: &mut Vec<USR>,
+    ast: &mut AST,
 ) -> Result<Vec<Option<TemplateType>>> {
     let num_args = ty.num_template_arguments();
 
@@ -146,7 +301,7 @@ fn extract_template_args(
         template_args.reserve(num_args as usize);
         for i in 0..num_args {
             if let Ok(tty) = ty.template_argument_as_type(i as u32) {
-                let qt = extract_type(tty.clone(), &[])?;
+                let qt = extract_type(tty.clone(), depth + 1, &[], already_visited, ast, tu)?;
                 template_args.push(Some(TemplateType::Type(qt)));
             } else {
                 // If it's not a type, we have to handle it separately, below.
@@ -193,7 +348,9 @@ fn extract_template_args(
         }
 
         if current != non_type_indices.len() {
-            return Err(Error::TemplateArgExtraction(c_type_alias_decl.display_name()));
+            return Err(Error::TemplateArgExtraction(
+                c_type_alias_decl.display_name(),
+            ));
         }
     }
 

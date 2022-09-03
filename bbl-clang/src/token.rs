@@ -64,9 +64,9 @@ impl SourceLocation {
 
 #[derive(Debug)]
 pub struct FileLocation {
-    file: File,
-    line: u32,
-    column: u32,
+    pub file: File,
+    pub line: u32,
+    pub column: u32,
 }
 
 impl Display for FileLocation {

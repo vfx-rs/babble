@@ -17,16 +17,18 @@ pub mod namespace;
 pub mod qualtype;
 pub mod template_argument;
 pub mod type_alias;
-use ast::{dump, extract_ast, extract_ast_from_namespace, AST, Include};
+use ast::{dump, extract_ast, extract_ast_from_namespace, Include, AST};
 pub mod error;
 use error::Error;
+use tracing::instrument;
 
 use crate::template_argument::TemplateType;
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Convenience function to parse a file with the given compiler arguments and optionally log diagnostics
-pub fn parse_file<P: AsRef<Path>, S: AsRef<str>>(
+#[instrument]
+pub fn parse_file<P: AsRef<Path> + std::fmt::Debug, S: AsRef<str> + std::fmt::Debug>(
     filename: P,
     cli_args: &[S],
     log_diagnostics: bool,
@@ -48,11 +50,15 @@ pub fn parse_file<P: AsRef<Path>, S: AsRef<str>>(
     Ok(tu)
 }
 
-pub fn parse_file_and_extract_ast<P: AsRef<Path>, S: AsRef<str>>(
+#[instrument]
+pub fn parse_file_and_extract_ast<
+    P: AsRef<Path> + std::fmt::Debug,
+    S: AsRef<str> + std::fmt::Debug,
+>(
     path: P,
     cli_args: &[S],
     log_diagnostics: bool,
-    namespace: Option<&str>
+    namespace: Option<&str>,
 ) -> Result<AST> {
     let index = Index::new();
     let tu = index.create_translation_unit(path, cli_args)?;
@@ -70,33 +76,16 @@ pub fn parse_file_and_extract_ast<P: AsRef<Path>, S: AsRef<str>>(
 
     let cur = tu.get_cursor()?;
 
-    let mut ast = AST::new();
-
-    tu.get_inclusions(|file, locations| {
-        if locations.len() == 1 {
-            for location in locations {
-                let name = tu.get_cursor_at_location(location).unwrap().display_name();
-                ast.includes.push(Include::new(
-                    name,
-                    tu.token(*location).spelling().get(0..1).unwrap().to_string(),
-                ));
-            }
-        }
-    });
-
-    let mut already_visited = Vec::new();
-
-    if let Some(namespace) = namespace {
-        ast = extract_ast_from_namespace(namespace, cur, &tu)?;
-    } else {
-        extract_ast(cur, 0, 100, &mut already_visited, &mut ast, &tu, Vec::new())?;
-    }
+    let ast = extract_ast_from_namespace(namespace, cur, &tu)?;
 
     Ok(ast)
-
 }
 
-pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
+#[instrument]
+pub fn parse_string_and_extract_ast<
+    S1: AsRef<str> + std::fmt::Debug,
+    S: AsRef<str> + std::fmt::Debug,
+>(
     contents: S1,
     cli_args: &[S],
     log_diagnostics: bool,
@@ -106,7 +95,11 @@ pub fn parse_string_and_extract_ast<S1: AsRef<str>, S: AsRef<str>>(
     parse_file_and_extract_ast(&path, cli_args, log_diagnostics, namespace)
 }
 
-pub fn parse_string_and_dump_ast<S1: AsRef<str>, S: AsRef<str>>(
+#[instrument]
+pub fn parse_string_and_dump_ast<
+    S1: AsRef<str> + std::fmt::Debug,
+    S: AsRef<str> + std::fmt::Debug,
+>(
     contents: S1,
     cli_args: &[S],
     namespace: Option<&str>,

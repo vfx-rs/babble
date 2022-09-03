@@ -5,10 +5,10 @@ use clang_sys::{CXErrorCode, CXError_Success};
 
 use crate::compilation_database::CompilationDatabaseError;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum Error {
     InvalidCursor,
-    InvalidType,
+    InvalidType(backtrace::Backtrace),
     InvalidTemplateArgumentKind,
     InvalidAccessSpecifier,
     InvalidExceptionSpecificationKind,
@@ -17,21 +17,43 @@ pub enum Error {
     Crashed,
     InvalidArguments,
     ASTReadError,
-    NulError(#[from] std::ffi::NulError),
+    NulError(std::ffi::NulError),
     InvalidPath,
-    IoError(#[from] std::io::Error),
+    IoError(std::io::Error),
     ParseError,
     ClangBinaryNotFound,
     FailedToRunClang(std::io::Error),
     NonUTF8Output(std::string::FromUtf8Error),
     FailedToParseOutput(String),
     CMakeError,
-    CompilationDatabaseError(#[from] CompilationDatabaseError)
+    CompilationDatabaseError(CompilationDatabaseError)
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
+    }
+}
+
+impl From<std::ffi::NulError> for Error {
+    fn from(e: std::ffi::NulError) -> Self {
+        Error::NulError(e)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::IoError(e)
+    }
+}
+
+impl std::error::Error for Error {
+
+}
+
+impl From<CompilationDatabaseError> for Error {
+    fn from(e: CompilationDatabaseError) -> Self {
+        Error::CompilationDatabaseError(e)
     }
 }
 

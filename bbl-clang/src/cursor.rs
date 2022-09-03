@@ -1,6 +1,7 @@
 use crate::{
-    access_specifier::AccessSpecifier, template_argument::TemplateArgumentKind,
-    token::SourceLocation, exception::ExceptionSpecificationKind,
+    access_specifier::AccessSpecifier, exception::ExceptionSpecificationKind,
+    printing_policy::PrintingPolicy, template_argument::TemplateArgumentKind,
+    token::SourceLocation,
 };
 
 use super::cursor_kind::CursorKind;
@@ -16,12 +17,12 @@ use clang_sys::{
     clang_Cursor_getVarDeclInitializer, clang_Cursor_hasVarDeclExternalStorage,
     clang_Cursor_hasVarDeclGlobalStorage, clang_equalCursors, clang_getCXXAccessSpecifier,
     clang_getCanonicalCursor, clang_getCursorDefinition, clang_getCursorDisplayName,
-    clang_getCursorKind, clang_getCursorLocation, clang_getCursorPrettyPrinted,
-    clang_getCursorPrintingPolicy, clang_getCursorReferenced, clang_getCursorResultType,
-    clang_getCursorSemanticParent, clang_getCursorSpelling, clang_getCursorType,
-    clang_getCursorUSR, clang_getNullCursor, clang_isCursorDefinition, clang_isInvalid,
-    clang_visitChildren, CXChildVisitResult, CXChildVisit_Break, CXChildVisit_Continue,
-    CXChildVisit_Recurse, CXClientData, CXCursor, clang_getCursorExceptionSpecificationType,
+    clang_getCursorExceptionSpecificationType, clang_getCursorKind, clang_getCursorLocation,
+    clang_getCursorPrettyPrinted, clang_getCursorPrintingPolicy, clang_getCursorReferenced,
+    clang_getCursorResultType, clang_getCursorSemanticParent, clang_getCursorSpelling,
+    clang_getCursorType, clang_getCursorUSR, clang_getNullCursor, clang_isCursorDefinition,
+    clang_isInvalid, clang_visitChildren, CXChildVisitResult, CXChildVisit_Break,
+    CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor,
 };
 use std::{
     fmt::{Debug, Display},
@@ -239,13 +240,6 @@ impl Cursor {
         unsafe { to_type(clang_getCursorResultType(self.inner)) }
     }
 
-    pub fn pretty_printed(&self) -> String {
-        unsafe {
-            let policy = clang_getCursorPrintingPolicy(self.inner);
-            clang_getCursorPrettyPrinted(self.inner, policy).to_string()
-        }
-    }
-
     pub fn num_arguments(&self) -> Result<u32> {
         unsafe {
             let n = clang_Cursor_getNumArguments(self.inner);
@@ -315,6 +309,18 @@ impl Cursor {
 
     pub fn exception_specification_kind(&self) -> Result<ExceptionSpecificationKind> {
         unsafe { clang_getCursorExceptionSpecificationType(self.inner).try_into() }
+    }
+
+    pub fn printing_policy(&self) -> PrintingPolicy {
+        unsafe {
+            PrintingPolicy {
+                inner: clang_getCursorPrintingPolicy(self.inner),
+            }
+        }
+    }
+
+    pub fn pretty_printed(&self, policy: PrintingPolicy) -> String {
+        unsafe { clang_getCursorPrettyPrinted(self.inner, policy.inner).to_string() }
     }
 }
 
@@ -460,6 +466,35 @@ extern int b;
         assert_eq!(init.kind(), CursorKind::IntegerLiteral);
 
         assert_eq!("1", tu.token(init.location()).spelling());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_pretty_print() -> Result<(), Error> {
+        let contents = r#"
+namespace Foo {
+namespace Bar {
+class Baz {};
+}
+}
+        "#;
+        let tu = parse_string_to_tu(contents, &["-std=c++11"], true)?;
+        let c = tu.get_cursor().unwrap();
+
+        c.visit_children(|c, _| {
+            if c.kind() == CursorKind::ClassDecl {
+                println!("{}", c.display_name());
+                let pp = c.printing_policy();
+                println!("{}", c.pretty_printed(pp));
+                pp.set_suppress_scope(false);
+                println!("{}", c.pretty_printed(pp));
+                pp.set_fully_qualified_name(true);
+                println!("{}", c.pretty_printed(pp));
+            }
+
+            super::ChildVisitResult::Recurse
+        });
 
         Ok(())
     }

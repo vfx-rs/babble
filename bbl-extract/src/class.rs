@@ -5,12 +5,11 @@ use bbl_clang::access_specifier::AccessSpecifier;
 use bbl_clang::cursor::{Cursor, USR};
 use bbl_clang::translation_unit::TranslationUnit;
 use log::*;
+use tracing::instrument;
 use std::fmt::Display;
 use ustr::Ustr;
 
-use crate::ast::{
-    get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST,
-};
+use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST};
 use crate::error::{self, ExtractClassError};
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::index_map::IndexMapKey;
@@ -258,7 +257,12 @@ impl ClassDecl {
         let ns_string = self
             .namespaces
             .iter()
-            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
+            .map(|u| {
+                ast.get_namespace(*u)
+                    .expect(&format!("Failed to get namespace with usr {u}"))
+                    .name
+                    .clone()
+            })
             .collect::<Vec<String>>()
             .join("::");
 
@@ -399,17 +403,37 @@ impl Display for ClassDecl {
     }
 }
 
+#[instrument(skip(depth, tu, namespaces, ast, already_visited))]
 pub fn extract_class_decl(
     class_template: Cursor,
     depth: usize,
     tu: &TranslationUnit,
     namespaces: &[USR],
+    ast: &mut AST,
+    already_visited: &mut Vec<USR>,
 ) -> Result<ClassDecl> {
     let indent = format!("{:width$}", "", width = depth * 2);
 
-    debug!("{indent}extract_class_decl({})", class_template.usr());
+    debug!(
+        "{indent}extract_class_decl({}) {}",
+        class_template.usr(),
+        class_template.display_name()
+    );
 
-    let namespaces = get_namespaces_for_decl(class_template);
+    let namespaces = get_namespaces_for_decl(class_template, tu, ast);
+
+    if class_template.display_name().starts_with("basic_string<") {
+        debug!("Extracting basic_string {}", class_template.usr());
+        return Ok(ClassDecl::new(
+            class_template.usr(),
+            class_template.spelling(),
+            Vec::new(),
+            Vec::new(),
+            namespaces,
+            vec![TemplateParameterDecl::typ("_CharT".into(), 0)],
+            false,
+        ));
+    }
 
     let mut methods = Vec::new();
     let mut fields = Vec::new();
@@ -419,6 +443,16 @@ pub fn extract_class_decl(
     let mut index = 0;
     for member in members {
         debug!("member {:?}", member);
+        if let Ok(access) = member.cxx_access_specifier() {
+            if access != AccessSpecifier::Public {
+                continue;
+            }
+        } else {
+            error!(
+                "Could not get access specifier from member {}",
+                member.display_name()
+            );
+        }
         match member.kind() {
             CursorKind::TemplateTypeParameter => {
                 // TODO: Doesn't seem to be a way to get a type default
@@ -453,7 +487,14 @@ pub fn extract_class_decl(
             | CursorKind::FunctionTemplate => {
                 if let Ok(access) = member.cxx_access_specifier() {
                     if access == AccessSpecifier::Public {
-                        match extract_method(member, depth + 1, &template_parameters) {
+                        match extract_method(
+                            member,
+                            depth + 1,
+                            &template_parameters,
+                            already_visited,
+                            tu,
+                            ast,
+                        ) {
                             Ok(method) => methods.push(method),
                             Err(e) => {
                                 error!(
@@ -473,7 +514,7 @@ pub fn extract_class_decl(
                 if let Ok(access) = member.cxx_access_specifier() {
                     if access == AccessSpecifier::Public {
                         let field =
-                            extract_field(member, depth, &template_parameters).map_err(|e| {
+                            extract_field(member, depth, &template_parameters, already_visited, ast, tu).map_err(|e| {
                                 ExtractClassError::FailedToExtractField {
                                     class: class_template.display_name(),
                                     name: member.display_name(),
@@ -524,7 +565,13 @@ pub fn extract_class_decl(
 
     // If this is a template decl we won't be able to get a type from it so just set POD to false
     let is_pod = if template_parameters.is_empty() {
-        class_template.ty()?.is_pod()
+        match class_template.ty() {
+            Ok(ty) => ty.is_pod(),
+            Err(e) => {
+                error!("Could not get type from {class_template:?}");
+                false
+            }
+        }
     } else {
         false
     };
@@ -546,6 +593,9 @@ pub fn extract_field(
     c_field: Cursor,
     depth: usize,
     class_template_parameters: &[TemplateParameterDecl],
+    already_visited: &mut Vec<USR>,
+    ast: &mut AST,
+    tu: &TranslationUnit,
 ) -> Result<Field> {
     let indent = format!("{:width$}", "", width = depth * 2);
 
@@ -555,7 +605,7 @@ pub fn extract_field(
         .collect::<Vec<_>>();
 
     let ty = c_field.ty()?;
-    let qual_type = extract_type(ty, &template_parameters)?;
+    let qual_type = extract_type(ty, depth + 1, &template_parameters, already_visited, ast, tu)?;
 
     Ok(Field {
         name: c_field.display_name(),

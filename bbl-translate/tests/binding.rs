@@ -1,13 +1,15 @@
 mod common;
 
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
-use bbl_clang::{cli_args, virtual_file::write_temp_cmake_project, cli_args_with};
+use bbl_clang::{cli_args, cli_args_with, virtual_file::write_temp_cmake_project};
 use bbl_extract::{
-    error::Error, parse_string_and_extract_ast, qualtype::QualType, template_argument::TemplateType, parse_file_and_extract_ast,
+    error::Error, parse_file_and_extract_ast, parse_string_and_extract_ast, qualtype::QualType,
+    template_argument::TemplateType,
 };
 
 use bbl_translate::translate_cpp_ast_to_c;
+use log::error;
 
 #[test]
 fn test_binding_rename() -> Result<(), Error> {
@@ -468,14 +470,13 @@ public:
     Ok(())
 }
 
-
-/*
 #[test]
 fn take_std_string() -> Result<(), Error> {
     common::init_log();
 
-    let mut ast = parse_string_and_extract_ast(
-        r#"
+    let clo = || -> Result<(), Error> {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
 #include <string>
 
 namespace Test {
@@ -485,29 +486,50 @@ public:
 };
 }
         "#,
-        &cli_args()?,
-        true,
-        None,
-    )?;
+            &cli_args()?,
+            true,
+            Some("Test"),
+        )?;
 
-    ast.pretty_print(0);
-    // let class = ast.find_class("Class")?;
-    // let method = ast.find_method(class, "method_template")?;
-    // ast.specialize_method(
-    //     class,
-    //     method,
-    //     "method_float",
-    //     vec![Some(TemplateType::Type(QualType::float()))],
-    // )?;
+        ast.pretty_print(0);
 
-    // ast.pretty_print(0);
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        c_ast.pretty_print(0);
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0);
+        assert_eq!(c_ast.structs.len(), 2);
+        assert_eq!(c_ast.functions.len(), 1);
 
-    assert_eq!(c_ast.structs.len(), 1);
-    assert_eq!(c_ast.functions.len(), 1);
+        Ok(())
+    };
 
-    Ok(())
+    clo().map_err(|err| {
+        error!("{err}");
+        for e in source_iter(&err) {
+            error!("  because: {e}")
+        }
+
+        err
+    })
 }
-*/
+
+struct SourceIter<'a> {
+    current: Option<&'a (dyn std::error::Error + 'static)>,
+}
+
+impl<'a> Iterator for SourceIter<'a> {
+    type Item = &'a (dyn std::error::Error + 'static);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let current = self.current;
+        self.current = self.current.and_then(std::error::Error::source);
+        current
+    }
+}
+
+fn source_iter(
+    error: &impl std::error::Error,
+) -> impl Iterator<Item = &(dyn std::error::Error + 'static)> {
+    SourceIter {
+        current: error.source(),
+    }
+}

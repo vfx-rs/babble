@@ -94,7 +94,7 @@ impl Debug for Type {
 
 pub fn to_type(cx: CXType) -> Result<Type> {
     if cx.kind == CXType_Invalid {
-        Err(Error::InvalidType)
+        Err(Error::InvalidType(backtrace::Backtrace::new()))
     } else {
         Ok(Type { inner: cx })
     }

@@ -1,9 +1,12 @@
 use bbl_clang::cursor::{Cursor, USR};
 use bbl_clang::exception::ExceptionSpecificationKind;
+use bbl_clang::translation_unit::TranslationUnit;
+use bbl_clang::ty::TypeKind;
 use log::*;
+use tracing::instrument;
 use std::fmt::Display;
 
-use crate::ast::{get_namespaces_for_decl, MethodId, TypeAliasId, get_qualified_name};
+use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId};
 use crate::class::MethodSpecializationId;
 use crate::qualtype::{extract_type, extract_type_from_typeref};
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
@@ -444,17 +447,19 @@ impl MethodTemplateSpecialization {
     }
 }
 
-pub fn extract_argument(c_arg: Cursor, template_parameters: &[String]) -> Result<Argument> {
+pub fn extract_argument(c_arg: Cursor, depth: usize, template_parameters: &[String], already_visited: &mut Vec<USR>, ast: &mut AST, tu: &TranslationUnit) -> Result<Argument> {
     let children = c_arg.children();
+    trace!("{:width$}extracting arg {c_arg:?}", "", width = depth * 2);
 
     let ty = c_arg.ty()?;
+    trace!("{:width$}  has type {ty:?}", "", width = depth * 2);
 
     let qual_type = if ty.is_builtin() || ty.is_pointer() {
-        extract_type(ty, template_parameters)?
+        extract_type(ty, depth+1, template_parameters, already_visited, ast, tu)?
     } else if !children.is_empty() {
         match children[0].kind() {
             CursorKind::TypeRef | CursorKind::TemplateRef => {
-                extract_type_from_typeref(children[0])?
+                extract_type_from_typeref(children[0], depth+1)?
             }
             _ => {
                 debug!("other kind {:?}", children[0].kind(),);
@@ -472,10 +477,14 @@ pub fn extract_argument(c_arg: Cursor, template_parameters: &[String]) -> Result
     })
 }
 
+#[instrument(skip(depth, already_visited, tu, ast))]
 pub fn extract_function(
     c_function: Cursor,
     depth: usize,
     extra_template_parameters: &[TemplateParameterDecl],
+    already_visited: &mut Vec<USR>,
+    tu: &TranslationUnit,
+    ast: &mut AST,
 ) -> Result<Function> {
     let indent = format!("{:width$}", "", width = depth * 2);
 
@@ -535,15 +544,16 @@ pub fn extract_function(
     let mut skip = c_template_parameters.len();
 
     let ty_result = c_function.result_ty()?;
-    let result = if ty_result.is_builtin() || ty_result.is_pointer() {
-        extract_type(ty_result, &string_template_parameters)?
+    debug!("result type is {:?}", ty_result);
+    let result = if ty_result.is_builtin() || ty_result.is_pointer() || ty_result.kind() == TypeKind::Elaborated {
+        extract_type(ty_result, depth+1, &string_template_parameters, already_visited, ast, tu).map_err(|e| Error::FailedToExtractResult{source: Box::new(e)})?
     } else {
         let c_result = children.get(skip).ok_or(Error::FailedToGetCursor)?;
 
         skip += 1;
 
         if c_result.kind() == CursorKind::TypeRef || c_result.kind() == CursorKind::TemplateRef {
-            extract_type_from_typeref(*c_result)?
+            extract_type_from_typeref(*c_result, depth+1).map_err(|e| Error::FailedToExtractResult{source: Box::new(e)})?
         } else {
             QualType::unknown(ty_result.kind())
         }
@@ -554,17 +564,24 @@ pub fn extract_function(
         Err(_) => children.len(),
     };
     let mut arguments: Vec<Argument> = Vec::with_capacity(num_arguments);
-    for c_arg in children.iter().skip(skip).take(num_arguments) {
+    let mut i = 0;
+    let mut it = children.iter().skip(skip);
+    while let Some(c_arg) = it.next() {
         debug!("{indent}    arg: {}", c_arg.display_name());
 
-        if c_arg.kind() != CursorKind::ParmDecl {
-            break;
-        }
+        if c_arg.kind() == CursorKind::ParmDecl {
+            arguments.push(
+                extract_argument(*c_arg, depth, &string_template_parameters, already_visited, ast, tu).map_err(|e| {
+                    Error::FailedToExtractArgument {
+                        name: c_arg.display_name(),
+                        source: Box::new(e),
+                    }
+                })?,
+            );
 
-        arguments.push(extract_argument(
-            *c_arg,
-            &string_template_parameters,
-        )?);
+            i += 1;
+            if i == num_arguments { break; }
+        }
     }
 
     for child in c_function.children() {
@@ -595,7 +612,7 @@ pub fn extract_function(
     }
 
     let replacement_name = get_default_replacement_name(c_function);
-    let namespaces = get_namespaces_for_decl(c_function);
+    let namespaces = get_namespaces_for_decl(c_function, tu, ast);
     let name = c_function.spelling();
     let exception_specification_kind = c_function.exception_specification_kind()?;
 
@@ -611,10 +628,14 @@ pub fn extract_function(
     ))
 }
 
+#[instrument(skip(depth, already_visited, tu, ast))]
 pub fn extract_method(
     c_method: Cursor,
     depth: usize,
     class_template_parameters: &[TemplateParameterDecl],
+    already_visited: &mut Vec<USR>,
+    tu: &TranslationUnit,
+    ast: &mut AST,
 ) -> Result<Method> {
     let indent = format!("{:width$}", "", width = depth * 2);
 
@@ -631,7 +652,12 @@ pub fn extract_method(
     );
 
     Ok(Method {
-        function: extract_function(c_method, depth, class_template_parameters)?,
+        function: extract_function(c_method, depth, class_template_parameters, already_visited, tu, ast).map_err(|e| {
+            Error::FailedToExtractMethod {
+                name: c_method.display_name(),
+                source: Box::new(e),
+            }
+        })?,
         is_const: c_method.cxx_method_is_const(),
         is_static: c_method.cxx_method_is_static(),
         is_virtual: c_method.cxx_method_is_virtual(),

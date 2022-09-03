@@ -54,7 +54,10 @@ pub fn gen_c(module_name: &str, ast: &AST, c_ast: &CAST) -> Result<(String, Stri
 
     header = format!("{header}\n#ifdef __cplusplus\n}}\n#endif\n\n");
 
-    header = format!("{header}\n#endif /* ifdef __{}_H__ */\n", module_name.to_uppercase());
+    header = format!(
+        "{header}\n#endif /* ifdef __{}_H__ */\n",
+        module_name.to_uppercase()
+    );
 
     Ok((header, source))
 }
@@ -121,15 +124,24 @@ fn gen_cast(qual_type: &CQualType, ast: &AST, c_ast: &CAST) -> Result<Option<Str
             }
         }
         CTypeRef::Ref(usr) => {
-            let class = ast
-                .get_class(*usr)
-                .ok_or(TypeError::TypeRefNotFound(*usr))?;
-            Ok(Some(class.get_qualified_name(ast).map_err(|source| {
-                TypeError::FailedToGetQualifiedName {
-                    name: class.name().to_string(),
-                    source,
-                }
-            })?))
+            // ref might be to a class directly, or to a typedef
+            if let Some(class) = ast.get_class(*usr) {
+                Ok(Some(class.get_qualified_name(ast).map_err(|source| {
+                    TypeError::FailedToGetQualifiedName {
+                        name: class.name().to_string(),
+                        source,
+                    }
+                })?))
+            } else if let Some(cts) = ast.get_type_alias(*usr) {
+                Ok(Some(cts.get_qualified_name(ast).map_err(|source| {
+                    TypeError::FailedToGetQualifiedName {
+                        name: cts.name().to_string(),
+                        source,
+                    }
+                })?))
+            } else {
+                Err(TypeError::TypeRefNotFound(*usr))
+            }
         }
         CTypeRef::Unknown(tk) => Err(TypeError::UnknownType(*tk)),
     }
@@ -352,6 +364,11 @@ mod tests {
     use bbl_clang::cli_args;
     use bbl_extract::{class::ClassBindKind, parse_string_and_extract_ast};
     use bbl_translate::translate_cpp_ast_to_c;
+    use env_logger::fmt::Color;
+    use log::{error, Level};
+    use opentelemetry::sdk::export::trace::stdout;
+    use tracing::span;
+    use tracing_subscriber::Registry;
 
     use crate::{gen_c, Error};
 
@@ -634,10 +651,166 @@ public:
         Ok(())
     }
 
+    #[test]
+    fn write_take_std_string() -> Result<(), Error> {
+        run_with_telemetry(|| {
+            let mut ast = parse_string_and_extract_ast(
+                r#"
+    #include <string>
+
+    namespace Test {
+    class Class {
+    public:
+        std::string take_string(const std::string& s);
+    };
+    }
+            "#,
+                &cli_args()?,
+                true,
+                Some("Test"),
+            )?;
+
+            ast.pretty_print(0);
+
+            let c_ast = translate_cpp_ast_to_c(&ast)?;
+            c_ast.pretty_print(0);
+
+            assert_eq!(c_ast.structs.len(), 2);
+            assert_eq!(c_ast.functions.len(), 1);
+
+            let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
+            println!(
+                "HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------"
+            );
+
+            Ok(())
+        })
+    }
+
+    fn run_with_telemetry<F>(closure: F) -> Result<(), Error>
+    where
+        F: FnOnce() -> Result<(), Error>,
+    {
+        use opentelemetry::global;
+        use tracing_subscriber::layer::SubscriberExt;
+
+        global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
+        let tracer = opentelemetry_jaeger::new_pipeline()
+            .install_simple()
+            .unwrap();
+
+        // Create a tracing layer with the configured tracer
+        let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+
+        // Use the tracing subscriber `Registry`, or any other subscriber
+        // that impls `LookupSpan`
+        let subscriber = Registry::default().with(telemetry);
+
+        // Trace executed code
+        let res = tracing::subscriber::with_default(subscriber, || {
+            // Spans will be sent to the configured OpenTelemetry exporter
+            let root = span!(tracing::Level::TRACE, "app_start", work_units = 2);
+            let _enter = root.enter();
+
+            closure()
+        });
+        global::shutdown_tracer_provider(); // sending remaining spans
+
+        res.map_err(|err| {
+            error!("{err}");
+            for e in source_iter(&err) {
+                error!("  because: {e}")
+            }
+
+            err
+        })
+    }
+
+    #[tracing::instrument]
+    fn fun_b(arg: &str) {}
+
+    #[tracing::instrument]
+    fn fun_a(arg: &str) {
+        fun_b("your mum's a slag");
+    }
+
+    #[test]
+    fn test_tracing() {
+        use opentelemetry::global;
+        use tracing_subscriber::layer::SubscriberExt;
+
+        global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
+        let tracer = opentelemetry_jaeger::new_pipeline()
+            .install_simple()
+            .unwrap();
+
+        // Create a tracing layer with the configured tracer
+        let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+
+        // Use the tracing subscriber `Registry`, or any other subscriber
+        // that impls `LookupSpan`
+        let subscriber = Registry::default().with(telemetry);
+
+        // Trace executed code
+        tracing::subscriber::with_default(subscriber, || {
+            // Spans will be sent to the configured OpenTelemetry exporter
+            let root = span!(tracing::Level::TRACE, "app_start", work_units = 2);
+            let _enter = root.enter();
+
+            tracing::error!("This event will be logged in the root span.");
+
+            fun_a("fuck you");
+        });
+        global::shutdown_tracer_provider(); // sending remaining spans
+    }
+
     pub fn init_log() {
+        use std::io::Write;
+
         let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
             .format_timestamp(None)
+            .format(|buf, record| -> Result<(), std::io::Error> {
+                let mut level_style = buf.style();
+                match record.level() {
+                    Level::Trace => level_style.set_color(Color::Blue),
+                    Level::Debug => level_style.set_color(Color::White),
+                    Level::Info => level_style.set_color(Color::Cyan),
+                    Level::Warn => level_style.set_color(Color::Yellow),
+                    Level::Error => level_style.set_color(Color::Red),
+                };
+
+                writeln!(
+                    buf,
+                    "{} [{}:{}] {}",
+                    level_style.value(record.level()),
+                    record.file().unwrap_or(""),
+                    record.line().unwrap_or(0),
+                    record.args()
+                )
+            })
             // .is_test(true)
             .try_init();
+    }
+
+    fn source_iter(
+        error: &impl std::error::Error,
+    ) -> impl Iterator<Item = &(dyn std::error::Error + 'static)> {
+        SourceIter {
+            current: error.source(),
+        }
+    }
+
+    struct SourceIter<'a> {
+        current: Option<&'a (dyn std::error::Error + 'static)>,
+    }
+
+    impl<'a> Iterator for SourceIter<'a> {
+        type Item = &'a (dyn std::error::Error + 'static);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            let current = self.current;
+            self.current = self.current.and_then(std::error::Error::source);
+            current
+        }
     }
 }
