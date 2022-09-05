@@ -63,7 +63,7 @@ impl TypeAlias {
     }
 }
 
-#[instrument(skip(depth, already_visited, ast, tu))]
+#[instrument(skip(depth, already_visited, ast, tu), level="trace")]
 pub fn extract_typedef_decl<'a>(
     c_typedef: Cursor,
     depth: usize,
@@ -102,7 +102,7 @@ pub fn extract_typedef_decl<'a>(
 
 }
 
-#[instrument(skip(depth, already_visited, ast, tu))]
+#[instrument(skip(depth, already_visited, ast, tu), level="trace")]
 pub fn extract_type_alias_type<'a>(
     c_type_alias_decl: Cursor,
     depth: usize,
@@ -180,7 +180,7 @@ pub fn extract_type_alias_type<'a>(
     Ok(type_alias)
 }
 
-#[instrument(skip(depth, tu, namespaces, ast, already_visited))]
+#[instrument(skip(depth, tu, namespaces, ast, already_visited), level="trace")]
 pub fn extract_class_template_specialization(
     c_type_alias_decl: Cursor,
     depth: usize,

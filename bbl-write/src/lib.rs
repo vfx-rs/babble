@@ -1,8 +1,9 @@
 use bbl_clang::ty::TypeKind;
 use bbl_extract::{ast::AST, class::ClassBindKind, function::Method, index_map::IndexMapKey};
-use bbl_translate::{CFunction, CFunctionSource, CQualType, CStruct, CTypeRef, CTypedef, CAST};
+use bbl_translate::{CFunction, CFunctionSource, CQualType, CStruct, CTypeRef, CTypedef, CAST, CArgument};
 
 pub mod error;
+pub mod cmake;
 use error::{ArgumentError, Error, FunctionGenerationError, TypeError};
 
 use std::fmt::Write;
@@ -223,7 +224,7 @@ fn gen_cpp_call(fun: &CFunction, ast: &AST) -> Result<String, TypeError> {
             let class = &ast.classes()[class_id];
             let method: &Method = &class.methods()[method_id.get()];
 
-            let qname = method.get_qualified_name(ast).map_err(|e| {
+            let qname = class.get_qualified_name(ast).map_err(|e| {
                 TypeError::FailedToGetQualifiedName {
                     name: class.name().to_string(),
                     source: e,
@@ -270,6 +271,7 @@ fn gen_function_definition(
         gen_function_signature(fun, c_ast, false)
             .map_err(FunctionGenerationError::FailedToGenerateSignature)?
     );
+    // TODO (AL): clean up this nastiness
     let mut indent = "    ";
     let mut indent2 = "        ";
     let mut indent3 = "            ";
@@ -304,16 +306,14 @@ fn gen_function_definition(
     };
 
     // Get all the arguments for the call
+    let arguments: Vec<&CArgument> = fun.arguments.iter().filter(|a| !(a.is_result || a.is_self) ).collect();
+
     let arg_str =
-        if fun.arguments.is_empty() || fun.arguments.len() == 1 && fun.arguments[0].is_self {
+        if arguments.is_empty() {
             "();".to_string()
         } else {
             let mut args = Vec::new();
-            for arg in &fun.arguments {
-                if arg.is_self {
-                    continue;
-                }
-
+            for arg in arguments {
                 match generate_arg_pass(&arg.name, &arg.qual_type, ast, c_ast) {
                     Ok(s) => args.push(format!("{indent3}{s}")),
                     Err(source) => {

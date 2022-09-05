@@ -27,7 +27,7 @@ use crate::template_argument::TemplateType;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Convenience function to parse a file with the given compiler arguments and optionally log diagnostics
-#[instrument]
+#[instrument(level="trace")]
 pub fn parse_file<P: AsRef<Path> + std::fmt::Debug, S: AsRef<str> + std::fmt::Debug>(
     filename: P,
     cli_args: &[S],
@@ -50,7 +50,7 @@ pub fn parse_file<P: AsRef<Path> + std::fmt::Debug, S: AsRef<str> + std::fmt::De
     Ok(tu)
 }
 
-#[instrument]
+#[instrument(level="trace")]
 pub fn parse_file_and_extract_ast<
     P: AsRef<Path> + std::fmt::Debug,
     S: AsRef<str> + std::fmt::Debug,
@@ -81,7 +81,7 @@ pub fn parse_file_and_extract_ast<
     Ok(ast)
 }
 
-#[instrument]
+#[instrument(level="trace")]
 pub fn parse_string_and_extract_ast<
     S1: AsRef<str> + std::fmt::Debug,
     S: AsRef<str> + std::fmt::Debug,
@@ -95,7 +95,7 @@ pub fn parse_string_and_extract_ast<
     parse_file_and_extract_ast(&path, cli_args, log_diagnostics, namespace)
 }
 
-#[instrument]
+#[instrument(level="trace")]
 pub fn parse_string_and_dump_ast<
     S1: AsRef<str> + std::fmt::Debug,
     S: AsRef<str> + std::fmt::Debug,

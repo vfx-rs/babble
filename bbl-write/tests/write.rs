@@ -1,13 +1,15 @@
 mod common;
 
-use bbl_clang::cli_args;
-use bbl_extract::{class::ClassBindKind, parse_string_and_extract_ast};
+use std::path::PathBuf;
+
+use bbl_clang::{cli_args, cli_args_with, virtual_file::write_temp_cmake_project};
+use bbl_extract::{class::ClassBindKind, parse_file_and_extract_ast, parse_string_and_extract_ast};
 use bbl_translate::translate_cpp_ast_to_c;
 use common::run_with_telemetry;
 use tracing::span;
 use tracing_subscriber::Registry;
 
-use bbl_write::{error::Error, gen_c};
+use bbl_write::{cmake::build_project, error::Error, gen_c};
 
 use crate::common::init_log;
 
@@ -322,6 +324,62 @@ fn write_take_std_string() -> Result<(), Error> {
 
         let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+
+        Ok(())
+    })
+}
+
+#[test]
+fn build_take_std_string() -> Result<(), Error> {
+    run_with_telemetry(|| {
+        let contents = "#include <take_string.hpp>\n";
+
+        let cmake_prefix_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("testdata")
+            .join("take_string");
+
+        let find_packages = ["take_string REQUIRED"];
+        let link_libraries = ["take_string::take_string"];
+
+        let (source_filename, args) = write_temp_cmake_project(
+            contents,
+            &find_packages,
+            &link_libraries,
+            Some(&cmake_prefix_path),
+        )?;
+
+        let mut ast = parse_file_and_extract_ast(
+            &source_filename,
+            &cli_args_with(&args)?,
+            true,
+            Some("Test_1_0"),
+        )?;
+
+        ast.pretty_print(0);
+
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
+
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        c_ast.pretty_print(0);
+
+        assert_eq!(c_ast.structs.len(), 2);
+        assert_eq!(c_ast.functions.len(), 1);
+
+        let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+
+        build_project(
+            "build_take_std_string",
+            "/tmp",
+            &ast,
+            &c_ast,
+            &find_packages,
+            &link_libraries,
+            Some(&cmake_prefix_path),
+        )?;
 
         Ok(())
     })

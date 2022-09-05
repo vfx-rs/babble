@@ -409,7 +409,7 @@ impl std::fmt::Debug for ClassDecl {
     }
 }
 
-#[instrument(skip(depth, tu, namespaces, ast, already_visited))]
+#[instrument(skip(depth, tu, namespaces, ast, already_visited), level="trace")]
 pub fn extract_class_decl(
     class_template: Cursor,
     depth: usize,

@@ -156,7 +156,7 @@ impl QualType {
 
 /// Given a template parameter in type position for which we only know the name, try to look up the type to replace it
 /// with
-#[instrument]
+#[instrument(level="trace")]
 fn specialize_template_type(
     t: &str,
     class_template_parameters: &[TemplateParameterDecl],
@@ -204,7 +204,7 @@ impl Display for QualType {
 }
 
 /// Get a qualified type from a reference to a type
-#[instrument(skip(depth))]
+#[instrument(skip(depth), level="trace")]
 pub fn extract_type_from_typeref(c_tr: Cursor, depth: usize) -> Result<QualType> {
     if let Ok(c_ref) = c_tr.referenced() {
         let c_ref =
@@ -258,7 +258,7 @@ pub fn extract_type_from_typeref(c_tr: Cursor, depth: usize) -> Result<QualType>
 }
 
 /// Extract a qualified type from a clang Type
-#[instrument(skip(depth, already_visited, ast, tu))]
+#[instrument(skip(depth, already_visited, ast, tu), level="trace")]
 pub fn extract_type(
     ty: Type,
     depth: usize,

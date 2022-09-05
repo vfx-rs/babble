@@ -158,22 +158,6 @@ target_link_libraries(babble_get_args {link_libraries_str})
         args.push(arg);
     }
 
-    // let mut args = Vec::new();
-    // let mut i = 0;
-    // loop {
-    //     if i == raw_args.len() {
-    //         break;
-    //     }
-
-    //     if ["-c", "-o", "--driver-mode"].contains(&raw_args[i].as_str()) {
-    //         i += 1;
-    //     } else {
-    //         args.push(raw_args[i].clone());
-    //     }
-
-    //     i += 1;
-    // }
-
     Ok((source_filename, args))
 }
 

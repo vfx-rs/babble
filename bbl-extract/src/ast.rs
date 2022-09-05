@@ -4,10 +4,8 @@ use std::ops::{Index, IndexMut};
 
 use bbl_clang::cursor::Cursor;
 use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::TranslationUnit};
-use tracing::instrument;
+use tracing::{error, warn, info, debug, trace, instrument};
 use ustr::{Ustr, UstrMap};
-
-use log::*;
 
 use crate::class::{ClassBindKind, ClassDecl, MethodSpecializationId};
 use crate::function::{extract_function, Function, Method};
@@ -435,7 +433,7 @@ pub fn get_qualified_name(decl: &str, namespaces: &[USR], ast: &AST) -> Result<S
 }
 
 /// Main recursive function to walk the AST and extract the pieces we're interested in
-#[instrument(skip(depth, max_depth, tu, namespaces, already_visited))]
+#[instrument(skip(depth, max_depth, tu, namespaces, already_visited), level="trace")]
 pub fn extract_ast(
     c: Cursor,
     depth: usize,
@@ -467,6 +465,8 @@ pub fn extract_ast(
                     already_visited.push(c.usr());
                 }
             }
+
+            return Ok(());
         }
         CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
             // check if this type alias has a TemplateRef child, in which case it's a class template specialization
@@ -492,6 +492,8 @@ pub fn extract_ast(
                     c.display_name()
                 );
             }
+
+            return Ok(());
         }
         CursorKind::Namespace => {
             let ns = extract_namespace(c, depth, tu);
@@ -526,6 +528,8 @@ pub fn extract_ast(
                 })?;
             ast.insert_function(fun);
             already_visited.push(c.usr());
+
+            return Ok(());
         }
         // CursorKind::NamespaceRef => {
 
@@ -533,7 +537,7 @@ pub fn extract_ast(
         _ => (),
     }
 
-    debug!("{indent}{}: {} {}", c.kind(), c.display_name(), c.usr());
+    trace!("{indent}{}: {} {}", c.kind(), c.display_name(), c.usr());
 
     if let Ok(cr) = c.referenced() {
         if cr != c && !already_visited.contains(&cr.usr()) {
@@ -682,7 +686,7 @@ pub fn dump(
     }
 }
 
-#[instrument]
+#[instrument(level="trace", skip(tu))]
 pub fn extract_ast_from_namespace(
     name: Option<&str>,
     c_tu: Cursor,

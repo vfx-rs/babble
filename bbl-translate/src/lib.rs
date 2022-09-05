@@ -368,7 +368,7 @@ impl CAST {
     }
 }
 
-#[instrument]
+#[instrument(level="trace")]
 pub fn translate_qual_type(
     qual_type: &QualType,
     template_parms: &[TemplateParameterDecl],
@@ -465,7 +465,7 @@ pub fn translate_qual_type(
     }
 }
 
-#[instrument(skip(used_argument_names, ast))]
+#[instrument(skip(used_argument_names, ast), level="trace")]
 pub fn translate_arguments(
     arguments: &[Argument],
     template_parms: &[TemplateParameterDecl],
@@ -740,7 +740,7 @@ fn translate_class_template_specialization(
     Ok(())
 }
 
-#[instrument(skip(ast, structs, functions, used_names))]
+#[instrument(skip(ast, structs, functions, used_names), level="trace")]
 pub fn translate_class(
     ast: &AST,
     class_id: ClassId,
@@ -872,7 +872,7 @@ fn get_unique_argument_name(name: &str, used_argument_names: &mut HashSet<String
     result
 }
 
-#[instrument(skip(ast, functions, used_names))]
+#[instrument(skip(ast, functions, used_names), level="trace")]
 fn translate_function(
     ast: &AST,
     function_id: FunctionId,
@@ -967,7 +967,7 @@ fn translate_function(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[instrument(skip(used_names, ast))]
+#[instrument(skip(used_names, ast), level="trace")]
 pub fn translate_method(
     class: &ClassDecl,
     class_template_parms: &[TemplateParameterDecl],

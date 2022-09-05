@@ -18,6 +18,8 @@ pub enum Error {
     },
     #[error("String formatting error while generating")]
     FormatError(#[from] std::fmt::Error),
+    #[error("Failed to generate cmake project")]
+    FailedToGenerateCMake{source: Box<dyn std::error::Error + 'static + Send + Sync>}
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -485,7 +485,7 @@ pub fn extract_argument(c_arg: Cursor, depth: usize, template_parameters: &[Stri
     })
 }
 
-#[instrument(skip(depth, already_visited, tu, ast))]
+#[instrument(skip(depth, already_visited, tu, ast), level="trace")]
 pub fn extract_function(
     c_function: Cursor,
     depth: usize,
@@ -636,7 +636,7 @@ pub fn extract_function(
     ))
 }
 
-#[instrument(skip(depth, already_visited, tu, ast))]
+#[instrument(skip(depth, already_visited, tu, ast), level="trace")]
 pub fn extract_method(
     c_method: Cursor,
     depth: usize,
