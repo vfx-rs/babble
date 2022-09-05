@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         true)?;
 
     println!("INCLUDES");
-    tu.get_inclusions(|file, locations| {
+    tu.get_inclusions(|_file, locations| {
         if locations.len() == 1 {
             for location in locations {
                 println!("    {:?}", tu.get_cursor_at_location(location));

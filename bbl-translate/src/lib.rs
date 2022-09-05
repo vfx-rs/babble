@@ -3,11 +3,10 @@ use std::fmt::Display;
 use bbl_clang::cursor::USR;
 use bbl_clang::ty::TypeKind;
 use bbl_extract::ast::Include;
-use bbl_extract::index_map::{IndexMapKey, UstrIndexMap};
 use bbl_extract::function::Function;
+use bbl_extract::index_map::{IndexMapKey, UstrIndexMap};
 use bbl_extract::type_alias::{ClassTemplateSpecialization, FunctionTemplateSpecialization};
 use hashbrown::HashSet;
-use log::{error, warn};
 
 use bbl_extract::class::MethodSpecializationId;
 use bbl_extract::error::{Error, TranslateArgumentError, TranslateTypeError};
@@ -22,7 +21,9 @@ use bbl_extract::{
     template_argument::TemplateType,
     type_alias::TypeAlias,
 };
+use tracing::{debug, error, info, instrument, trace, warn};
 
+#[derive(Debug)]
 pub enum CTypeRef {
     Builtin(TypeKind),
     Ref(USR),
@@ -30,6 +31,7 @@ pub enum CTypeRef {
     Unknown(TypeKind),
 }
 
+#[derive(Debug)]
 pub struct CQualType {
     name: String,
     is_const: bool,
@@ -37,6 +39,7 @@ pub struct CQualType {
     cpp_type_ref: TypeRef,
     needs_deref: bool,
     needs_move: bool,
+    needs_alloc: bool,
 }
 
 impl CQualType {
@@ -76,38 +79,46 @@ impl CQualType {
             needs_move: false,
             type_ref: CTypeRef::Unknown(tk),
             cpp_type_ref: TypeRef::Unknown(tk),
+            needs_alloc: false,
         }
     }
 
     pub fn format(&self, ast: &CAST, use_public_names: bool) -> String {
-        let result = String::new();
+        let const_ = if self.is_const { " const" } else { "" };
 
-        let result = if self.is_const {
-            format!("{result}const ")
-        } else {
-            result
-        };
-
-        let result = match &self.type_ref {
+        match &self.type_ref {
             CTypeRef::Builtin(tk) => {
-                format!("{result}{}", tk.spelling())
+                format!("{}{const_}", tk.spelling())
             }
             CTypeRef::Pointer(pointee) => {
-                format!("{result}{}*", pointee.format(ast, use_public_names))
+                format!("{}*{const_}", pointee.format(ast, use_public_names))
             }
             CTypeRef::Ref(usr) => {
-                let name = ast
-                    .get_struct(*usr)
-                    .map(|r| r.format(use_public_names))
-                    .unwrap_or_else(|| usr.to_string());
-                format!("{result}{}", name)
+                if let Some(st) = ast.get_struct(*usr) {
+                    st.format(use_public_names)
+                } else if let Some(td) = ast.get_typedef(*usr) {
+                    // no struct with this USR, see if there's a typedef instead
+                    format!("{}{const_}", td.name_external)
+                } else {
+                    unimplemented!("no struct or typedef")
+                }
             }
             CTypeRef::Unknown(tk) => {
-                format!("{result}UNKNOWN({})", tk.spelling())
+                format!("UNKNOWN({}){const_}", tk.spelling())
             }
-        };
+        }
+    }
 
-        result
+    pub fn int(name: &str, is_const: bool) -> CQualType {
+        CQualType {
+            name: name.to_string(),
+            cpp_type_ref: TypeRef::Builtin(TypeKind::Int),
+            type_ref: CTypeRef::Builtin(TypeKind::Int),
+            is_const,
+            needs_alloc: false,
+            needs_deref: false,
+            needs_move: false,
+        }
     }
 }
 
@@ -136,6 +147,7 @@ pub struct CArgument {
     pub name: String,
     pub qual_type: CQualType,
     pub is_self: bool,
+    pub is_result: bool,
 }
 
 impl Display for CArgument {
@@ -154,6 +166,7 @@ impl CArgument {
     }
 }
 
+#[derive(Debug)]
 pub enum CFunctionSource {
     /// This function was translated from a method
     Method((ClassId, MethodId)),
@@ -173,6 +186,8 @@ pub struct CFunction {
     pub arguments: Vec<CArgument>,
     /// Where this function came from
     pub source: CFunctionSource,
+    /// Is the cpp source of this function definitely not going to throw?
+    pub is_noexcept: bool,
 }
 
 impl CFunction {
@@ -226,9 +241,9 @@ impl CField {
 
 pub struct CStruct {
     /// The name of the struct with internal namespace baked in, e.g. Imath_3_1_V3f
-    pub name_private: String,
-    /// The name of the struct that will be used for a public #define, e.g. Imath_V3f
-    pub name_public: String,
+    pub name_internal: String,
+    /// The name of the struct that will be used for an external-facing #define, e.g. Imath_V3f
+    pub name_external: String,
     pub fields: Vec<CField>,
     pub bind_kind: ClassBindKind,
     /// The class from whence this struct came
@@ -239,9 +254,9 @@ pub struct CStruct {
 impl CStruct {
     pub fn format(&self, use_public_name: bool) -> String {
         if use_public_name {
-            &self.name_public
+            &self.name_external
         } else {
-            &self.name_private
+            &self.name_internal
         }
         .to_string()
     }
@@ -253,12 +268,20 @@ impl CStruct {
             println!("  {};", field.format(ast, false));
         }
 
-        println!("}} {};", self.name_private);
+        println!("}} {};", self.name_internal);
 
-        if self.name_private != self.name_public {
-            println!("typedef {} {};", self.name_private, self.name_public);
+        if self.name_internal != self.name_external {
+            println!("typedef {} {};", self.name_internal, self.name_external);
         }
     }
+}
+
+pub struct CTypedef {
+    pub name_external: String,
+    pub name_internal: String,
+    pub usr: USR,
+    /// The underlying type that this typedef refers to
+    pub typ: USR,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -271,6 +294,21 @@ impl CStructId {
 }
 
 impl IndexMapKey for CStructId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct CTypedefId(usize);
+
+impl CTypedefId {
+    pub fn new(id: usize) -> CTypedefId {
+        CTypedefId(id)
+    }
+}
+
+impl IndexMapKey for CTypedefId {
     fn get(&self) -> usize {
         self.0
     }
@@ -293,6 +331,7 @@ impl IndexMapKey for CFunctionId {
 
 pub struct CAST {
     pub structs: UstrIndexMap<CStruct, CStructId>,
+    pub typedefs: UstrIndexMap<CTypedef, CTypedefId>,
     pub functions: UstrIndexMap<CFunction, CFunctionId>,
     pub includes: Vec<Include>,
 }
@@ -300,6 +339,10 @@ pub struct CAST {
 impl CAST {
     pub fn get_struct(&self, usr: USR) -> Option<&CStruct> {
         self.structs.get(&usr.into())
+    }
+
+    pub fn get_typedef(&self, usr: USR) -> Option<&CTypedef> {
+        self.typedefs.get(&usr.into())
     }
 
     pub fn pretty_print(&self, depth: usize) {
@@ -325,6 +368,7 @@ impl CAST {
     }
 }
 
+#[instrument]
 pub fn translate_qual_type(
     qual_type: &QualType,
     template_parms: &[TemplateParameterDecl],
@@ -338,6 +382,7 @@ pub fn translate_qual_type(
             cpp_type_ref: qual_type.type_ref.clone(),
             needs_deref: false,
             needs_move: false,
+            needs_alloc: false,
         }),
         TypeRef::Pointer(qt) => Ok(CQualType {
             name: qual_type.name.clone(),
@@ -350,6 +395,7 @@ pub fn translate_qual_type(
             cpp_type_ref: qual_type.type_ref.clone(),
             needs_deref: false,
             needs_move: false,
+            needs_alloc: false,
         }),
         TypeRef::LValueReference(qt) => Ok(CQualType {
             name: qual_type.name.clone(),
@@ -362,6 +408,7 @@ pub fn translate_qual_type(
             cpp_type_ref: qual_type.type_ref.clone(),
             needs_deref: true,
             needs_move: false,
+            needs_alloc: false,
         }),
         TypeRef::RValueReference(qt) => Ok(CQualType {
             name: qual_type.name.clone(),
@@ -374,6 +421,7 @@ pub fn translate_qual_type(
             cpp_type_ref: qual_type.type_ref.clone(),
             needs_deref: false,
             needs_move: true,
+            needs_alloc: false,
         }),
         TypeRef::Ref(usr) => Ok(CQualType {
             name: qual_type.name.clone(),
@@ -382,6 +430,7 @@ pub fn translate_qual_type(
             cpp_type_ref: qual_type.type_ref.clone(),
             needs_deref: false,
             needs_move: false,
+            needs_alloc: false,
         }),
         TypeRef::TemplateTypeParameter(parm_name) => {
             // find the parameter with the given name in the params list, then get the matching arg here
@@ -400,21 +449,23 @@ pub fn translate_qual_type(
                     Some(TemplateType::Integer(_n)) => {
                         todo!()
                     }
-                    None => {
-                        Err(TranslateTypeError::InvalidTemplateArgumentKind(
-                            parm_name.into(),
-                        ))
-                    }
+                    None => Err(TranslateTypeError::InvalidTemplateArgumentKind(
+                        parm_name.into(),
+                    )),
                 }
             }
         }
         _ => {
-            error!("Not yet implemented qual_type translation for {:?}", qual_type.type_ref);
+            error!(
+                "Not yet implemented qual_type translation for {:?}",
+                qual_type.type_ref
+            );
             todo!()
         }
     }
 }
 
+#[instrument(skip(used_argument_names, ast))]
 pub fn translate_arguments(
     arguments: &[Argument],
     template_parms: &[TemplateParameterDecl],
@@ -430,12 +481,19 @@ pub fn translate_arguments(
                 error!("Error translating argument {}: {e}", arg.name());
                 TranslateArgumentError::FailedToTranslateType {
                     name: arg.name().to_string(),
-                    source: e,
+                    source: Box::new(e),
                 }
             })?;
 
+        trace!(
+            "Translated qual_type {:?} as {:?}",
+            arg.qual_type(),
+            qual_type
+        );
+
         // if the argument is a pass-by-value of a non-POD type we need to force it to be passed as a pointer and
         // deref'd on the other side
+        // TODO: we'll need to move it if it's a non-copyable type
         let do_pass_by_pointer = if let CTypeRef::Ref(usr) = &qual_type.type_ref {
             let class = ast
                 .get_class(*usr)
@@ -458,6 +516,7 @@ pub fn translate_arguments(
                 cpp_type_ref,
                 needs_deref: true,
                 needs_move: false,
+                needs_alloc: false,
             };
         }
         let qual_type = qual_type;
@@ -473,6 +532,7 @@ pub fn translate_arguments(
             name: get_unique_argument_name(name, used_argument_names),
             qual_type,
             is_self: false,
+            is_result: false,
         });
     }
 
@@ -527,6 +587,7 @@ pub fn get_c_names(
 
 pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
     let mut structs = UstrIndexMap::new();
+    let mut typedefs = UstrIndexMap::new();
     let mut functions = UstrIndexMap::new();
 
     let mut used_names = HashSet::new();
@@ -561,6 +622,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
                 ast,
                 cts,
                 &mut structs,
+                &mut typedefs,
                 &mut functions,
                 &mut used_names,
             )?,
@@ -597,7 +659,12 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
         )?;
     }
 
-    Ok(CAST { structs, functions, includes: ast.includes().to_vec() })
+    Ok(CAST {
+        structs,
+        typedefs,
+        functions,
+        includes: ast.includes().to_vec(),
+    })
 }
 
 fn translate_function_template_specialization(
@@ -629,16 +696,15 @@ fn translate_class_template_specialization(
     ast: &AST,
     cts: &ClassTemplateSpecialization,
     structs: &mut UstrIndexMap<CStruct, CStructId>,
+    typedefs: &mut UstrIndexMap<CTypedef, CTypedefId>,
     functions: &mut UstrIndexMap<CFunction, CFunctionId>,
     used_names: &mut HashSet<String>,
 ) -> Result<()> {
-    let class_id =
-        ast.classes()
-            .get_id(&cts.specialized_decl().into())
-            .map(|id| ClassId::new(*id))
-            .ok_or_else(|| Error::ClassNotFound(
-                cts.specialized_decl().as_str().to_string(),
-            ))?;
+    let class_id = ast
+        .classes()
+        .get_id(&cts.specialized_decl().into())
+        .map(|id| ClassId::new(*id))
+        .ok_or_else(|| Error::ClassNotFound(cts.specialized_decl().as_str().to_string()))?;
     let class = &ast.classes()[class_id];
 
     translate_class(
@@ -651,9 +717,30 @@ fn translate_class_template_specialization(
         used_names,
     )?;
 
+    let (ns_prefix_external, ns_prefix_internal) = build_namespace_prefix(ast, cts.namespaces())?;
+
+    // get unique, prefixed names for the typedef
+    let (td_c_name_external, td_c_name_internal) = get_c_names(
+        cts.name(),
+        &ns_prefix_external,
+        &ns_prefix_internal,
+        used_names,
+    );
+
+    typedefs.insert(
+        cts.usr().into(),
+        CTypedef {
+            name_external: td_c_name_external,
+            name_internal: td_c_name_internal,
+            usr: cts.usr(),
+            typ: cts.specialized_decl(),
+        },
+    );
+
     Ok(())
 }
 
+#[instrument(skip(ast, structs, functions, used_names))]
 pub fn translate_class(
     ast: &AST,
     class_id: ClassId,
@@ -699,8 +786,8 @@ pub fn translate_class(
     structs.insert(
         class.usr().into(),
         CStruct {
-            name_public: st_c_name_public.clone(),
-            name_private: st_c_name_private.clone(),
+            name_external: st_c_name_public.clone(),
+            name_internal: st_c_name_private.clone(),
             fields,
             bind_kind: *class.bind_kind(),
             class_id,
@@ -785,6 +872,7 @@ fn get_unique_argument_name(name: &str, used_argument_names: &mut HashSet<String
     result
 }
 
+#[instrument(skip(ast, functions, used_names))]
 fn translate_function(
     ast: &AST,
     function_id: FunctionId,
@@ -806,13 +894,13 @@ fn translate_function(
         name: function.name().to_string(),
         source: TranslateArgumentError::FailedToTranslateType {
             name: "[return]".into(),
-            source: e,
+            source: Box::new(e),
         },
     })?;
 
     let mut used_argument_names = HashSet::new();
 
-    let arguments = translate_arguments(
+    let mut arguments = translate_arguments(
         function.arguments(),
         function.template_parameters(),
         template_args,
@@ -823,6 +911,27 @@ fn translate_function(
         name: function.name().to_string(),
         source: e,
     })?;
+
+    // insert the result as the first argument, since we'll be forcing an int return type in order to return exception
+    // status
+    let result_name = get_unique_argument_name("result", &mut used_argument_names);
+    arguments.insert(
+        0,
+        CArgument {
+            name: result_name.clone(),
+            qual_type: CQualType {
+                name: format!("{result_name}*"),
+                cpp_type_ref: result.cpp_type_ref().clone(),
+                type_ref: CTypeRef::Pointer(Box::new(result)),
+                is_const: false,
+                needs_alloc: false,
+                needs_deref: false,
+                needs_move: false,
+            },
+            is_self: false,
+            is_result: true,
+        },
+    );
 
     let fn_name = if let Some(name) = function.replacement_name() {
         name
@@ -838,9 +947,19 @@ fn translate_function(
         CFunction {
             name_private: fn_name_private,
             name_public: fn_name_public,
-            result,
+            // force an integer return for the error code
+            result: CQualType {
+                name: "[result]".to_string(),
+                cpp_type_ref: TypeRef::Builtin(TypeKind::Int),
+                type_ref: CTypeRef::Builtin(TypeKind::Int),
+                is_const: false,
+                needs_alloc: false,
+                needs_deref: false,
+                needs_move: false,
+            },
             arguments,
             source,
+            is_noexcept: false,
         },
     );
 
@@ -848,6 +967,7 @@ fn translate_function(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip(used_names, ast))]
 pub fn translate_method(
     class: &ClassDecl,
     class_template_parms: &[TemplateParameterDecl],
@@ -874,7 +994,7 @@ pub fn translate_method(
                 name: format!("{}::{}", class.name(), method.name()),
                 source: TranslateArgumentError::FailedToTranslateType {
                     name: "[return]".into(),
-                    source: e,
+                    source: Box::new(e),
                 },
             }
         })?;
@@ -905,6 +1025,7 @@ pub fn translate_method(
                 cpp_type_ref: TypeRef::Ref(class.usr()),
                 needs_deref: false,
                 needs_move: false,
+                needs_alloc: false,
             })),
             cpp_type_ref: TypeRef::Pointer(Box::new(QualType {
                 name: class.name().to_string(),
@@ -913,6 +1034,7 @@ pub fn translate_method(
             })),
             needs_deref: false,
             needs_move: false,
+            needs_alloc: false,
         };
         arguments.insert(
             0,
@@ -920,9 +1042,31 @@ pub fn translate_method(
                 name: get_unique_argument_name("self", &mut used_argument_names),
                 qual_type: qt,
                 is_self: true,
+                is_result: false,
             },
         );
     }
+
+    // insert the result as the first argument, since we'll be forcing an int return type in order to return exception
+    // status
+    let result_name = get_unique_argument_name("result", &mut used_argument_names);
+    arguments.insert(
+        0,
+        CArgument {
+            name: result_name.clone(),
+            qual_type: CQualType {
+                name: format!("{result_name}*"),
+                cpp_type_ref: result.cpp_type_ref().clone(),
+                type_ref: CTypeRef::Pointer(Box::new(result)),
+                is_const: false,
+                needs_alloc: false,
+                needs_deref: false,
+                needs_move: false,
+            },
+            is_self: false,
+            is_result: true,
+        },
+    );
 
     let fn_name = if let Some(name) = method.replacement_name() {
         name
@@ -936,9 +1080,10 @@ pub fn translate_method(
     Ok(CFunction {
         name_private: fn_name_private,
         name_public: fn_name_public,
-        result,
+        result: CQualType::int("[result]", false),
         arguments,
         source,
+        is_noexcept: false,
     })
 }
 

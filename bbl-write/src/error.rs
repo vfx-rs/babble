@@ -11,6 +11,13 @@ pub enum Error {
         name: String,
         source: FunctionGenerationError,
     },
+    #[error("Failed to generate typedef \"{name}\"")]
+    FailedToGenerateTypedef {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    #[error("String formatting error while generating")]
+    FormatError(#[from] std::fmt::Error),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -38,7 +45,7 @@ pub enum StructGenerationError {
     FailedToGenerateField {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
-    }
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -49,5 +56,6 @@ pub enum FunctionGenerationError {
     FailedToGenerateCall(TypeError),
     #[error("Failed to function argument \"{name}\"")]
     FailedToGenerateArg { name: String, source: ArgumentError },
+    #[error("String formatting error while generating")]
+    FormatError(#[from] std::fmt::Error),
 }
-

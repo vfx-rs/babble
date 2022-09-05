@@ -278,7 +278,7 @@ pub fn extract_class_template_specialization(
             usr: c_type_alias_decl.usr(),
             name,
             template_arguments: template_args,
-            namespaces: namespaces.clone(),
+            namespaces,
         })
     } else {
         Err(Error::FailedToGetTypeFrom(c_type_alias_decl.display_name()))

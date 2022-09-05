@@ -4,7 +4,7 @@ use bbl_clang::translation_unit::TranslationUnit;
 use bbl_clang::ty::TypeKind;
 use log::*;
 use tracing::instrument;
-use std::fmt::Display;
+use std::fmt::{Display, Debug};
 
 use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId};
 use crate::class::MethodSpecializationId;
@@ -16,6 +16,7 @@ use bbl_clang::cursor_kind::CursorKind;
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+#[derive(Debug)]
 pub struct Argument {
     pub(crate) name: String,
     pub(crate) qual_type: QualType,
@@ -62,6 +63,12 @@ pub struct Function {
     pub(crate) template_parameters: Vec<TemplateParameterDecl>,
     pub(crate) specializations: Vec<TypeAliasId>,
     pub(crate) exception_specification_kind: ExceptionSpecificationKind,
+}
+
+impl Debug for Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Function{{\"{}\"}}", self.name())
+    }
 }
 
 impl Function {
@@ -231,6 +238,7 @@ impl Function {
     }
 }
 
+#[derive(Debug)]
 pub struct Method {
     pub(crate) function: Function,
     pub(crate) is_const: bool,

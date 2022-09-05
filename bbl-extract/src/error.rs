@@ -93,7 +93,7 @@ pub enum TranslateArgumentError {
     #[error("Failed to translate type \"{name}\"")]
     FailedToTranslateType {
         name: String,
-        source: TranslateTypeError,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
     #[error("Failed to get class from ref \"{0}\"")]
     FailedToGetClassFromRef(USR),
@@ -113,25 +113,3 @@ impl std::fmt::Display for TranslateTypeError {
         write!(f, "{:?}", self)
     }
 }
-
-/*
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            _ => write!(f, "{:?}", self),
-        }
-    }
-}
-
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::ClangError(e) => Some(e),
-            Self::IoError(e) => Some(e),
-            Self::TranslateField { source, .. } => Some(source),
-            Self::TranslateFunction { source, .. } => Some(source),
-            _ => None,
-        }
-    }
-}
-*/

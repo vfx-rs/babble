@@ -403,6 +403,12 @@ impl Display for ClassDecl {
     }
 }
 
+impl std::fmt::Debug for ClassDecl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ClassDecl{{\"{}\"}}", self.name())
+    }
+}
+
 #[instrument(skip(depth, tu, namespaces, ast, already_visited))]
 pub fn extract_class_decl(
     class_template: Cursor,
@@ -430,7 +436,7 @@ pub fn extract_class_decl(
             Vec::new(),
             Vec::new(),
             namespaces,
-            vec![TemplateParameterDecl::typ("_CharT".into(), 0)],
+            vec![TemplateParameterDecl::typ("_CharT", 0)],
             false,
         ));
     }
