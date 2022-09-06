@@ -914,24 +914,26 @@ fn translate_function(
 
     // insert the result as the first argument, since we'll be forcing an int return type in order to return exception
     // status
-    let result_name = get_unique_argument_name("result", &mut used_argument_names);
-    arguments.insert(
-        0,
-        CArgument {
-            name: result_name.clone(),
-            qual_type: CQualType {
-                name: format!("{result_name}*"),
-                cpp_type_ref: result.cpp_type_ref().clone(),
-                type_ref: CTypeRef::Pointer(Box::new(result)),
-                is_const: false,
-                needs_alloc: false,
-                needs_deref: false,
-                needs_move: false,
+    if !matches!(result.type_ref, CTypeRef::Builtin(TypeKind::Void)) {
+        let result_name = get_unique_argument_name("result", &mut used_argument_names);
+        arguments.insert(
+            0,
+            CArgument {
+                name: result_name.clone(),
+                qual_type: CQualType {
+                    name: format!("{result_name}*"),
+                    cpp_type_ref: result.cpp_type_ref().clone(),
+                    type_ref: CTypeRef::Pointer(Box::new(result)),
+                    is_const: false,
+                    needs_alloc: false,
+                    needs_deref: false,
+                    needs_move: false,
+                },
+                is_self: false,
+                is_result: true,
             },
-            is_self: false,
-            is_result: true,
-        },
-    );
+        );
+    }
 
     let fn_name = if let Some(name) = function.replacement_name() {
         name
@@ -1049,24 +1051,26 @@ pub fn translate_method(
 
     // insert the result as the first argument, since we'll be forcing an int return type in order to return exception
     // status
-    let result_name = get_unique_argument_name("result", &mut used_argument_names);
-    arguments.insert(
-        0,
-        CArgument {
-            name: result_name.clone(),
-            qual_type: CQualType {
-                name: format!("{result_name}*"),
-                cpp_type_ref: result.cpp_type_ref().clone(),
-                type_ref: CTypeRef::Pointer(Box::new(result)),
-                is_const: false,
-                needs_alloc: false,
-                needs_deref: false,
-                needs_move: false,
+    if !matches!(result.type_ref, CTypeRef::Builtin(TypeKind::Void)) {
+        let result_name = get_unique_argument_name("result", &mut used_argument_names);
+        arguments.insert(
+            0,
+            CArgument {
+                name: result_name.clone(),
+                qual_type: CQualType {
+                    name: format!("{result_name}*"),
+                    cpp_type_ref: result.cpp_type_ref().clone(),
+                    type_ref: CTypeRef::Pointer(Box::new(result)),
+                    is_const: false,
+                    needs_alloc: false,
+                    needs_deref: false,
+                    needs_move: false,
+                },
+                is_self: false,
+                is_result: true,
             },
-            is_self: false,
-            is_result: true,
-        },
-    );
+        );
+    }
 
     let fn_name = if let Some(name) = method.replacement_name() {
         name

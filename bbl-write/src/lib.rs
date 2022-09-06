@@ -302,6 +302,11 @@ fn gen_function_definition(
 
         true
     } else {
+        write!(&mut body,
+            "{indent}{}", 
+            gen_cpp_call(fun, ast).map_err(FunctionGenerationError::FailedToGenerateCall)?
+        )?;
+
         false
     };
 

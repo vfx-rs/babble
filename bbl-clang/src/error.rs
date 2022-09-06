@@ -25,7 +25,7 @@ pub enum Error {
     FailedToRunClang(std::io::Error),
     NonUTF8Output(std::string::FromUtf8Error),
     FailedToParseOutput(String),
-    CMakeError,
+    CMakeError{stdout: String, stderr: String},
     CompilationDatabaseError(CompilationDatabaseError)
 }
 

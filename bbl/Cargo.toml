@@ -1,0 +1,13 @@
+[package]
+name = "bbl"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bbl-extract = { path = "../bbl-extract", version = "0.1.0" }
+bbl-translate = { path = "../bbl-translate", version = "0.1.0" }
+bbl-clang = { path = "../bbl-clang", version = "0.1.0" }
+bbl-write = { path = "../bbl-write", version = "0.1.0" }
+thiserror = "1.0.34"

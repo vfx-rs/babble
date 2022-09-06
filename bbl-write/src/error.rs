@@ -19,7 +19,15 @@ pub enum Error {
     #[error("String formatting error while generating")]
     FormatError(#[from] std::fmt::Error),
     #[error("Failed to generate cmake project")]
-    FailedToGenerateCMake{source: Box<dyn std::error::Error + 'static + Send + Sync>}
+    FailedToGenerateCMake{source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    #[error("Failed to run cmake")]
+    FailedToRunCMake(#[from] std::io::Error),
+    #[error("CMake configuration failed: \n{stdout}\n\n{stderr}")]
+    FailedToConfigureCMake{stdout: String, stderr: String},
+    #[error("CMake build failed: \n{stdout}\n\n{stderr}")]
+    FailedToBuildCMake{stdout: String, stderr: String},
+    #[error("CMake installation failed: \n{stdout}\n\n{stderr}")]
+    FailedToInstallCMake{stdout: String, stderr: String},
 }
 
 #[derive(Debug, thiserror::Error)]

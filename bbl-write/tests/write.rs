@@ -390,7 +390,7 @@ fn fun_b(arg: &str) {}
 
 #[tracing::instrument]
 fn fun_a(arg: &str) {
-    fun_b("your mum's a slag");
+    fun_b("blah blah blah");
 }
 
 #[test]
@@ -418,7 +418,7 @@ fn test_tracing() {
 
         tracing::error!("This event will be logged in the root span.");
 
-        fun_a("fuck you");
+        fun_a("sooooo");
     });
     global::shutdown_tracer_provider(); // sending remaining spans
 }

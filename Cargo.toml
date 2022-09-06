@@ -4,6 +4,8 @@ members = [
     "bbl-extract",
     "bbl-translate",
     "bbl-write",
+    "bbl",
     "bbl-gen",
-    "bbl-dumpast"
+    "bbl-dumpast",
+    "examples/*"
 ]

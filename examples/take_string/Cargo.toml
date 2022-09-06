@@ -1,0 +1,17 @@
+[package]
+name = "take-string"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "take-string"
+path = "src/main.rs"
+
+
+[build-dependencies]
+anyhow = "1.0.64"
+bbl = {path = "../../bbl", version = "0.1.0"}
+clap = { version = "3.2.17", features = ["derive", "unstable-doc"] }
+env_logger = "0.9.0"
+log = "0.4.17"
+

@@ -132,7 +132,14 @@ target_link_libraries(babble_get_args {link_libraries_str})
             std::str::from_utf8(&output.stdout).expect("UTF-8 error parsing cmake stdout"),
             std::str::from_utf8(&output.stderr).expect("UTF-8 error parsing cmake stderr")
         );
-        return Err(Error::CMakeError);
+        return Err(Error::CMakeError {
+            stdout: std::str::from_utf8(&output.stdout)
+                .expect("UTF-8 error parsing cmake stdout")
+                .to_string(),
+            stderr: std::str::from_utf8(&output.stderr)
+                .expect("UTF-8 error parsing cmake stderr")
+                .to_string(),
+        });
     }
 
     let compilation_db = CompilationDatabase::from_directory(&build_dir)?;
