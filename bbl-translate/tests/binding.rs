@@ -4,9 +4,11 @@ use std::path::{Path, PathBuf};
 
 use bbl_clang::{cli_args, cli_args_with, virtual_file::write_temp_cmake_project};
 use bbl_extract::{
-    error::Error, parse_file_and_extract_ast, parse_string_and_extract_ast, qualtype::QualType,
+    parse_file_and_extract_ast, parse_string_and_extract_ast, qualtype::QualType,
     template_argument::TemplateType,
 };
+
+use bbl_translate::error::Error;
 
 use bbl_translate::translate_cpp_ast_to_c;
 use log::error;
@@ -235,7 +237,7 @@ public:
 
     let class = ast.find_class("Class")?;
     let method = ast.find_method(class, "foo()");
-    assert!(matches!(method, Err(Error::MethodNotFound)));
+    assert!(matches!(method, Err(bbl_extract::error::Error::MethodNotFound)));
 
     ast.pretty_print(0);
 
@@ -272,7 +274,7 @@ public:
 
     let class = ast.find_class("Class")?;
     let method = ast.find_method(class, "method");
-    assert!(matches!(method, Err(Error::MultipleMatches)));
+    assert!(matches!(method, Err(bbl_extract::error::Error::MultipleMatches)));
 
     ast.pretty_print(0);
 

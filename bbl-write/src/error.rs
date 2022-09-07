@@ -6,6 +6,8 @@ pub enum Error {
     ClangError(#[from] bbl_clang::error::Error),
     #[error("Extraction error")]
     ExtractError(#[from] bbl_extract::error::Error),
+    #[error("Translation error")]
+    TranslationError(#[from] bbl_translate::error::Error),
     #[error("Failed to generate function \"{name}\"")]
     FailedToGenerateFunction {
         name: String,

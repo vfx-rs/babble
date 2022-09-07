@@ -3,8 +3,8 @@ use bbl_clang::exception::ExceptionSpecificationKind;
 use bbl_clang::translation_unit::TranslationUnit;
 use bbl_clang::ty::TypeKind;
 use log::*;
+use std::fmt::{Debug, Display};
 use tracing::instrument;
-use std::fmt::{Display, Debug};
 
 use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId};
 use crate::class::MethodSpecializationId;
@@ -241,8 +241,8 @@ impl Function {
 #[derive(Debug)]
 pub struct Method {
     pub(crate) function: Function,
+    pub(crate) kind: MethodKind,
     pub(crate) is_const: bool,
-    pub(crate) is_static: bool,
     pub(crate) is_virtual: bool,
     pub(crate) is_pure_virtual: bool,
     pub(crate) specializations: Vec<MethodSpecializationId>,
@@ -253,6 +253,7 @@ impl Method {
     pub fn new(
         usr: USR,
         name: String,
+        kind: MethodKind,
         result: QualType,
         arguments: Vec<Argument>,
         rename: Option<String>,
@@ -275,8 +276,8 @@ impl Method {
                 template_parameters,
                 exception_specification_kind,
             ),
+            kind,
             is_const,
-            is_static,
             is_virtual,
             is_pure_virtual,
             specializations: Vec::new(),
@@ -289,6 +290,49 @@ impl Method {
 
     pub fn get_qualified_name(&self, ast: &AST) -> Result<String> {
         self.function.get_qualified_name(ast)
+    }
+
+    pub fn kind(&self) -> MethodKind {
+        self.kind
+    }
+
+    pub fn is_constructor(&self) -> bool {
+        matches!(self.kind, MethodKind::Constructor)
+    }
+
+    pub fn is_any_constructor(&self) -> bool {
+        matches!(
+            self.kind,
+            MethodKind::Constructor
+                | MethodKind::ConvertingConstructor
+                | MethodKind::CopyConstructor
+                | MethodKind::DefaultConstructor
+                | MethodKind::MoveConstructor
+        )
+    }
+
+    pub fn is_copy_constructor(&self) -> bool {
+        matches!(self.kind, MethodKind::CopyConstructor)
+    }
+
+    pub fn is_move_constructor(&self) -> bool {
+        matches!(self.kind, MethodKind::MoveConstructor)
+    }
+
+    pub fn is_converting_constructor(&self) -> bool {
+        matches!(self.kind, MethodKind::ConvertingConstructor)
+    }
+
+    pub fn is_default_constructor(&self) -> bool {
+        matches!(self.kind, MethodKind::DefaultConstructor)
+    }
+
+    pub fn is_destructor(&self) -> bool {
+        matches!(self.kind, MethodKind::Constructor)
+    }
+
+    pub fn is_regular_method(&self) -> bool {
+        matches!(self.kind, MethodKind::Method)
     }
 
     pub fn result(&self) -> &QualType {
@@ -333,7 +377,7 @@ impl Method {
     }
 
     pub fn is_static(&self) -> bool {
-        self.is_static
+        matches!(self.kind, MethodKind::StaticMethod)
     }
 
     pub fn is_virtual(&self) -> bool {
@@ -371,7 +415,7 @@ impl Method {
             .function
             .format(ast, class_template_parameters, class_template_args);
 
-        if self.is_static {
+        if self.is_static() {
             s += " static"
         };
 
@@ -420,6 +464,18 @@ impl Method {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MethodKind {
+    Constructor,
+    CopyConstructor,
+    MoveConstructor,
+    ConvertingConstructor,
+    DefaultConstructor,
+    Destructor,
+    Method,
+    StaticMethod,
+}
+
 pub struct MethodTemplateSpecialization {
     pub(crate) specialized_decl: MethodId,
     pub(crate) usr: USR,
@@ -455,7 +511,14 @@ impl MethodTemplateSpecialization {
     }
 }
 
-pub fn extract_argument(c_arg: Cursor, depth: usize, template_parameters: &[String], already_visited: &mut Vec<USR>, ast: &mut AST, tu: &TranslationUnit) -> Result<Argument> {
+pub fn extract_argument(
+    c_arg: Cursor,
+    depth: usize,
+    template_parameters: &[String],
+    already_visited: &mut Vec<USR>,
+    ast: &mut AST,
+    tu: &TranslationUnit,
+) -> Result<Argument> {
     let children = c_arg.children();
     trace!("{:width$}extracting arg {c_arg:?}", "", width = depth * 2);
 
@@ -463,11 +526,11 @@ pub fn extract_argument(c_arg: Cursor, depth: usize, template_parameters: &[Stri
     trace!("{:width$}  has type {ty:?}", "", width = depth * 2);
 
     let qual_type = if ty.is_builtin() || ty.is_pointer() {
-        extract_type(ty, depth+1, template_parameters, already_visited, ast, tu)?
+        extract_type(ty, depth + 1, template_parameters, already_visited, ast, tu)?
     } else if !children.is_empty() {
         match children[0].kind() {
             CursorKind::TypeRef | CursorKind::TemplateRef => {
-                extract_type_from_typeref(children[0], depth+1)?
+                extract_type_from_typeref(children[0], depth + 1)?
             }
             _ => {
                 debug!("other kind {:?}", children[0].kind(),);
@@ -485,7 +548,7 @@ pub fn extract_argument(c_arg: Cursor, depth: usize, template_parameters: &[Stri
     })
 }
 
-#[instrument(skip(depth, already_visited, tu, ast), level="trace")]
+#[instrument(skip(depth, already_visited, tu, ast), level = "trace")]
 pub fn extract_function(
     c_function: Cursor,
     depth: usize,
@@ -553,15 +616,32 @@ pub fn extract_function(
 
     let ty_result = c_function.result_ty()?;
     debug!("result type is {:?}", ty_result);
-    let result = if ty_result.is_builtin() || ty_result.is_pointer() || ty_result.kind() == TypeKind::Elaborated {
-        extract_type(ty_result, depth+1, &string_template_parameters, already_visited, ast, tu).map_err(|e| Error::FailedToExtractResult{source: Box::new(e)})?
+    let result = if ty_result.is_builtin()
+        || ty_result.is_pointer()
+        || ty_result.kind() == TypeKind::Elaborated
+    {
+        extract_type(
+            ty_result,
+            depth + 1,
+            &string_template_parameters,
+            already_visited,
+            ast,
+            tu,
+        )
+        .map_err(|e| Error::FailedToExtractResult {
+            source: Box::new(e),
+        })?
     } else {
         let c_result = children.get(skip).ok_or(Error::FailedToGetCursor)?;
 
         skip += 1;
 
         if c_result.kind() == CursorKind::TypeRef || c_result.kind() == CursorKind::TemplateRef {
-            extract_type_from_typeref(*c_result, depth+1).map_err(|e| Error::FailedToExtractResult{source: Box::new(e)})?
+            extract_type_from_typeref(*c_result, depth + 1).map_err(|e| {
+                Error::FailedToExtractResult {
+                    source: Box::new(e),
+                }
+            })?
         } else {
             QualType::unknown(ty_result.kind())
         }
@@ -579,16 +659,24 @@ pub fn extract_function(
 
         if c_arg.kind() == CursorKind::ParmDecl {
             arguments.push(
-                extract_argument(*c_arg, depth, &string_template_parameters, already_visited, ast, tu).map_err(|e| {
-                    Error::FailedToExtractArgument {
-                        name: c_arg.display_name(),
-                        source: Box::new(e),
-                    }
+                extract_argument(
+                    *c_arg,
+                    depth,
+                    &string_template_parameters,
+                    already_visited,
+                    ast,
+                    tu,
+                )
+                .map_err(|e| Error::FailedToExtractArgument {
+                    name: c_arg.display_name(),
+                    source: Box::new(e),
                 })?,
             );
 
             i += 1;
-            if i == num_arguments { break; }
+            if i == num_arguments {
+                break;
+            }
         }
     }
 
@@ -636,7 +724,7 @@ pub fn extract_function(
     ))
 }
 
-#[instrument(skip(depth, already_visited, tu, ast), level="trace")]
+#[instrument(skip(depth, already_visited, tu, ast), level = "trace")]
 pub fn extract_method(
     c_method: Cursor,
     depth: usize,
@@ -659,15 +747,39 @@ pub fn extract_method(
         }
     );
 
+    let kind = if c_method.cxx_method_is_static() {
+        MethodKind::StaticMethod
+    } else if c_method.cxx_constructor_is_copy_constructor() {
+        MethodKind::CopyConstructor
+    } else if c_method.cxx_constructor_is_move_constructor() {
+        MethodKind::MoveConstructor
+    } else if c_method.cxx_constructor_is_converting_constructor() {
+        MethodKind::ConvertingConstructor
+    } else if c_method.cxx_constructor_is_default_constructor() {
+        MethodKind::DefaultConstructor
+    } else if c_method.kind() == CursorKind::Constructor {
+        MethodKind::Constructor
+    } else if c_method.kind() == CursorKind::Destructor {
+        MethodKind::Destructor
+    } else {
+        MethodKind::Method
+    };
+
     Ok(Method {
-        function: extract_function(c_method, depth, class_template_parameters, already_visited, tu, ast).map_err(|e| {
-            Error::FailedToExtractMethod {
-                name: c_method.display_name(),
-                source: Box::new(e),
-            }
+        function: extract_function(
+            c_method,
+            depth,
+            class_template_parameters,
+            already_visited,
+            tu,
+            ast,
+        )
+        .map_err(|e| Error::FailedToExtractMethod {
+            name: c_method.display_name(),
+            source: Box::new(e),
         })?,
+        kind,
         is_const: c_method.cxx_method_is_const(),
-        is_static: c_method.cxx_method_is_static(),
         is_virtual: c_method.cxx_method_is_virtual(),
         is_pure_virtual: c_method.cxx_method_is_pure_virtual(),
         specializations: Vec::new(),

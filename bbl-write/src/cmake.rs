@@ -121,10 +121,10 @@ install(EXPORT {project_name} DESTINATION lib/cmake)
 
     if !build_output.status.success() {
         return Err(Error::FailedToBuildCMake { 
-            stdout: std::str::from_utf8(&configure_output.stdout)
+            stdout: std::str::from_utf8(&build_output.stdout)
                 .expect("UTF-8 error parsing cmake stdout")
                 .to_string(),
-            stderr: std::str::from_utf8(&configure_output.stderr)
+            stderr: std::str::from_utf8(&build_output.stderr)
                 .expect("UTF-8 error parsing cmake stderr")
                 .to_string(),
         });
@@ -140,10 +140,10 @@ install(EXPORT {project_name} DESTINATION lib/cmake)
 
     if !install_output.status.success() {
         return Err(Error::FailedToInstallCMake { 
-            stdout: std::str::from_utf8(&configure_output.stdout)
+            stdout: std::str::from_utf8(&install_output.stdout)
                 .expect("UTF-8 error parsing cmake stdout")
                 .to_string(),
-            stderr: std::str::from_utf8(&configure_output.stderr)
+            stderr: std::str::from_utf8(&install_output.stderr)
                 .expect("UTF-8 error parsing cmake stderr")
                 .to_string(),
         });

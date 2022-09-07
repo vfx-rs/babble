@@ -1,9 +1,15 @@
 use bbl_clang::ty::TypeKind;
 use bbl_extract::{ast::AST, class::ClassBindKind, function::Method, index_map::IndexMapKey};
-use bbl_translate::{CFunction, CFunctionSource, CQualType, CStruct, CTypeRef, CTypedef, CAST, CArgument};
+use bbl_translate::{
+    cfunction::{CArgument, CFunction, CFunctionSource},
+    cstruct::CStruct,
+    ctype::{CQualType, CTypeRef},
+    ctypedef::CTypedef,
+    CAST,
+};
 
-pub mod error;
 pub mod cmake;
+pub mod error;
 use error::{ArgumentError, Error, FunctionGenerationError, TypeError};
 
 use std::fmt::Write;
@@ -15,8 +21,9 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 /// # Returns
 /// A tuple containing two [`String`]s, the first of which is the header source, the second is the implementation source
 pub fn gen_c(module_name: &str, ast: &AST, c_ast: &CAST) -> Result<(String, String)> {
-    let mut header = format!("#ifndef __{}_H__\n", module_name.to_uppercase());
-    header = format!("{header}#define __{}_H__\n\n", module_name.to_uppercase());
+    let module_name_upper = module_name.to_uppercase().replace("-", "_");
+    let mut header = format!("#ifndef __{}_H__\n", module_name_upper);
+    header = format!("{header}#define __{}_H__\n\n", module_name_upper);
     header = format!("{header}#ifdef __cplusplus\nextern \"C\" {{\n#endif\n\n");
 
     let mut source = c_ast
@@ -25,7 +32,7 @@ pub fn gen_c(module_name: &str, ast: &AST, c_ast: &CAST) -> Result<(String, Stri
         .map(|i| i.get_statement())
         .collect::<Vec<_>>()
         .join("\n");
-    
+
     writeln!(&mut source, "\n\n#include <utility>")?;
     writeln!(&mut source, "#include <exception>\n")?;
 
@@ -79,10 +86,7 @@ pub fn gen_c(module_name: &str, ast: &AST, c_ast: &CAST) -> Result<(String, Stri
 
     header = format!("{header}\n#ifdef __cplusplus\n}}\n#endif\n\n");
 
-    header = format!(
-        "{header}\n#endif /* ifdef __{}_H__ */\n",
-        module_name.to_uppercase()
-    );
+    header = format!("{header}\n#endif /* ifdef __{}_H__ */\n", module_name_upper);
 
     Ok((header, source))
 }
@@ -224,12 +228,13 @@ fn gen_cpp_call(fun: &CFunction, ast: &AST) -> Result<String, TypeError> {
             let class = &ast.classes()[class_id];
             let method: &Method = &class.methods()[method_id.get()];
 
-            let qname = class.get_qualified_name(ast).map_err(|e| {
-                TypeError::FailedToGetQualifiedName {
-                    name: class.name().to_string(),
-                    source: e,
-                }
-            })?;
+            let qname =
+                class
+                    .get_qualified_name(ast)
+                    .map_err(|e| TypeError::FailedToGetQualifiedName {
+                        name: class.name().to_string(),
+                        source: e,
+                    })?;
 
             if method.is_static() {
                 Ok(qname)
@@ -295,15 +300,18 @@ fn gen_function_definition(
             .unwrap_or_else(|| "".to_string());
 
         // Append the call to the cpp function
-        write!(&mut body,
-            "{indent}*({cast}{}) = std::move(\n{indent2}{}", result.name,
+        write!(
+            &mut body,
+            "{indent}*({cast}{}) = std::move(\n{indent2}{}",
+            result.name,
             gen_cpp_call(fun, ast).map_err(FunctionGenerationError::FailedToGenerateCall)?
         )?;
 
         true
     } else {
-        write!(&mut body,
-            "{indent}{}", 
+        write!(
+            &mut body,
+            "{indent}{}",
             gen_cpp_call(fun, ast).map_err(FunctionGenerationError::FailedToGenerateCall)?
         )?;
 
@@ -311,27 +319,34 @@ fn gen_function_definition(
     };
 
     // Get all the arguments for the call
-    let arguments: Vec<&CArgument> = fun.arguments.iter().filter(|a| !(a.is_result || a.is_self) ).collect();
+    let arguments: Vec<&CArgument> = fun
+        .arguments
+        .iter()
+        .filter(|a| !(a.is_result || a.is_self))
+        .collect();
 
-    let arg_str =
-        if arguments.is_empty() {
-            "();".to_string()
-        } else {
-            let mut args = Vec::new();
-            for arg in arguments {
-                match generate_arg_pass(&arg.name, &arg.qual_type, ast, c_ast) {
-                    Ok(s) => args.push(format!("{indent3}{s}")),
-                    Err(source) => {
-                        return Err(FunctionGenerationError::FailedToGenerateArg {
-                            name: arg.name.to_string(),
-                            source,
-                        })
-                    }
+    let arg_str = if arguments.is_empty() {
+        "();".to_string()
+    } else {
+        let mut args = Vec::new();
+        for arg in arguments {
+            match generate_arg_pass(&arg.name, &arg.qual_type, ast, c_ast) {
+                Ok(s) => args.push(format!("{indent3}{s}")),
+                Err(source) => {
+                    return Err(FunctionGenerationError::FailedToGenerateArg {
+                        name: arg.name.to_string(),
+                        source,
+                    })
                 }
             }
+        }
 
-            format!("(\n{}\n{indent2})\n{indent}{};", args.join(",\n"), if result_is_moved { ")" } else { "" })
-        };
+        format!(
+            "(\n{}\n{indent2})\n{indent}{};",
+            args.join(",\n"),
+            if result_is_moved { ")" } else { "" }
+        )
+    };
 
     writeln!(&mut body, "{arg_str}")?;
     writeln!(&mut body, "\n{indent}return 0;")?;
@@ -453,5 +468,4 @@ fn generate_opaqueptr_declaration(st: &CStruct) -> Result<String> {
     } else {
         Ok("".to_string())
     }
-
 }

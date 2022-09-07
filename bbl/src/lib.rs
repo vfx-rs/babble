@@ -80,6 +80,8 @@ pub enum Error {
     Clang(#[from] bbl_clang::error::Error),
     #[error("Error extracting AST")]
     Extract(#[from] bbl_extract::error::Error),
+    #[error("Error translating AST")]
+    Translate(#[from] bbl_translate::error::Error),
     #[error("Error writing project")]
     Write(#[from] bbl_write::error::Error),
 }

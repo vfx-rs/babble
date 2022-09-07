@@ -357,6 +357,7 @@ fn extract_template_args(
     Ok(template_args)
 }
 
+#[derive(Debug)]
 pub struct ClassTemplateSpecialization {
     pub(crate) specialized_decl: USR,
     pub(crate) usr: USR,
@@ -440,6 +441,7 @@ impl ClassTemplateSpecialization {
     }
 }
 
+#[derive(Debug)]
 pub struct FunctionTemplateSpecialization {
     pub(crate) specialized_decl: USR,
     pub(crate) usr: USR,

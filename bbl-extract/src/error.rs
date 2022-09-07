@@ -21,16 +21,6 @@ pub enum Error {
     TypeAliasNotFound(USR),
     #[error("Could not find a class or namespace with USR \"{0}\" in AST")]
     ClassOrNamespaceNotFound(USR),
-    #[error("Could not translate function \"{name}\"")]
-    TranslateFunction {
-        name: String,
-        source: TranslateArgumentError,
-    },
-    #[error("Could not translate field \"{name}\"")]
-    TranslateField {
-        name: String,
-        source: TranslateTypeError,
-    },
     #[error("Failed to get the template reference from \"{0}\"")]
     FailedToGetTemplateRefFrom(String),
     #[error("Failed to get the type from \"{0}\"")]
@@ -86,30 +76,4 @@ pub enum ExtractClassError {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum TranslateArgumentError {
-    #[error("Failed to translate type \"{name}\"")]
-    FailedToTranslateType {
-        name: String,
-        source: Box<dyn std::error::Error + 'static + Send + Sync>,
-    },
-    #[error("Failed to get class from ref \"{0}\"")]
-    FailedToGetClassFromRef(USR),
-}
-
-#[derive(Debug)]
-pub enum TranslateTypeError {
-    TemplateParmNotFound(String),
-    TemplateArgNotFound(String),
-    InvalidTemplateArgumentKind(String),
-}
-
-impl std::error::Error for TranslateTypeError {}
-
-impl std::fmt::Display for TranslateTypeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
 }

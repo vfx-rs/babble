@@ -14,6 +14,7 @@ use crate::error::{self, ExtractClassError};
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::index_map::IndexMapKey;
 use crate::qualtype::extract_type;
+use crate::stdlib::create_std_string;
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
 use crate::{function::Method, qualtype::QualType};
 use bbl_clang::cursor_kind::CursorKind;
@@ -430,15 +431,7 @@ pub fn extract_class_decl(
 
     if class_template.display_name().starts_with("basic_string<") {
         debug!("Extracting basic_string {}", class_template.usr());
-        return Ok(ClassDecl::new(
-            class_template.usr(),
-            class_template.spelling(),
-            Vec::new(),
-            Vec::new(),
-            namespaces,
-            vec![TemplateParameterDecl::typ("_CharT", 0)],
-            false,
-        ));
+        return Ok(create_std_string(class_template, namespaces));
     }
 
     let mut methods = Vec::new();
