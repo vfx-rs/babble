@@ -22,7 +22,7 @@ use bbl_clang::cursor_kind::CursorKind;
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum ClassBindKind {
     OpaquePtr,
     OpaqueBytes,

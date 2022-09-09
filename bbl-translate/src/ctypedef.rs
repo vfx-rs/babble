@@ -10,9 +10,9 @@ use tracing::instrument;
 use crate::{
     build_namespace_prefix,
     cfunction::{translate_function, CFunction, CFunctionId},
-    cstruct::{translate_class, CStruct, CStructId},
+    cstruct::{CStruct, CStructId, translate_class_template},
     error::Error,
-    get_c_names,
+    get_c_names, ctype::TypeReplacements,
 };
 
 #[instrument(level = "trace", skip(ast, functions, used_names))]
@@ -29,6 +29,8 @@ pub fn translate_function_template_specialization(
         .ok_or_else(|| Error::FunctionNotFound(fts.specialized_decl().to_string()))?;
     let function = &ast.functions()[function_id];
 
+    let type_replacements = TypeReplacements::default();
+
     translate_function(
         ast,
         function_id,
@@ -36,6 +38,7 @@ pub fn translate_function_template_specialization(
         functions,
         used_names,
         fts.template_arguments(),
+        &type_replacements,
     )?;
 
     Ok(())
@@ -57,19 +60,15 @@ pub fn translate_class_template_specialization(
         .ok_or_else(|| Error::ClassNotFound(cts.specialized_decl().as_str().to_string()))?;
     let class = &ast.classes()[class_id];
 
-    translate_class(
-        ast,
-        class_id,
-        class,
-        cts.template_arguments(),
-        structs,
-        functions,
-        used_names,
-    )?;
-
     let (ns_prefix_external, ns_prefix_internal) = build_namespace_prefix(ast, cts.namespaces())?;
 
     // get unique, prefixed names for the typedef
+    // TODO (AL): need to resolve this properly: we're currently storing the name of the typedef class template 
+    // specialization and then using this name when creating the monomorphizations of the class. This works well when
+    // other functions and types only refer to the CTS by its typedef name, but if they use the underlying class template
+    // name, we'll still have references to the underlying template instead of the typedef, and we'll need to patch those
+    // too.
+    /*
     let (td_c_name_external, td_c_name_internal) = get_c_names(
         cts.name(),
         &ns_prefix_external,
@@ -86,6 +85,18 @@ pub fn translate_class_template_specialization(
             typ: cts.specialized_decl(),
         },
     );
+    */
+
+    translate_class_template(
+        ast,
+        class_id,
+        class,
+        cts.template_arguments(),
+        structs,
+        functions,
+        used_names,
+        cts,
+    )?;
 
     Ok(())
 }

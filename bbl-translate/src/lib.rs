@@ -1,33 +1,29 @@
-pub mod ctype;
-pub mod cstruct;
 pub mod cfunction;
-pub mod error;
+pub mod cstruct;
+pub mod ctype;
 pub mod ctypedef;
+pub mod error;
 
 use bbl_clang::cursor::USR;
 use bbl_extract::ast::Include;
-use bbl_extract::index_map::{IndexMapKey, UstrIndexMap};
-use bbl_extract::type_alias::{ClassTemplateSpecialization, FunctionTemplateSpecialization};
-use cfunction::{CFunction, CFunctionSource, CFunctionId, translate_function, translate_method};
-use cstruct::{CStruct, CField, CStructId, translate_class};
-use ctypedef::{CTypedef, CTypedefId, translate_class_template_specialization, translate_function_template_specialization};
+use bbl_extract::index_map::UstrIndexMap;
+use cfunction::{translate_function, CFunction, CFunctionId};
+use cstruct::{translate_class, CStruct, CStructId};
+use ctype::TypeReplacements;
+use ctypedef::{
+    translate_class_template_specialization, translate_function_template_specialization, CTypedef,
+    CTypedefId,
+};
 use hashbrown::HashSet;
 
-use bbl_extract::class::MethodSpecializationId;
-
-use error::{Error};
+use error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-
 use bbl_extract::{
-    ast::{ClassId, FunctionId, MethodId, AST},
-    class::{ClassDecl},
-    template_argument::TemplateType,
+    ast::{ClassId, FunctionId, AST},
     type_alias::TypeAlias,
 };
-use tracing::{error, instrument, warn, info, debug};
-
-use crate::ctype::translate_qual_type;
+use tracing::{debug, warn};
 
 pub struct CAST {
     pub structs: UstrIndexMap<CStruct, CStructId>,
@@ -45,18 +41,26 @@ impl CAST {
         self.typedefs.get(&usr.into())
     }
 
-    pub fn pretty_print(&self, depth: usize) {
+    pub fn pretty_print(&self, depth: usize) -> Result<()> {
         for inc in self.includes.iter() {
             println!("{}", inc.get_statement());
         }
 
         for st in self.structs.iter() {
-            st.pretty_print(depth, self);
+            st.pretty_print(depth, self)
+                .map_err(|e| Error::FailedToFormatStruct {
+                    name: st.name_internal.clone(),
+                    source: Box::new(e),
+                })?;
         }
         println!();
 
         for fun in self.functions.iter() {
-            fun.pretty_print(depth, self);
+            fun.pretty_print(depth, self)
+                .map_err(|e| Error::FailedToFormatFunction {
+                    name: fun.name_private.clone(),
+                    source: Box::new(e),
+                })?;
         }
         println!();
 
@@ -65,6 +69,8 @@ impl CAST {
             self.structs.len(),
             self.functions.len()
         );
+
+        Ok(())
     }
 }
 
@@ -121,6 +127,8 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
 
     let mut used_names = HashSet::new();
 
+    let type_replacements = TypeReplacements::default();
+
     for (class_id, class) in ast.classes().iter().enumerate() {
         debug!("translating {class:?}");
         // if this is a template class, we'll ignore it and translate its specializations instead
@@ -143,6 +151,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
             &mut structs,
             &mut functions,
             &mut used_names,
+            &type_replacements,
         )?;
     }
 
@@ -186,6 +195,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
             &mut functions,
             &mut used_names,
             &[],
+            &type_replacements,
         )?;
     }
 

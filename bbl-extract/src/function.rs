@@ -301,14 +301,7 @@ impl Method {
     }
 
     pub fn is_any_constructor(&self) -> bool {
-        matches!(
-            self.kind,
-            MethodKind::Constructor
-                | MethodKind::ConvertingConstructor
-                | MethodKind::CopyConstructor
-                | MethodKind::DefaultConstructor
-                | MethodKind::MoveConstructor
-        )
+        self.kind.is_any_constructor()
     }
 
     pub fn is_copy_constructor(&self) -> bool {
@@ -474,6 +467,19 @@ pub enum MethodKind {
     Destructor,
     Method,
     StaticMethod,
+}
+
+impl MethodKind {
+    pub fn is_any_constructor(&self) -> bool {
+        matches!(
+            self,
+            MethodKind::Constructor
+                | MethodKind::ConvertingConstructor
+                | MethodKind::CopyConstructor
+                | MethodKind::DefaultConstructor
+                | MethodKind::MoveConstructor
+        )
+    }
 }
 
 pub struct MethodTemplateSpecialization {

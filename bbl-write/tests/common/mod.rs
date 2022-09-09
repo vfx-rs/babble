@@ -43,6 +43,23 @@ where
     })
 }
 
+pub(crate) fn run_with_logging<F>(closure: F) -> Result<(), Error>
+where
+    F: FnOnce() -> Result<(), Error>,
+{
+    init_log();
+    let res = closure();
+
+    res.map_err(|err| {
+        error!("{err}");
+        for e in source_iter(&err) {
+            error!("  because: {e}")
+        }
+
+        err
+    })
+}
+
 pub(crate) fn init_log() {
     use std::io::Write;
 

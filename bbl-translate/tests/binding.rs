@@ -496,10 +496,10 @@ public:
         ast.pretty_print(0);
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;
-        c_ast.pretty_print(0);
+        c_ast.pretty_print(0)?;
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 1);
+        assert_eq!(c_ast.functions.len(), 2);
 
         Ok(())
     };

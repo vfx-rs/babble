@@ -3,22 +3,25 @@ use std::fmt::Display;
 use bbl_clang::ty::TypeKind;
 use bbl_extract::{
     ast::{ClassId, FunctionId, MethodId, AST},
-    class::{ClassBindKind, MethodSpecializationId, ClassDecl},
-    function::{Argument, Function, Method},
+    class::{ClassBindKind, ClassDecl, MethodSpecializationId},
+    function::{Argument, Function, Method, MethodKind},
+    index_map::{IndexMapKey, UstrIndexMap},
     qualtype::{QualType, TypeRef},
-    template_argument::{TemplateParameterDecl, TemplateType}, index_map::{UstrIndexMap, IndexMapKey},
+    template_argument::{TemplateParameterDecl, TemplateType},
 };
 use hashbrown::HashSet;
 use tracing::{error, instrument, trace};
 
 use crate::{
-    ctype::{translate_qual_type, CQualType, CTypeRef},
-    get_c_names, CAST, build_namespace_prefix,
+    build_namespace_prefix,
+    ctype::{translate_qual_type, CQualType, CTypeRef, TypeReplacements},
+    get_c_names, CAST,
 };
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+#[derive(Debug)]
 pub struct CArgument {
     pub name: String,
     pub qual_type: CQualType,
@@ -33,12 +36,17 @@ impl Display for CArgument {
 }
 
 impl CArgument {
-    fn format(&self, ast: &CAST, use_public_names: bool) -> String {
-        format!(
+    fn format(&self, ast: &CAST, use_public_names: bool) -> Result<String> {
+        Ok(format!(
             "{}: {}",
             self.name,
-            self.qual_type.format(ast, use_public_names)
-        )
+            self.qual_type.format(ast, use_public_names).map_err(|e| {
+                Error::FailedToFormatArgument {
+                    name: self.name.clone(),
+                    source: Box::new(e),
+                }
+            })?
+        ))
     }
 }
 
@@ -51,6 +59,7 @@ pub enum CFunctionSource {
     SpecializedMethod((ClassId, MethodSpecializationId)),
 }
 
+#[derive(Debug)]
 pub struct CFunction {
     /// The name of the function with internal namespace baked in, e.g. Imath_3_1_V3f_dot
     pub name_private: String,
@@ -62,26 +71,94 @@ pub struct CFunction {
     pub arguments: Vec<CArgument>,
     /// Where this function came from
     pub source: CFunctionSource,
+    /// if the source function was a method, what kind of method was it?
+    pub method_kind: Option<MethodKind>,
     /// Is the cpp source of this function definitely not going to throw?
     pub is_noexcept: bool,
 }
 
 impl CFunction {
-    pub fn pretty_print(&self, _depth: usize, ast: &CAST) {
+    #[instrument(level = "trace", skip(ast))]
+    pub fn pretty_print(&self, _depth: usize, ast: &CAST) -> Result<()> {
         let args = self
             .arguments
             .iter()
             .map(|a| a.format(ast, false))
-            .collect::<Vec<String>>();
+            .collect::<Result<Vec<String>>>()?;
         let arg_str = args.join(", ");
 
         println!(
             "{}({arg_str}) -> {};",
             self.name_private,
-            self.result.format(ast, false)
+            self.result
+                .format(ast, false)
+                .map_err(|e| Error::FailedToFormatFunction {
+                    name: self.name_private.clone(),
+                    source: Box::new(e)
+                })?
         );
         if self.name_private != self.name_public {
             println!("#define {} {}", self.name_public, self.name_private);
+        }
+
+        Ok(())
+    }
+
+    /// Does this function have a return value?
+    pub fn has_return_value(&self) -> bool {
+        !self.arguments.is_empty() && self.arguments[0].is_result
+    }
+
+    pub fn return_value(&self) -> Option<&CArgument> {
+        if self.has_return_value() {
+            Some(&self.arguments[0])
+        } else {
+            None
+        }
+    }
+
+    /// Does this function represent a c++ constructor?
+    pub fn is_any_constructor(&self) -> bool {
+        if let Some(kind) = self.method_kind {
+            kind.is_any_constructor()
+        } else {
+            false
+        }
+    }
+
+    pub fn parent_class_is_opaqueptr(&self, ast: &AST) -> bool {
+        match self.source {
+            CFunctionSource::Function(_) => false,
+            CFunctionSource::Method((class_id, _)) => {
+                matches!(ast.classes()[class_id].bind_kind(), ClassBindKind::OpaquePtr)
+            }
+            CFunctionSource::SpecializedMethod((class_id, _)) => {
+                matches!(ast.classes()[class_id].bind_kind(), ClassBindKind::OpaquePtr)
+            }
+        }
+    }
+
+    pub fn parent_class_is_opaquebytes(&self, ast: &AST) -> bool {
+        match self.source {
+            CFunctionSource::Function(_) => false,
+            CFunctionSource::Method((class_id, _)) => {
+                matches!(ast.classes()[class_id].bind_kind(), ClassBindKind::OpaqueBytes)
+            }
+            CFunctionSource::SpecializedMethod((class_id, _)) => {
+                matches!(ast.classes()[class_id].bind_kind(), ClassBindKind::OpaqueBytes)
+            }
+        }
+    }
+
+    pub fn parent_class_is_valuetype(&self, ast: &AST) -> bool {
+        match self.source {
+            CFunctionSource::Function(_) => false,
+            CFunctionSource::Method((class_id, _)) => {
+                matches!(ast.classes()[class_id].bind_kind(), ClassBindKind::ValueType)
+            }
+            CFunctionSource::SpecializedMethod((class_id, _)) => {
+                matches!(ast.classes()[class_id].bind_kind(), ClassBindKind::ValueType)
+            }
         }
     }
 }
@@ -93,18 +170,25 @@ pub fn translate_arguments(
     template_args: &[Option<TemplateType>],
     used_argument_names: &mut HashSet<String>,
     ast: &AST,
+    type_replacements: &TypeReplacements,
 ) -> Result<Vec<CArgument>, Error> {
+    trace!("Translating arguments {:?}", arguments);
     let mut result = Vec::new();
 
     for arg in arguments {
-        let mut qual_type = translate_qual_type(arg.qual_type(), template_parms, template_args)
-            .map_err(|e| {
-                error!("Error translating argument {}: {e}", arg.name());
-                Error::FailedToTranslateType {
-                    name: arg.name().to_string(),
-                    source: Box::new(e),
-                }
-            })?;
+        let mut qual_type = translate_qual_type(
+            arg.qual_type(),
+            template_parms,
+            template_args,
+            type_replacements,
+        )
+        .map_err(|e| {
+            error!("Error translating argument {}: {e}", arg.name());
+            Error::FailedToTranslateType {
+                name: arg.name().to_string(),
+                source: Box::new(e),
+            }
+        })?;
 
         trace!(
             "Translated qual_type {:?} as {:?}",
@@ -168,8 +252,10 @@ pub fn translate_function(
     functions: &mut UstrIndexMap<CFunction, CFunctionId>,
     used_names: &mut HashSet<String>,
     template_args: &[Option<TemplateType>],
+    type_replacements: &TypeReplacements,
 ) -> Result<()> {
     // build the namespace prefix
+    trace!("Translating function {:?}", function);
     let (ns_prefix_public, ns_prefix_private) = build_namespace_prefix(ast, function.namespaces())?;
 
     let source = CFunctionSource::Function(function_id);
@@ -177,6 +263,7 @@ pub fn translate_function(
         function.result(),
         function.template_parameters(),
         template_args,
+        type_replacements,
     )
     .map_err(|e| Error::TranslateFunction {
         name: function.name().to_string(),
@@ -194,6 +281,7 @@ pub fn translate_function(
         template_args,
         &mut used_argument_names,
         ast,
+        type_replacements,
     )
     .map_err(|e| Error::TranslateFunction {
         name: function.name().to_string(),
@@ -249,6 +337,7 @@ pub fn translate_function(
             },
             arguments,
             source,
+            method_kind: None,
             is_noexcept: false,
         },
     );
@@ -269,7 +358,9 @@ pub fn translate_method(
     st_c_name_private: &str,
     used_names: &mut HashSet<String>,
     ast: &AST,
+    type_replacements: &TypeReplacements,
 ) -> Result<CFunction> {
+    trace!("translate method {class:?} {method:?} with replacements {type_replacements:?}");
     // Concatenate both the class template parameters and any template parameters on the function
     let template_parms = method
         .template_parameters()
@@ -278,16 +369,20 @@ pub fn translate_method(
         .chain(class_template_parms.iter().cloned())
         .collect::<Vec<_>>();
 
-    let result =
-        translate_qual_type(method.result(), &template_parms, template_args).map_err(|e| {
-            Error::TranslateFunction {
-                name: format!("{}::{}", class.name(), method.name()),
-                source: Box::new(Error::FailedToTranslateType {
-                    name: "[return]".into(),
-                    source: Box::new(e),
-                }),
-            }
-        })?;
+    let result = translate_qual_type(
+        method.result(),
+        &template_parms,
+        template_args,
+        type_replacements,
+    )
+    .map_err(|e| Error::TranslateFunction {
+        name: format!("{}::{}", class.name(), method.name()),
+        source: Box::new(Error::FailedToTranslateType {
+            name: "[return]".into(),
+            source: Box::new(e),
+        }),
+    })?;
+    println!("method {} result is {result:?}", method.name());
 
     let mut used_argument_names = HashSet::new();
 
@@ -297,6 +392,7 @@ pub fn translate_method(
         template_args,
         &mut used_argument_names,
         ast,
+        type_replacements,
     )
     .map_err(|e| Error::TranslateFunction {
         name: format!("{}::{}", class.name(), method.name()),
@@ -304,14 +400,14 @@ pub fn translate_method(
     })?;
 
     // insert self pointer
-    if !method.is_static() {
+    if !method.is_static()  && !method.is_any_constructor() {
         let qt = CQualType {
             name: format!("{}*", st_c_name_private),
             is_const: false,
             type_ref: CTypeRef::Pointer(Box::new(CQualType {
                 name: st_c_name_private.into(),
                 is_const: method.is_const(),
-                type_ref: CTypeRef::Ref(class.usr()),
+                type_ref: CTypeRef::Ref(type_replacements.replace(class.usr())),
                 cpp_type_ref: TypeRef::Ref(class.usr()),
                 needs_deref: false,
                 needs_move: false,
@@ -341,23 +437,65 @@ pub fn translate_method(
     // status
     if !matches!(result.type_ref, CTypeRef::Builtin(TypeKind::Void)) {
         let result_name = get_unique_argument_name("result", &mut used_argument_names);
-        arguments.insert(
-            0,
-            CArgument {
-                name: result_name.clone(),
-                qual_type: CQualType {
-                    name: format!("{result_name}*"),
-                    cpp_type_ref: result.cpp_type_ref().clone(),
-                    type_ref: CTypeRef::Pointer(Box::new(result)),
-                    is_const: false,
-                    needs_alloc: false,
-                    needs_deref: false,
-                    needs_move: false,
-                },
-                is_self: false,
-                is_result: true,
-            },
-        );
+
+        match class.bind_kind() {
+            ClassBindKind::ValueType => {
+                arguments.insert(
+                    0,
+                    CArgument {
+                        name: result_name.clone(),
+                        qual_type: CQualType {
+                            name: format!("{result_name}*"),
+                            cpp_type_ref: result.cpp_type_ref().clone(),
+                            type_ref: CTypeRef::Pointer(Box::new(result)),
+                            is_const: false,
+                            needs_alloc: false,
+                            needs_deref: false,
+                            needs_move: false,
+                        },
+                        is_self: false,
+                        is_result: true,
+                    },
+                );
+            }
+            ClassBindKind::OpaquePtr => {
+                // in the case of an opaque type, we can't pass a pointer to a value in to initialize, because we don't
+                // have a value, so it must be a pointer to a pointer
+                let cpp_type_ref = result.cpp_type_ref().clone();
+
+                let inner_pointer = CQualType {
+                            name: format!("{result_name}*"),
+                            cpp_type_ref: cpp_type_ref.clone(),
+                            type_ref: CTypeRef::Pointer(Box::new(result)),
+                            is_const: false,
+                            needs_alloc: false,
+                            needs_deref: false,
+                            needs_move: false,
+                        };
+
+                let outer_pointer = CQualType {
+                            name: format!("{result_name}**"),
+                            cpp_type_ref, // TODO (AL): do we need to put an actual type here?
+                            type_ref: CTypeRef::Pointer(Box::new(inner_pointer)),
+                            is_const: false,
+                            needs_alloc: false,
+                            needs_deref: false,
+                            needs_move: false,
+                        };
+
+                arguments.insert(
+                    0,
+                    CArgument {
+                        name: result_name,
+                        qual_type: outer_pointer,
+                        is_self: false,
+                        is_result: true,
+                    },
+                );
+            }
+            _ => todo!("Handle opaque bytes")
+        }
+
     }
 
     let fn_name = if let Some(name) = method.replacement_name() {
@@ -375,6 +513,7 @@ pub fn translate_method(
         result: CQualType::int("[result]", false),
         arguments,
         source,
+        method_kind: Some(method.kind()),
         is_noexcept: false,
     })
 }

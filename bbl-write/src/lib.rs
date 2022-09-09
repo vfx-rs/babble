@@ -11,6 +11,8 @@ use bbl_translate::{
 pub mod cmake;
 pub mod error;
 use error::{ArgumentError, Error, FunctionGenerationError, TypeError};
+use opentelemetry::sdk::instrumentation;
+use tracing::{debug, instrument, trace};
 
 use std::fmt::Write;
 
@@ -20,6 +22,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 ///
 /// # Returns
 /// A tuple containing two [`String`]s, the first of which is the header source, the second is the implementation source
+#[instrument(level = "trace", skip(ast, c_ast))]
 pub fn gen_c(module_name: &str, ast: &AST, c_ast: &CAST) -> Result<(String, String)> {
     let module_name_upper = module_name.to_uppercase().replace("-", "_");
     let mut header = format!("#ifndef __{}_H__\n", module_name_upper);
@@ -56,10 +59,10 @@ pub fn gen_c(module_name: &str, ast: &AST, c_ast: &CAST) -> Result<(String, Stri
 
     // Generate typedefs
     header = format!("{header}/* Typedefs */\n");
-    for td in c_ast.typedefs.iter() {
-        let decl = generate_typedef(td, c_ast)?;
-        header = format!("{header}{decl}\n")
-    }
+    // for td in c_ast.typedefs.iter() {
+    //     let decl = generate_typedef(td, c_ast)?;
+    //     header = format!("{header}{decl}\n")
+    // }
 
     writeln!(&mut header)?;
 
@@ -69,14 +72,14 @@ pub fn gen_c(module_name: &str, ast: &AST, c_ast: &CAST) -> Result<(String, Stri
         let decl = gen_function_declaration(fun, c_ast).map_err(|source| {
             Error::FailedToGenerateFunction {
                 name: fun.name_private.clone(),
-                source,
+                source: Box::new(source),
             }
         })?;
 
         let defn = gen_function_definition(fun, ast, c_ast).map_err(|source| {
             Error::FailedToGenerateFunction {
                 name: fun.name_private.clone(),
-                source,
+                source: Box::new(source),
             }
         })?;
 
@@ -92,14 +95,15 @@ pub fn gen_c(module_name: &str, ast: &AST, c_ast: &CAST) -> Result<(String, Stri
 }
 
 /// Generate the signature for this function
+#[instrument(level = "trace", skip(c_ast))]
 fn gen_function_signature(
     fun: &CFunction,
     c_ast: &CAST,
     use_public_names: bool,
-) -> Result<String, TypeError> {
+) -> Result<String, Error> {
     let result = format!(
         "{} {}",
-        gen_c_type(&fun.result, c_ast, use_public_names),
+        gen_c_type(&fun.result, c_ast, use_public_names)?,
         fun.name_private
     );
 
@@ -109,7 +113,7 @@ fn gen_function_signature(
         .map(|a| {
             format!(
                 "{} {}",
-                gen_c_type(&a.qual_type, c_ast, use_public_names),
+                gen_c_type(&a.qual_type, c_ast, use_public_names).unwrap(),
                 a.name
             )
         })
@@ -121,14 +125,14 @@ fn gen_function_signature(
 /// Generate the declaration of this function
 ///
 /// This is both the function signature and the #define to give it a public name
-fn gen_function_declaration(
-    fun: &CFunction,
-    c_ast: &CAST,
-) -> Result<String, FunctionGenerationError> {
+#[instrument(level = "trace", skip(c_ast))]
+fn gen_function_declaration(fun: &CFunction, c_ast: &CAST) -> Result<String, Error> {
     let mut result = format!(
         "{};\n",
-        gen_function_signature(fun, c_ast, true)
-            .map_err(FunctionGenerationError::FailedToGenerateSignature)?
+        gen_function_signature(fun, c_ast, true).map_err(|e| Error::FailedToGenerateSignature {
+            name: fun.name_private.clone(),
+            source: Box::new(e)
+        })?
     );
 
     if fun.name_private != fun.name_public {
@@ -142,6 +146,7 @@ fn gen_function_declaration(
 }
 
 /// Generate the cast expression for converting the c type to its cpp counterpart
+#[instrument(level = "trace", skip(ast, c_ast))]
 fn gen_cast(qual_type: &CQualType, ast: &AST, c_ast: &CAST) -> Result<Option<String>, TypeError> {
     match qual_type.type_ref() {
         CTypeRef::Builtin(_) => Ok(None),
@@ -183,6 +188,7 @@ fn gen_cast(qual_type: &CQualType, ast: &AST, c_ast: &CAST) -> Result<Option<Str
 /// NS::Class*   -> (NS::Class*)arg
 /// NS::Class&   -> *(NS::Class*)arg
 /// NS::Class*&  -> *(NS::Class**)arg
+#[instrument(level = "trace", skip(ast, c_ast))]
 fn generate_arg_pass(
     arg_name: &str,
     qual_type: &CQualType,
@@ -213,6 +219,7 @@ fn generate_arg_pass(
 }
 
 /// Generate the cpp function call expression, including casting all arguments
+#[instrument(level = "trace", skip(ast))]
 fn gen_cpp_call(fun: &CFunction, ast: &AST) -> Result<String, TypeError> {
     match fun.source {
         CFunctionSource::Function(cpp_fun_id) => {
@@ -225,6 +232,8 @@ fn gen_cpp_call(fun: &CFunction, ast: &AST) -> Result<String, TypeError> {
             })?)
         }
         CFunctionSource::Method((class_id, method_id)) => {
+            // TODO(AL): if this is a class template specialiation, we need to use the specialized name here in order to
+            // get the typedef name rather then the underlying name
             let class = &ast.classes()[class_id];
             let method: &Method = &class.methods()[method_id.get()];
 
@@ -238,6 +247,14 @@ fn gen_cpp_call(fun: &CFunction, ast: &AST) -> Result<String, TypeError> {
 
             if method.is_static() {
                 Ok(qname)
+            } else if method.is_any_constructor() {
+                match class.bind_kind() {
+                    ClassBindKind::ValueType => Ok(qname),
+                    ClassBindKind::OpaquePtr => Ok(format!("new {qname}")),
+                    ClassBindKind::OpaqueBytes => {
+                        todo!("Handle opaque bytes")
+                    }
+                }
             } else {
                 Ok(format!("(({}*)self)->{}", qname, method.name()))
             }
@@ -266,15 +283,16 @@ fn gen_cpp_call(fun: &CFunction, ast: &AST) -> Result<String, TypeError> {
 /// Generate the definition of this function
 ///
 /// This means calling its cpp counterpart and generating all necessary casting
-fn gen_function_definition(
-    fun: &CFunction,
-    ast: &AST,
-    c_ast: &CAST,
-) -> Result<String, FunctionGenerationError> {
+#[instrument(level = "trace", skip(ast, c_ast))]
+fn gen_function_definition(fun: &CFunction, ast: &AST, c_ast: &CAST) -> Result<String, Error> {
     let mut body = format!(
         "{} {{\n",
-        gen_function_signature(fun, c_ast, false)
-            .map_err(FunctionGenerationError::FailedToGenerateSignature)?
+        gen_function_signature(fun, c_ast, false).map_err(|e| {
+            Error::FailedToGenerateSignature {
+                name: fun.name_private.clone(),
+                source: Box::new(e),
+            }
+        })?
     );
     // TODO (AL): clean up this nastiness
     let mut indent = "    ";
@@ -288,13 +306,12 @@ fn gen_function_definition(
         indent3 = "                ";
     }
 
-    let result_is_moved = if !fun.arguments.is_empty() && fun.arguments[0].is_result {
-        let result = &fun.arguments[0];
+    let result_is_moved = if let Some(result) = fun.return_value() {
         // Get the cast expression to cast the cpp return type to c
         let cast = gen_cast(&result.qual_type, ast, c_ast)
-            .map_err(|e| FunctionGenerationError::FailedToGenerateArg {
+            .map_err(|e| Error::FailedToGenerateArgument {
                 name: result.name.clone(),
-                source: ArgumentError::TypeError(e),
+                source: Box::new(e),
             })?
             .map(|s| format!("({s})"))
             .unwrap_or_else(|| "".to_string());
@@ -304,7 +321,10 @@ fn gen_function_definition(
             &mut body,
             "{indent}*({cast}{}) = std::move(\n{indent2}{}",
             result.name,
-            gen_cpp_call(fun, ast).map_err(FunctionGenerationError::FailedToGenerateCall)?
+            gen_cpp_call(fun, ast).map_err(|e| Error::FailedToGenerateCall {
+                name: fun.name_private.clone(),
+                source: Box::new(e)
+            })?
         )?;
 
         true
@@ -312,44 +332,25 @@ fn gen_function_definition(
         write!(
             &mut body,
             "{indent}{}",
-            gen_cpp_call(fun, ast).map_err(FunctionGenerationError::FailedToGenerateCall)?
+            gen_cpp_call(fun, ast).map_err(|e| Error::FailedToGenerateCall {
+                name: fun.name_private.clone(),
+                source: Box::new(e)
+            })?
         )?;
 
         false
     };
 
+    debug!("{} moved: {}", fun.name_private, result_is_moved);
+
     // Get all the arguments for the call
-    let arguments: Vec<&CArgument> = fun
-        .arguments
-        .iter()
-        .filter(|a| !(a.is_result || a.is_self))
-        .collect();
+    gen_call_arguments(&mut body, fun, ast, c_ast)?;
 
-    let arg_str = if arguments.is_empty() {
-        "();".to_string()
-    } else {
-        let mut args = Vec::new();
-        for arg in arguments {
-            match generate_arg_pass(&arg.name, &arg.qual_type, ast, c_ast) {
-                Ok(s) => args.push(format!("{indent3}{s}")),
-                Err(source) => {
-                    return Err(FunctionGenerationError::FailedToGenerateArg {
-                        name: arg.name.to_string(),
-                        source,
-                    })
-                }
-            }
-        }
-
-        format!(
-            "(\n{}\n{indent2})\n{indent}{};",
-            args.join(",\n"),
-            if result_is_moved { ")" } else { "" }
-        )
-    };
-
-    writeln!(&mut body, "{arg_str}")?;
-    writeln!(&mut body, "\n{indent}return 0;")?;
+    writeln!(
+        &mut body,
+        "{indent}{};\n{indent}return 0;",
+        if result_is_moved { ")" } else { "" }
+    )?;
 
     if !fun.is_noexcept {
         indent = "    ";
@@ -364,9 +365,44 @@ fn gen_function_definition(
     Ok(body)
 }
 
+/// Create the call arguments string
+fn gen_call_arguments(body: &mut String, fun: &CFunction, ast: &AST, c_ast: &CAST) -> Result<()> {
+    let indent = "        ";
+    let indent2 = "            ";
+    let indent3 = "                ";
+
+    let arguments: Vec<&CArgument> = fun
+        .arguments
+        .iter()
+        .filter(|a| !(a.is_result || a.is_self))
+        .collect();
+
+    if arguments.is_empty() {
+        writeln!(body, "()")?;
+    } else {
+        let mut args = Vec::new();
+        for arg in arguments {
+            match generate_arg_pass(&arg.name, &arg.qual_type, ast, c_ast) {
+                Ok(s) => args.push(format!("{indent3}{s}")),
+                Err(source) => {
+                    return Err(Error::FailedToGenerateArgument {
+                        name: arg.name.to_string(),
+                        source: Box::new(source),
+                    })
+                }
+            }
+        }
+
+        writeln!(body, "(\n{}\n{indent2})\n", args.join(",\n"),)?;
+    };
+
+    Ok(())
+}
+
 /// Generate the spelling for this C type
-fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> String {
-    match qt.type_ref() {
+#[instrument(level = "trace", skip(c_ast))]
+fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<String> {
+    Ok(match qt.type_ref() {
         CTypeRef::Builtin(tk) => match tk {
             TypeKind::Bool => "bool".to_string(),
             TypeKind::Char_S => "char".to_string(),
@@ -384,7 +420,7 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> String {
             TypeKind::ULongLong => "unsigned long long".to_string(),
             TypeKind::UShort => "unsigned short".to_string(),
             TypeKind::Void => "void".to_string(),
-            _ => qt.format(c_ast, use_public_names),
+            _ => qt.format(c_ast, use_public_names)?,
         },
         CTypeRef::Ref(usr) => {
             // first check to see if there's a direct class reference
@@ -397,16 +433,18 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> String {
                 unimplemented!("no struct or typedef")
             }
         }
-        _ => qt.format(c_ast, use_public_names),
-    }
+        _ => qt.format(c_ast, use_public_names)?,
+    })
 }
 
 /// Generate a forwad declaration for this struct
+#[instrument(level = "trace", skip(c_ast))]
 fn generate_struct_forward_declaration(st: &CStruct, c_ast: &CAST) -> Result<String> {
     Ok(format!("typedef struct {0} {0};", st.name_internal))
 }
 
 /// Generate the declaration of this struct
+#[instrument(level = "trace", skip(c_ast))]
 fn generate_struct_declaration(st: &CStruct, c_ast: &CAST) -> Result<String> {
     match &st.bind_kind {
         ClassBindKind::OpaquePtr => generate_opaqueptr_declaration(st),
@@ -415,6 +453,7 @@ fn generate_struct_declaration(st: &CStruct, c_ast: &CAST) -> Result<String> {
     }
 }
 
+#[instrument(level = "trace", skip(c_ast))]
 fn generate_typedef(td: &CTypedef, c_ast: &CAST) -> Result<String> {
     Ok(format!(
         "typedef {} {};",
@@ -432,6 +471,7 @@ fn generate_typedef(td: &CTypedef, c_ast: &CAST) -> Result<String> {
 /// Generate the declaration for a valuetype struct
 ///
 /// This means generating all fields
+#[instrument(level = "trace", skip(c_ast))]
 fn generate_valuetype_declaration(st: &CStruct, c_ast: &CAST) -> Result<String> {
     let ind = "    ";
     let mut result = format!("struct {} {{\n", st.name_internal);
@@ -439,7 +479,7 @@ fn generate_valuetype_declaration(st: &CStruct, c_ast: &CAST) -> Result<String> 
     for field in &st.fields {
         result = format!(
             "{result}{ind}{} {};\n",
-            gen_c_type(field.qual_type(), c_ast, true),
+            gen_c_type(field.qual_type(), c_ast, true)?,
             field.name()
         );
     }
@@ -459,6 +499,7 @@ fn generate_valuetype_declaration(st: &CStruct, c_ast: &CAST) -> Result<String> 
 /// Generate the declaration for an opaqueptr struct
 ///
 /// This is basically just a forward declaration since the type is only ever represented by a pointer to it
+#[instrument(level = "trace")]
 fn generate_opaqueptr_declaration(st: &CStruct) -> Result<String> {
     if st.name_external != st.name_internal {
         Ok(format!(

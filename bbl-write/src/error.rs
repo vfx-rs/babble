@@ -11,10 +11,25 @@ pub enum Error {
     #[error("Failed to generate function \"{name}\"")]
     FailedToGenerateFunction {
         name: String,
-        source: FunctionGenerationError,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
     #[error("Failed to generate typedef \"{name}\"")]
     FailedToGenerateTypedef {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    #[error("Failed to generate function signature \"{name}\"")]
+    FailedToGenerateSignature {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    #[error("Failed to generate function call \"{name}\"")]
+    FailedToGenerateCall {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    #[error("Failed to generate function argument \"{name}\"")]
+    FailedToGenerateArgument {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },

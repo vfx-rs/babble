@@ -1,10 +1,17 @@
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    ops::{Deref, DerefMut},
+};
 
-use bbl_clang::{ty::TypeKind, cursor::USR};
-use bbl_extract::{qualtype::{TypeRef, QualType}, template_argument::{TemplateParameterDecl, TemplateType}};
-use tracing::{instrument, error};
+use bbl_clang::{cursor::USR, ty::TypeKind};
+use bbl_extract::{
+    qualtype::{QualType, TypeRef},
+    template_argument::{TemplateParameterDecl, TemplateType},
+};
+use tracing::{error, instrument, trace};
 
-use crate::error::TranslateTypeError;
+use crate::error::{Error, TranslateTypeError};
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 use crate::CAST;
 
@@ -68,29 +75,27 @@ impl CQualType {
         }
     }
 
-    pub fn format(&self, ast: &CAST, use_public_names: bool) -> String {
+    #[instrument(level = "trace", skip(ast))]
+    pub fn format(&self, ast: &CAST, use_public_names: bool) -> Result<String> {
         let const_ = if self.is_const { " const" } else { "" };
 
         match &self.type_ref {
-            CTypeRef::Builtin(tk) => {
-                format!("{}{const_}", tk.spelling())
-            }
-            CTypeRef::Pointer(pointee) => {
-                format!("{}*{const_}", pointee.format(ast, use_public_names))
-            }
+            CTypeRef::Builtin(tk) => Ok(format!("{}{const_}", tk.spelling())),
+            CTypeRef::Pointer(pointee) => Ok(format!(
+                "{}*{const_}",
+                pointee.format(ast, use_public_names)?
+            )),
             CTypeRef::Ref(usr) => {
                 if let Some(st) = ast.get_struct(*usr) {
-                    st.format(use_public_names)
+                    Ok(st.format(use_public_names))
                 } else if let Some(td) = ast.get_typedef(*usr) {
                     // no struct with this USR, see if there's a typedef instead
-                    format!("{}{const_}", td.name_external)
+                    Ok(format!("{}{const_}", td.name_external))
                 } else {
-                    unimplemented!("no struct or typedef")
+                    Err(Error::RefNotFound(*usr))
                 }
             }
-            CTypeRef::Unknown(tk) => {
-                format!("UNKNOWN({}){const_}", tk.spelling())
-            }
+            CTypeRef::Unknown(tk) => Ok(format!("UNKNOWN({}){const_}", tk.spelling())),
         }
     }
 
@@ -103,6 +108,26 @@ impl CQualType {
             needs_alloc: false,
             needs_deref: false,
             needs_move: false,
+        }
+    }
+
+    pub fn pointer(
+        name: &str,
+        cpp_type_ref: TypeRef,
+        c_qual_type: CQualType,
+        is_const: bool,
+        needs_deref: bool,
+        needs_move: bool,
+        needs_alloc: bool,
+    ) -> CQualType {
+        CQualType {
+            name: name.to_string(),
+            is_const,
+            type_ref: CTypeRef::Pointer(Box::new(c_qual_type)),
+            cpp_type_ref,
+            needs_deref,
+            needs_move,
+            needs_alloc,
         }
     }
 }
@@ -128,11 +153,43 @@ impl Display for CQualType {
     }
 }
 
-#[instrument(level="trace")]
+#[derive(Debug, Default)]
+pub struct TypeReplacements {
+    replacements: Vec<(USR, USR)>,
+}
+
+impl Deref for TypeReplacements {
+    type Target = Vec<(USR, USR)>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.replacements
+    }
+}
+
+impl DerefMut for TypeReplacements {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.replacements
+    }
+}
+
+impl TypeReplacements {
+    pub fn replace(&self, usr: USR) -> USR {
+        for tup in &self.replacements {
+            if tup.0 == usr {
+                return tup.1;
+            }
+        }
+
+        usr
+    }
+}
+
+#[instrument(level = "trace")]
 pub fn translate_qual_type(
     qual_type: &QualType,
     template_parms: &[TemplateParameterDecl],
     template_args: &[Option<TemplateType>],
+    type_replacements: &TypeReplacements,
 ) -> Result<CQualType, TranslateTypeError> {
     match &qual_type.type_ref {
         TypeRef::Builtin(tk) => Ok(CQualType {
@@ -151,6 +208,7 @@ pub fn translate_qual_type(
                 qt.as_ref(),
                 template_parms,
                 template_args,
+                type_replacements,
             )?)),
             cpp_type_ref: qual_type.type_ref.clone(),
             needs_deref: false,
@@ -164,6 +222,7 @@ pub fn translate_qual_type(
                 qt.as_ref(),
                 template_parms,
                 template_args,
+                type_replacements,
             )?)),
             cpp_type_ref: qual_type.type_ref.clone(),
             needs_deref: true,
@@ -177,6 +236,7 @@ pub fn translate_qual_type(
                 qt.as_ref(),
                 template_parms,
                 template_args,
+                type_replacements,
             )?)),
             cpp_type_ref: qual_type.type_ref.clone(),
             needs_deref: false,
@@ -186,7 +246,7 @@ pub fn translate_qual_type(
         TypeRef::Ref(usr) => Ok(CQualType {
             name: qual_type.name.clone(),
             is_const: qual_type.is_const,
-            type_ref: CTypeRef::Ref(*usr),
+            type_ref: CTypeRef::Ref(type_replacements.replace(*usr)),
             cpp_type_ref: qual_type.type_ref.clone(),
             needs_deref: false,
             needs_move: false,
@@ -204,7 +264,7 @@ pub fn translate_qual_type(
             } else {
                 match &template_args[parm_index] {
                     Some(TemplateType::Type(tty)) => {
-                        translate_qual_type(tty, template_parms, template_args)
+                        translate_qual_type(tty, template_parms, template_args, type_replacements)
                     }
                     Some(TemplateType::Integer(_n)) => {
                         todo!()

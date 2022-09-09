@@ -27,6 +27,16 @@ pub enum Error {
     ClassNotFound(String),
     #[error("Could not find function \"{0}\"")]
     FunctionNotFound(String),
+    #[error("Could not find a struct or typedef for \"{0}\"")]
+    RefNotFound(USR),
+    #[error("Failed to format field \"{name}\"")]
+    FailedToFormatField{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    #[error("Failed to format struct \"{name}\"")]
+    FailedToFormatStruct{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    #[error("Failed to format function \"{name}\"")]
+    FailedToFormatFunction{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    #[error("Failed to format argument \"{name}\"")]
+    FailedToFormatArgument{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
 }
 
 #[derive(Debug, thiserror::Error)]

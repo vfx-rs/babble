@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use bbl_clang::{cli_args, cli_args_with, virtual_file::write_temp_cmake_project};
 use bbl_extract::{class::ClassBindKind, parse_file_and_extract_ast, parse_string_and_extract_ast};
 use bbl_translate::translate_cpp_ast_to_c;
-use common::run_with_telemetry;
+use common::{run_with_telemetry, run_with_logging};
 use tracing::span;
 use tracing_subscriber::Registry;
 
@@ -36,7 +36,7 @@ public:
     ast.rename_namespace(ns, "Test");
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0);
+    c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 1);
     assert_eq!(c_ast.functions.len(), 2);
@@ -75,7 +75,7 @@ public:
     // ast.class_set_bind_kind(class, ClassBindKind::ValueType)?;
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0);
+    c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 1);
     assert_eq!(c_ast.functions.len(), 0);
@@ -113,7 +113,7 @@ void fun(Class c);
     ast.rename_namespace(ns, "Test");
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0);
+    c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 1);
     assert_eq!(c_ast.functions.len(), 1);
@@ -149,7 +149,7 @@ void fun(Class c);
     ast.rename_namespace(ns, "Test");
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0);
+    c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 1);
     assert_eq!(c_ast.functions.len(), 1);
@@ -188,7 +188,7 @@ public:
     ast.rename_namespace(ns, "Test");
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0);
+    c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 2);
     assert_eq!(c_ast.functions.len(), 0);
@@ -232,7 +232,7 @@ public:
     ast.class_set_bind_kind(class, ClassBindKind::ValueType)?;
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0);
+    c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 2);
     assert_eq!(c_ast.functions.len(), 1);
@@ -281,7 +281,7 @@ public:
     let c_ast = translate_cpp_ast_to_c(&ast)?;
     println!("ast has {} includes", ast.includes().len());
     println!("cast has {} includes", c_ast.includes.len());
-    c_ast.pretty_print(0);
+    c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 2);
     assert_eq!(c_ast.functions.len(), 1);
@@ -294,7 +294,7 @@ public:
 
 #[test]
 fn write_take_std_string() -> Result<(), Error> {
-    run_with_telemetry(|| {
+    run_with_logging(|| {
         let mut ast = parse_string_and_extract_ast(
             r#"
     #include <string>
@@ -317,10 +317,10 @@ fn write_take_std_string() -> Result<(), Error> {
         ast.rename_namespace(ns, "Test");
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;
-        c_ast.pretty_print(0);
+        c_ast.pretty_print(0)?;
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 1);
+        assert_eq!(c_ast.functions.len(), 2);
 
         let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
@@ -363,10 +363,10 @@ fn build_take_std_string() -> Result<(), Error> {
         ast.rename_namespace(ns, "Test");
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;
-        c_ast.pretty_print(0);
+        c_ast.pretty_print(0)?;
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 1);
+        assert_eq!(c_ast.functions.len(), 2);
 
         let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
