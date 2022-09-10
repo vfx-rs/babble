@@ -2,6 +2,7 @@
 #![allow(non_snake_case)]
 
 use bbl_clang::access_specifier::AccessSpecifier;
+use bbl_clang::cli_args;
 use bbl_clang::cursor::{Cursor, USR};
 use bbl_clang::translation_unit::TranslationUnit;
 use log::*;
@@ -13,6 +14,7 @@ use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAlia
 use crate::error::{self, ExtractClassError};
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::index_map::IndexMapKey;
+use crate::parse_string_and_extract_ast;
 use crate::qualtype::extract_type;
 use crate::stdlib::create_std_string;
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
@@ -440,6 +442,7 @@ pub fn extract_class_decl(
 
     let members = class_template.children();
     let mut index = 0;
+    let mut has_private_fields = false;
     for member in members {
         debug!("member {:?}", member);
         if let Ok(access) = member.cxx_access_specifier() {
@@ -521,6 +524,8 @@ pub fn extract_class_decl(
                                 }
                             })?;
                         fields.push(field);
+                    } else {
+                        has_private_fields = true;
                     }
                 } else {
                     error!(
@@ -563,9 +568,11 @@ pub fn extract_class_decl(
     let name = class_template.spelling();
 
     // If this is a template decl we won't be able to get a type from it so just set POD to false
+    // Note that we have a slightly different definition of POD from cpp: we do not consider records with private fields
+    // to be POD as they're not correctly representable in C.
     let is_pod = if template_parameters.is_empty() {
         match class_template.ty() {
-            Ok(ty) => ty.is_pod(),
+            Ok(ty) => ty.is_pod() && !has_private_fields,
             Err(e) => {
                 error!("Could not get type from {class_template:?}");
                 false
@@ -670,4 +677,85 @@ pub(crate) fn specialize_template_parameter(
     }
 
     decl.default_name()
+}
+
+#[test]
+fn extract_pod() -> Result<(), Error> {
+    // test that a POD extracts as a valuetype
+    let ast = parse_string_and_extract_ast(
+        r#"
+class Class {
+public:
+    int a;
+    float b;
+};
+}
+        "#,
+        &cli_args()?,
+        true,
+        None,
+    )?;
+
+    ast.pretty_print(0);
+
+    let class_id = ast.find_class("Class")?;
+    let class = &ast.classes()[class_id];
+    assert!(matches!(class.bind_kind(), ClassBindKind::ValueType));
+
+    Ok(())
+}
+
+#[test]
+fn extract_non_pod() -> Result<(), Error> {
+    // test that adding a private field to a POD forces opaqueptr
+    let ast = parse_string_and_extract_ast(
+        r#"
+class Class {
+    int a;
+public:
+    float b;
+};
+}
+    
+        "#,
+        &cli_args()?,
+        true,
+        None,
+    )?;
+
+    ast.pretty_print(0);
+
+    let class_id = ast.find_class("Class")?;
+    let class = &ast.classes()[class_id];
+    assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
+
+    Ok(())
+}
+
+
+#[test]
+fn extract_non_pod2() -> Result<(), Error> {
+    // test that adding a constructor forces non-pod
+    let ast = parse_string_and_extract_ast(
+        r#"
+class Class {
+public:
+    Class();
+    float b;
+};
+}
+    
+        "#,
+        &cli_args()?,
+        true,
+        None,
+    )?;
+
+    ast.pretty_print(0);
+
+    let class_id = ast.find_class("Class")?;
+    let class = &ast.classes()[class_id];
+    assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
+
+    Ok(())
 }

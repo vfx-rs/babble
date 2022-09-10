@@ -6,7 +6,7 @@
 namespace Test_1_0 {
 
 class Class {
-    int a;
+    // int a;
 public:
     // Class(){}
 
