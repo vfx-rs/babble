@@ -439,6 +439,11 @@ impl ClassTemplateSpecialization {
         let class = ast.get_class(self.specialized_decl).unwrap();
         class.format(ast, Some(self.template_arguments()))
     }
+
+    pub fn get_qualified_name(&self, ast: &AST) -> Result<String> {
+        get_qualified_name(self.name(), &self.namespaces, ast)
+    }
+
 }
 
 #[derive(Debug)]

@@ -168,6 +168,8 @@ pub fn translate_class(
     let st_prefix_public = format!("{}_", st_c_name_public);
     let st_prefix_private = format!("{}_", st_c_name_private);
 
+    let qname = class.get_qualified_name(ast)?;
+
     // translate the class's methods to functions
     for (method_id, method) in class.methods().iter().enumerate() {
         if method.is_templated() {
@@ -188,6 +190,7 @@ pub fn translate_class(
             template_args,
             CFunctionSource::Method((class_id, MethodId::new(method_id))),
             method,
+            &qname,
             &st_prefix_public,
             &st_prefix_private,
             &st_c_name_private,
@@ -217,6 +220,7 @@ pub fn translate_class(
             &combined_template_args,
             source,
             method,
+            &qname,
             &st_prefix_public,
             &st_prefix_private,
             &st_c_name_private,
@@ -302,6 +306,8 @@ pub fn translate_class_template(
     let st_prefix_public = format!("{}_", st_c_name_public);
     let st_prefix_private = format!("{}_", st_c_name_private);
 
+    let qname = cts.get_qualified_name(ast)?;
+
     // translate the class's methods to functions
     for (method_id, method) in class.methods().iter().enumerate() {
         if method.is_templated() {
@@ -322,6 +328,7 @@ pub fn translate_class_template(
             cts.template_arguments(),
             CFunctionSource::Method((class_id, MethodId::new(method_id))),
             method,
+            &qname,
             &st_prefix_public,
             &st_prefix_private,
             &st_c_name_private,
@@ -352,6 +359,7 @@ pub fn translate_class_template(
             &combined_template_args,
             source,
             method,
+            &qname,
             &st_prefix_public,
             &st_prefix_private,
             &st_c_name_private,

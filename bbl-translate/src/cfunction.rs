@@ -59,6 +59,17 @@ pub enum CFunctionSource {
     SpecializedMethod((ClassId, MethodSpecializationId)),
 }
 
+/// Cached information we'll want to know about the method when writing the C function.
+/// 
+/// We cache this on translation to save doing a whole bunch of AST lookup stuff, and also so that specialized class
+/// templates can override the qualified name for the class, i.e. so that when we call back to cpp when writing we can
+/// easily call std::string::foo() rather than std::__cxx11::basic_string<char>::foo().
+#[derive(Debug)]
+pub struct MethodInfo {
+    pub kind: MethodKind,
+    pub class_qname: String,
+}
+
 #[derive(Debug)]
 pub struct CFunction {
     /// The name of the function with internal namespace baked in, e.g. Imath_3_1_V3f_dot
@@ -72,8 +83,8 @@ pub struct CFunction {
     /// Where this function came from
     pub source: CFunctionSource,
     /// if the source function was a method, what kind of method was it?
-    pub method_kind: Option<MethodKind>,
-    /// Is the cpp source of this function definitely not going to throw?
+    pub method_info: Option<MethodInfo>,
+    /// Is the cpp source of this function absolutely definitely not going to throw?
     pub is_noexcept: bool,
 }
 
@@ -119,8 +130,8 @@ impl CFunction {
 
     /// Does this function represent a c++ constructor?
     pub fn is_any_constructor(&self) -> bool {
-        if let Some(kind) = self.method_kind {
-            kind.is_any_constructor()
+        if let Some(info) = &self.method_info {
+            info.kind.is_any_constructor()
         } else {
             false
         }
@@ -337,7 +348,7 @@ pub fn translate_function(
             },
             arguments,
             source,
-            method_kind: None,
+            method_info: None,
             is_noexcept: false,
         },
     );
@@ -353,6 +364,7 @@ pub fn translate_method(
     template_args: &[Option<TemplateType>],
     source: CFunctionSource,
     method: &Method,
+    class_qname: &str,
     st_prefix_public: &str,
     st_prefix_private: &str,
     st_c_name_private: &str,
@@ -513,7 +525,10 @@ pub fn translate_method(
         result: CQualType::int("[result]", false),
         arguments,
         source,
-        method_kind: Some(method.kind()),
+        method_info: Some(MethodInfo {
+            kind: method.kind(),
+            class_qname: class_qname.to_string(),
+        }),
         is_noexcept: false,
     })
 }

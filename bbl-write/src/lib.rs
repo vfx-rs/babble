@@ -237,13 +237,11 @@ fn gen_cpp_call(fun: &CFunction, ast: &AST) -> Result<String, TypeError> {
             let class = &ast.classes()[class_id];
             let method: &Method = &class.methods()[method_id.get()];
 
-            let qname =
-                class
-                    .get_qualified_name(ast)
-                    .map_err(|e| TypeError::FailedToGetQualifiedName {
-                        name: class.name().to_string(),
-                        source: e,
-                    })?;
+            let qname = fun
+                .method_info
+                .as_ref()
+                .map(|info| info.class_qname.clone())
+                .unwrap(); // safe to unwrap here because we only ever populate method_info for methods
 
             if method.is_static() {
                 Ok(qname)
@@ -340,8 +338,6 @@ fn gen_function_definition(fun: &CFunction, ast: &AST, c_ast: &CAST) -> Result<S
 
         false
     };
-
-    debug!("{} moved: {}", fun.name_private, result_is_moved);
 
     // Get all the arguments for the call
     gen_call_arguments(&mut body, fun, ast, c_ast)?;
