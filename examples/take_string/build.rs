@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use anyhow::Result;
 
 pub fn main() -> Result<()> {
-    /*
     let cmake_prefix_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent().unwrap()
         .parent().unwrap()
@@ -36,7 +35,6 @@ pub fn main() -> Result<()> {
 
     // Now bind the AST, which will write, compile and link a shim library, and create the rust ffi binding
     bind("take_string", "/tmp", &ast, &options)?;
-    */
 
     Ok(())
 }

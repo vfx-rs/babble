@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use bbl_clang::{cli_args_with, virtual_file::write_temp_cmake_project};
 use bbl_extract::parse_file_and_extract_ast;
-use bbl_write::{cmake::build_project, gen_c};
+use bbl_write::{cmake::build_project, gen_c::gen_c};
 
 pub use bbl_extract::ast::AST;
 pub use bbl_translate::translate_cpp_ast_to_c;

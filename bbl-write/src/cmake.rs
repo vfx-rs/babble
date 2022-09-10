@@ -5,7 +5,7 @@ use bbl_extract::ast::AST;
 use bbl_translate::CAST;
 
 use crate::error::Error;
-use crate::gen_c;
+use crate::gen_c::gen_c;
 
 use std::fmt::Write;
 

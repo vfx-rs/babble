@@ -1,13 +1,14 @@
 use bbl_write::error::Error;
 use env_logger::fmt::Color;
 use log::Level;
-use tracing::{error, span};
-use tracing_subscriber::Registry;
 
-pub(crate) fn run_with_telemetry<F>(closure: F) -> Result<(), Error>
+#[cfg(feature="telemetry")]
+pub(crate) fn run_test<F>(closure: F) -> Result<(), Error>
 where
     F: FnOnce() -> Result<(), Error>,
 {
+    use tracing::{error, span};
+    use tracing_subscriber::Registry;
     use opentelemetry::global;
     use tracing_subscriber::layer::SubscriberExt;
 
@@ -43,10 +44,13 @@ where
     })
 }
 
-pub(crate) fn run_with_logging<F>(closure: F) -> Result<(), Error>
+#[cfg(not(feature="telemetry"))]
+pub(crate) fn run_test<F>(closure: F) -> Result<(), Error>
 where
     F: FnOnce() -> Result<(), Error>,
 {
+    use tracing::error;
+
     init_log();
     let res = closure();
 

@@ -82,7 +82,7 @@ pub struct CFunction {
     pub arguments: Vec<CArgument>,
     /// Where this function came from
     pub source: CFunctionSource,
-    /// if the source function was a method, what kind of method was it?
+    /// Information about the method we'll want in the writing part later
     pub method_info: Option<MethodInfo>,
     /// Is the cpp source of this function absolutely definitely not going to throw?
     pub is_noexcept: bool,
@@ -120,6 +120,7 @@ impl CFunction {
         !self.arguments.is_empty() && self.arguments[0].is_result
     }
 
+    /// Get the function's return value, if it has one
     pub fn return_value(&self) -> Option<&CArgument> {
         if self.has_return_value() {
             Some(&self.arguments[0])
@@ -137,6 +138,8 @@ impl CFunction {
         }
     }
 
+    /// Returns true if this function represents a cpp method and the class it is a member of is bound as opaqueptr, 
+    /// false otherwise
     pub fn parent_class_is_opaqueptr(&self, ast: &AST) -> bool {
         match self.source {
             CFunctionSource::Function(_) => false,
@@ -149,6 +152,8 @@ impl CFunction {
         }
     }
 
+    /// Returns true if this function represents a cpp method and the class it is a member of is bound as opaquebytes, 
+    /// false otherwise
     pub fn parent_class_is_opaquebytes(&self, ast: &AST) -> bool {
         match self.source {
             CFunctionSource::Function(_) => false,
@@ -161,6 +166,8 @@ impl CFunction {
         }
     }
 
+    /// Returns true if this function represents a cpp method and the class it is a member of is bound as valuetype, 
+    /// false otherwise
     pub fn parent_class_is_valuetype(&self, ast: &AST) -> bool {
         match self.source {
             CFunctionSource::Function(_) => false,

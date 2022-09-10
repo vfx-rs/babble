@@ -5,11 +5,9 @@ use std::path::PathBuf;
 use bbl_clang::{cli_args, cli_args_with, virtual_file::write_temp_cmake_project};
 use bbl_extract::{class::ClassBindKind, parse_file_and_extract_ast, parse_string_and_extract_ast};
 use bbl_translate::translate_cpp_ast_to_c;
-use common::{run_with_telemetry, run_with_logging};
-use tracing::span;
-use tracing_subscriber::Registry;
+use common::{run_test};
 
-use bbl_write::{cmake::build_project, error::Error, gen_c};
+use bbl_write::{cmake::build_project, error::Error, gen_c::gen_c};
 
 use crate::common::init_log;
 
@@ -294,7 +292,7 @@ public:
 
 #[test]
 fn write_take_std_string() -> Result<(), Error> {
-    run_with_logging(|| {
+    run_test(|| {
         let mut ast = parse_string_and_extract_ast(
             r#"
     #include <string>
@@ -331,7 +329,7 @@ fn write_take_std_string() -> Result<(), Error> {
 
 #[test]
 fn build_take_std_string() -> Result<(), Error> {
-    run_with_telemetry(|| {
+    run_test(|| {
         let contents = "#include <take_string.hpp>\n";
 
         let cmake_prefix_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -393,8 +391,11 @@ fn fun_a(arg: &str) {
     fun_b("blah blah blah");
 }
 
+#[cfg(feature="telemetry")]
 #[test]
 fn test_tracing() {
+    use tracing::span;
+    use tracing_subscriber::Registry;
     use opentelemetry::global;
     use tracing_subscriber::layer::SubscriberExt;
 
