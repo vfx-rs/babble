@@ -6,8 +6,8 @@ use bbl_clang::cli_args;
 use bbl_clang::cursor::{Cursor, USR};
 use bbl_clang::translation_unit::TranslationUnit;
 use log::*;
-use tracing::instrument;
 use std::fmt::Display;
+use tracing::instrument;
 use ustr::Ustr;
 
 use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST};
@@ -46,6 +46,74 @@ impl From<MethodSpecializationId> for usize {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MethodState {
+    Defined,
+    Undefined,
+    Defaulted,
+    Deleted,
+}
+
+impl MethodState {
+    pub fn is_defined(&self) -> bool {
+        matches!(self, MethodState::Defined)
+    }
+
+    pub fn is_undefined(&self) -> bool {
+        matches!(self, MethodState::Undefined)
+    }
+
+    pub fn is_defaulted(&self) -> bool {
+        matches!(self, MethodState::Defaulted)
+    }
+
+    pub fn is_deleted(&self) -> bool {
+        matches!(self, MethodState::Deleted)
+    }
+}
+
+impl Default for MethodState {
+    fn default() -> Self {
+        MethodState::Undefined
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct RuleOfFive {
+    pub(crate) ctor: MethodState,
+    pub(crate) copy_ctor: MethodState,
+    pub(crate) move_ctor: MethodState,
+    pub(crate) copy_assign: MethodState,
+    pub(crate) move_assign: MethodState,
+    pub(crate) dtor: MethodState,
+}
+
+// TODO(AL): the rules here are complex and version-dependent. Will need to try and add to libclang here to have clang 
+// decide for us
+impl RuleOfFive {
+    pub fn needs_implicit_ctor(&self) -> bool {
+        self.ctor.is_undefined()
+    }
+
+    pub fn needs_implicit_copy_ctor(&self) -> bool {
+        self.copy_ctor.is_undefined()
+            && !self.move_ctor.is_defined()
+            && !self.move_assign.is_defined()
+    }
+
+    pub fn needs_implicit_move_ctor(&self) -> bool {
+        self.move_ctor.is_undefined()
+            && !self.copy_ctor.is_defined()
+            && !self.copy_assign.is_defined()
+            && !self.move_assign.is_defined()
+            && !self.dtor.is_defined()
+    }
+
+    pub fn needs_implicit_dtor(&self) -> bool {
+        self.dtor.is_undefined()
+    }
+}
+
 pub struct ClassDecl {
     pub(crate) usr: USR,
     pub(crate) name: String,
@@ -61,6 +129,8 @@ pub struct ClassDecl {
     pub(crate) bind_kind: ClassBindKind,
     pub(crate) specialized_methods: Vec<MethodTemplateSpecialization>,
     pub(crate) is_pod: bool,
+
+    pub(crate) rule_of_five: RuleOfFive,
 }
 
 impl ClassDecl {
@@ -72,6 +142,7 @@ impl ClassDecl {
         namespaces: Vec<USR>,
         template_parameters: Vec<TemplateParameterDecl>,
         is_pod: bool,
+        rule_of_five: RuleOfFive,
     ) -> ClassDecl {
         ClassDecl {
             usr,
@@ -90,6 +161,7 @@ impl ClassDecl {
             },
             specialized_methods: Vec::new(),
             is_pod,
+            rule_of_five,
         }
     }
 
@@ -135,6 +207,10 @@ impl ClassDecl {
 
     pub fn bind_kind(&self) -> &ClassBindKind {
         &self.bind_kind
+    }
+
+    pub fn rule_of_five(&self) -> &RuleOfFive {
+        &self.rule_of_five
     }
 
     /// Set the [`ClassBindKind`] of this class, which affects how it is represented in C.
@@ -412,7 +488,7 @@ impl std::fmt::Debug for ClassDecl {
     }
 }
 
-#[instrument(skip(depth, tu, namespaces, ast, already_visited), level="trace")]
+#[instrument(skip(depth, tu, namespaces, ast, already_visited), level = "trace")]
 pub fn extract_class_decl(
     class_template: Cursor,
     depth: usize,
@@ -423,7 +499,7 @@ pub fn extract_class_decl(
 ) -> Result<ClassDecl> {
     let indent = format!("{:width$}", "", width = depth * 2);
 
-    debug!(
+    trace!(
         "{indent}extract_class_decl({}) {}",
         class_template.usr(),
         class_template.display_name()
@@ -439,6 +515,7 @@ pub fn extract_class_decl(
     let mut methods = Vec::new();
     let mut fields = Vec::new();
     let mut template_parameters = Vec::new();
+    let mut rule_of_five = RuleOfFive::default();
 
     let members = class_template.children();
     let mut index = 0;
@@ -450,6 +527,7 @@ pub fn extract_class_decl(
                 continue;
             }
         } else {
+            // TODO(AL): return error here
             error!(
                 "Could not get access specifier from member {}",
                 member.display_name()
@@ -457,7 +535,8 @@ pub fn extract_class_decl(
         }
         match member.kind() {
             CursorKind::TemplateTypeParameter => {
-                // TODO: Doesn't seem to be a way to get a type default
+                // TODO(AL): Doesn't seem to be a way to get a type default - probably doesn't matter since we only need
+                // the types for including in cpp instantiations so they will be defaulted there anyway?
                 let name = member.display_name();
                 template_parameters.push(TemplateParameterDecl::Type { name, index });
                 index += 1;
@@ -505,6 +584,31 @@ pub fn extract_class_decl(
                             }
                         }
                     }
+
+                    // Get the state (defined, deleted, defaulted) of rule-of-five members so we can figure out which
+                    // ones we need to auto-generate later.
+                    // TODO(AL): need to trawl base classes here as well...
+                    match member.kind() {
+                        CursorKind::Constructor if member.cxx_constructor_is_copy_constructor() => {
+                            rule_of_five.copy_ctor = get_method_state(member)
+                        }
+                        CursorKind::Constructor if member.cxx_constructor_is_move_constructor() => {
+                            rule_of_five.move_ctor = get_method_state(member)
+                        }
+                        CursorKind::Constructor => {
+                            rule_of_five.ctor = get_method_state(member)
+                        }
+                        CursorKind::Destructor => {
+                            rule_of_five.dtor = get_method_state(member)
+                        }
+                        CursorKind::CXXMethod if member.cxx_method_is_copy_assignment_operator() => {
+                            rule_of_five.copy_assign = get_method_state(member)
+                        }
+                        CursorKind::CXXMethod if member.cxx_method_is_move_assignment_operator() => {
+                            rule_of_five.move_assign = get_method_state(member)
+                        }
+                        _ => (),
+                    }
                 } else {
                     error!(
                         "Could not get access specifier from member {}",
@@ -515,14 +619,21 @@ pub fn extract_class_decl(
             CursorKind::FieldDecl => {
                 if let Ok(access) = member.cxx_access_specifier() {
                     if access == AccessSpecifier::Public {
-                        let field =
-                            extract_field(member, depth, &template_parameters, already_visited, ast, tu).map_err(|e| {
-                                ExtractClassError::FailedToExtractField {
-                                    class: class_template.display_name(),
-                                    name: member.display_name(),
-                                    source: Box::new(e),
-                                }
-                            })?;
+                        let field = extract_field(
+                            member,
+                            depth,
+                            &template_parameters,
+                            already_visited,
+                            ast,
+                            tu,
+                        )
+                        .map_err(|e| {
+                            ExtractClassError::FailedToExtractField {
+                                class: class_template.display_name(),
+                                name: member.display_name(),
+                                source: Box::new(e),
+                            }
+                        })?;
                         fields.push(field);
                     } else {
                         has_private_fields = true;
@@ -592,7 +703,27 @@ pub fn extract_class_decl(
         namespaces,
         template_parameters,
         is_pod,
+        rule_of_five,
     ))
+}
+
+fn get_method_state(method: Cursor) -> MethodState {
+    if method.cxx_method_is_defaulted() {
+        MethodState::Defaulted
+    } else if method.cxx_method_is_deleted() {
+        MethodState::Deleted
+    } else {
+        MethodState::Defined
+    }
+}
+
+// TODO(AL): fix these once we've patched libclang
+fn method_is_copy_assignment_operator(method: Cursor, class: Cursor) -> bool {
+    false
+}
+
+fn method_is_move_assignment_operator(method: Cursor, class: Cursor) -> bool {
+    false
 }
 
 pub fn extract_field(
@@ -611,7 +742,14 @@ pub fn extract_field(
         .collect::<Vec<_>>();
 
     let ty = c_field.ty()?;
-    let qual_type = extract_type(ty, depth + 1, &template_parameters, already_visited, ast, tu)?;
+    let qual_type = extract_type(
+        ty,
+        depth + 1,
+        &template_parameters,
+        already_visited,
+        ast,
+        tu,
+    )?;
 
     Ok(Field {
         name: c_field.display_name(),
@@ -732,7 +870,6 @@ public:
     Ok(())
 }
 
-
 #[test]
 fn extract_non_pod2() -> Result<(), Error> {
     // test that adding a constructor forces non-pod
@@ -756,6 +893,64 @@ public:
     let class_id = ast.find_class("Class")?;
     let class = &ast.classes()[class_id];
     assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
+
+    Ok(())
+}
+
+#[test]
+fn extract_rof() -> Result<(), Error> {
+    // test that adding a constructor forces non-pod
+    let ast = parse_string_and_extract_ast(
+        r#"
+class NeedsImplicitAll {
+public:
+};
+
+class NeedsImplicitCopyCtor {
+public:
+    ~NeedsImplicitCopyCtor();
+};
+
+class NeedsImplicitNone {
+public:
+    NeedsImplicitNone();
+    NeedsImplicitNone(const NeedsImplicitNone&);
+    ~NeedsImplicitNone();
+};
+
+}
+    
+        "#,
+        &cli_args()?,
+        true,
+        None,
+    )?;
+
+    ast.pretty_print(0);
+
+    let class_id = ast.find_class("NeedsImplicitAll")?;
+    let class = &ast.classes()[class_id];
+    assert!(class.rule_of_five().needs_implicit_ctor());
+    assert!(class.rule_of_five().needs_implicit_copy_ctor());
+    assert!(class.rule_of_five().needs_implicit_move_ctor());
+    assert!(class.rule_of_five().needs_implicit_dtor());
+
+    let class_id = ast.find_class("NeedsImplicitCopyCtor")?;
+    let class = &ast.classes()[class_id];
+    assert!(class.rule_of_five().needs_implicit_ctor());
+    assert!(class.rule_of_five().needs_implicit_copy_ctor());
+    assert!(!class.rule_of_five().needs_implicit_move_ctor());
+    assert!(!class.rule_of_five().needs_implicit_dtor());
+
+    let class_id = ast.find_class("NeedsImplicitNone")?;
+    let class = &ast.classes()[class_id];
+    println!("{:?}", class.rule_of_five());
+    assert!(!class.rule_of_five().needs_implicit_ctor());
+    assert!(!class.rule_of_five().needs_implicit_copy_ctor());
+    assert!(!class.rule_of_five().needs_implicit_move_ctor());
+    assert!(!class.rule_of_five().needs_implicit_dtor());
+
+
 
     Ok(())
 }

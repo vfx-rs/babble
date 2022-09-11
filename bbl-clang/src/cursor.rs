@@ -267,12 +267,30 @@ impl Cursor {
         unsafe { clang_CXXMethod_isDefaulted(self.inner) != 0 }
     }
 
+    pub fn cxx_method_is_deleted(&self) -> bool {
+        // TODO(AL): implement this properly once we've patched libclang to implement this function
+        // unsafe { clang_CXXMethod_isDeleted(self.inner) != 0 }
+        false
+    }
+
     pub fn cxx_method_is_virtual(&self) -> bool {
         unsafe { clang_CXXMethod_isVirtual(self.inner) != 0 }
     }
 
     pub fn cxx_method_is_pure_virtual(&self) -> bool {
         unsafe { clang_CXXMethod_isPureVirtual(self.inner) != 0 }
+    }
+
+    pub fn cxx_method_is_copy_assignment_operator(&self) -> bool {
+        // TODO(AL): implement this properly once we've patched libclang to implement this function
+        // unsafe { clang_CXXMethod_isCopyAssignmentOperator(self.inner) != 0 }
+        false
+    }
+
+    pub fn cxx_method_is_move_assignment_operator(&self) -> bool {
+        // TODO(AL): implement this properly once we've patched libclang to implement this function
+        // unsafe { clang_CXXMethod_isMoveAssignmentOperator(self.inner) != 0 }
+        false
     }
 
     pub fn cxx_record_is_abstract(&self) -> bool {

@@ -379,7 +379,6 @@ pub fn translate_method(
     ast: &AST,
     type_replacements: &TypeReplacements,
 ) -> Result<CFunction> {
-    trace!("translate method {class:?} {method:?} with replacements {type_replacements:?}");
     // Concatenate both the class template parameters and any template parameters on the function
     let template_parms = method
         .template_parameters()
@@ -388,6 +387,7 @@ pub fn translate_method(
         .chain(class_template_parms.iter().cloned())
         .collect::<Vec<_>>();
 
+    // get the return type
     let result = translate_qual_type(
         method.result(),
         &template_parms,
@@ -401,7 +401,6 @@ pub fn translate_method(
             source: Box::new(e),
         }),
     })?;
-    println!("method {} result is {result:?}", method.name());
 
     let mut used_argument_names = HashSet::new();
 
@@ -418,44 +417,32 @@ pub fn translate_method(
         source: Box::new(e),
     })?;
 
-    // insert self pointer
-    if !method.is_static()  && !method.is_any_constructor() {
-        let qt = CQualType {
-            name: format!("{}*", st_c_name_private),
-            is_const: false,
-            type_ref: CTypeRef::Pointer(Box::new(CQualType {
-                name: st_c_name_private.into(),
-                is_const: method.is_const(),
-                type_ref: CTypeRef::Ref(type_replacements.replace(class.usr())),
-                cpp_type_ref: TypeRef::Ref(class.usr()),
-                needs_deref: false,
-                needs_move: false,
-                needs_alloc: false,
-            })),
-            cpp_type_ref: TypeRef::Pointer(Box::new(QualType {
-                name: class.name().to_string(),
-                is_const: method.is_const(),
-                type_ref: TypeRef::Ref(class.usr()),
-            })),
-            needs_deref: false,
-            needs_move: false,
-            needs_alloc: false,
-        };
-        arguments.insert(
-            0,
-            CArgument {
-                name: get_unique_argument_name("self", &mut used_argument_names),
-                qual_type: qt,
-                is_self: true,
-                is_result: false,
-            },
-        );
-    }
-
     // insert the result as the first argument, since we'll be forcing an int return type in order to return exception
-    // status
+    // status. Here we also do the necessary conversion to out pointers depending on the bind kind of the type in question
     if !matches!(result.type_ref, CTypeRef::Builtin(TypeKind::Void)) {
         let result_name = get_unique_argument_name("result", &mut used_argument_names);
+
+        // Rules
+        //
+        // - If the return type is a pointer:
+        //      o Add an extra pointer around it and tag the outer pointer as needing a deref
+        //        i.e. `*(Type**) result) = cpp()`
+        // 
+        // - If the return type is a reference:
+        //      o Add an extra pointer around the translated pointer. The outer pointer needs a deref and the inner
+        //        pointer needs the address of the cpp expression taken, 
+        //        i.e. `*((Type**) result) = &cpp()`
+        //
+        // - If the return type is a value and kind is valuetype
+        //      o Add an extra pointer and tag as deref and move
+        //        i.e. `*((Type*) result) = std::move(cpp())`
+        //
+        // - If the return type is a value and kind is opaqueptr and the method is NOT a constructor
+        //      o Add an extra pointer around it and tag as deref
+        //        i.e. `*((Type*) result) = std::move(cpp())`
+        //
+        // - If the return is a value and kind is opaqueptr and the method IS a constructor
+        //      o Add an extra pointer around it and tag as deref, insert new expression
 
         match class.bind_kind() {
             ClassBindKind::ValueType => {
@@ -515,6 +502,40 @@ pub fn translate_method(
             _ => todo!("Handle opaque bytes")
         }
 
+    }
+
+    // insert self pointer ahead of all the arguments
+    if !method.is_static()  && !method.is_any_constructor() {
+        let qt = CQualType {
+            name: format!("{}*", st_c_name_private),
+            is_const: false,
+            type_ref: CTypeRef::Pointer(Box::new(CQualType {
+                name: st_c_name_private.into(),
+                is_const: method.is_const(),
+                type_ref: CTypeRef::Ref(type_replacements.replace(class.usr())),
+                cpp_type_ref: TypeRef::Ref(class.usr()),
+                needs_deref: false,
+                needs_move: false,
+                needs_alloc: false,
+            })),
+            cpp_type_ref: TypeRef::Pointer(Box::new(QualType {
+                name: class.name().to_string(),
+                is_const: method.is_const(),
+                type_ref: TypeRef::Ref(class.usr()),
+            })),
+            needs_deref: false,
+            needs_move: false,
+            needs_alloc: false,
+        };
+        arguments.insert(
+            0,
+            CArgument {
+                name: get_unique_argument_name("self", &mut used_argument_names),
+                qual_type: qt,
+                is_self: true,
+                is_result: false,
+            },
+        );
     }
 
     let fn_name = if let Some(name) = method.replacement_name() {

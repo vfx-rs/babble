@@ -50,6 +50,10 @@ impl Argument {
     pub fn qual_type(&self) -> &QualType {
         &self.qual_type
     }
+
+    pub fn new(name: &str, qual_type: QualType) -> Argument {
+        Argument { name: name.to_string(), qual_type }
+    }
 }
 
 pub struct Function {
