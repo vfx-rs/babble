@@ -52,7 +52,10 @@ impl Argument {
     }
 
     pub fn new(name: &str, qual_type: QualType) -> Argument {
-        Argument { name: name.to_string(), qual_type }
+        Argument {
+            name: name.to_string(),
+            qual_type,
+        }
     }
 }
 
@@ -535,18 +538,30 @@ pub fn extract_argument(
     let ty = c_arg.ty()?;
     trace!("{:width$}  has type {ty:?}", "", width = depth * 2);
 
-    let qual_type = if ty.is_builtin() || ty.is_pointer() {
+    let qual_type = if ty.is_builtin() || ty.is_pointer() || ty.kind() == TypeKind::Elaborated {
         extract_type(ty, depth + 1, template_parameters, already_visited, ast, tu)?
     } else if !children.is_empty() {
-        match children[0].kind() {
-            CursorKind::TypeRef | CursorKind::TemplateRef => {
-                extract_type_from_typeref(children[0], depth + 1)?
-            }
-            _ => {
-                debug!("other kind {:?}", children[0].kind(),);
-                QualType::unknown(children[0].ty()?.kind())
+        // match children[0].kind() {
+        //     CursorKind::TypeRef | CursorKind::TemplateRef => {
+        //         extract_type_from_typeref(children[0], depth + 1)?
+        //     }
+        //     _ => {
+        //         debug!("other kind {:?}", children[0].kind(),);
+        //         QualType::unknown(children[0].ty()?.kind())
+        //     }
+        // }
+
+        let mut type_ref = None;
+        for child in children {
+            match child.kind() {
+                CursorKind::TypeRef | CursorKind::TemplateRef => {
+                    type_ref = Some(extract_type_from_typeref(child, depth + 1)?);
+                }
+                _ => (),
             }
         }
+
+        type_ref.ok_or_else(|| Error::FailedToGetTypeFrom(c_arg.display_name()))?
     } else {
         error!("coulnd't do argument type");
         QualType::unknown(children[0].ty()?.kind())
@@ -869,5 +884,68 @@ fn get_default_replacement_name(c_method: Cursor) -> Option<String> {
                 None
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bbl_clang::cli_args;
+
+    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast};
+
+    #[test]
+    fn extract_static_method() -> Result<(), Error> {
+        // test that a POD extracts as a valuetype
+        let ast = parse_string_and_extract_ast(
+            r#"
+class Class {
+public:
+    int a;
+    float b;
+
+    static float static_method(float b);
+};
+}
+        "#,
+            &cli_args()?,
+            true,
+            None,
+        )?;
+
+        ast.pretty_print(0);
+
+        let class_id = ast.find_class("Class")?;
+        let class = &ast.classes()[class_id];
+        assert!(matches!(class.bind_kind(), ClassBindKind::ValueType));
+
+        Ok(())
+    }
+
+    #[test]
+    fn extract_static_method_taking_class() -> Result<(), Error> {
+        // test that a POD extracts as a valuetype
+        let ast = parse_string_and_extract_ast(
+            r#"
+class Class {
+public:
+    int a;
+    float b;
+
+    static float static_method(Class c);
+};
+}
+        "#,
+            &cli_args()?,
+            true,
+            None,
+        )?;
+
+        ast.pretty_print(0);
+
+        let class_id = ast.find_class("Class")?;
+        let class = &ast.classes()[class_id];
+        assert!(matches!(class.bind_kind(), ClassBindKind::ValueType));
+
+        Ok(())
     }
 }

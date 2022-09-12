@@ -215,7 +215,7 @@ pub fn translate_arguments(
     let mut result = Vec::new();
 
     for arg in arguments {
-        let mut qual_type = translate_qual_type(
+        let qual_type = translate_qual_type(
             arg.qual_type(),
             template_parms,
             template_args,
@@ -234,36 +234,6 @@ pub fn translate_arguments(
             arg.qual_type(),
             qual_type
         );
-
-        // if the argument is a pass-by-value of a non-POD type we need to force it to be passed as a pointer and
-        // deref'd on the other side
-        // TODO: we'll need to move it if it's a non-copyable type
-        let do_pass_by_pointer = if let CTypeRef::Ref(usr) = &qual_type.type_ref {
-            let class = ast
-                .get_class(*usr)
-                .ok_or(Error::FailedToGetClassFromRef(*usr))?;
-
-            !matches!(class.bind_kind(), ClassBindKind::ValueType)
-        } else {
-            false
-        };
-
-        if do_pass_by_pointer {
-            let name = qual_type.name().to_string();
-            let is_const = qual_type.is_const();
-            let cpp_type_ref = qual_type.cpp_type_ref().clone();
-
-            qual_type = CQualType {
-                name,
-                is_const,
-                type_ref: CTypeRef::Pointer(Box::new(qual_type)),
-                cpp_type_ref,
-                needs_deref: true,
-                needs_move: false,
-                needs_alloc: false,
-            };
-        }
-        let qual_type = qual_type;
 
         // We need to create an argument name if none is specified in the header
         let name = if arg.name().is_empty() {

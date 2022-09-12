@@ -258,6 +258,11 @@ pub fn extract_type_from_typeref(c_tr: Cursor, depth: usize) -> Result<QualType>
                 is_const,
                 type_ref: TypeRef::TemplateTypeParameter(c_ref.spelling()),
             }),
+            CursorKind::TypedefDecl => Ok(QualType {
+                name: c_ref.spelling(),
+                is_const,
+                type_ref: TypeRef::Ref(c_ref.usr()),
+            }),
             _ => {
                 let loc = c_tr.location().spelling_location();
                 error!(
