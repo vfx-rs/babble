@@ -703,10 +703,113 @@ pub fn translate_method(
         );
 
         Some(result_expr)
-    // } else if method.is_any_constructor() {
-    //     // we need to add a return type.
-    //     // for value type this will just be an out pointer like a regular return
-    //     // for opaqueptr, it will be a pointer to a pointer, and we'll call new on the cpp side
+    } else if method.is_any_constructor() {
+        // we need to add a return type.
+        // for value type this will just be an out pointer like a regular return
+        // for opaqueptr, it will be a pointer to a pointer, and we'll call new on the cpp side
+        let result_name = get_unique_argument_name("result", &mut used_argument_names);
+
+        let usr = type_replacements.replace(class.usr());
+        let cpp_qt = QualType::type_ref(class.name(), false, usr);
+        let c_qt = CQualType {
+            name: st_c_name_private.to_string(),
+            type_ref: CTypeRef::Ref(usr),
+            cpp_type_ref: TypeRef::Ref(usr),
+            is_const: false,
+            needs_deref: false,
+            needs_move: false,
+            needs_alloc: false,
+        };
+
+        match class.bind_kind() {
+            ClassBindKind::ValueType => {
+                let result_qt = CQualType {
+                    name: format!("{}*", result.name()),
+                    cpp_type_ref: TypeRef::Pointer(Box::new(cpp_qt)),
+                    type_ref: CTypeRef::Pointer(Box::new(c_qt)),
+                    is_const: false,
+                    needs_alloc: false,
+                    needs_deref: false,
+                    needs_move: false,
+                };
+
+                let to_type = get_cpp_cast_expr(&result_qt, ast)?;
+                let result_expr = Expr::Deref {
+                    value: Box::new(Expr::Cast {
+                        to_type,
+                        value: Box::new(Expr::Token(result_name.clone())),
+                    }),
+                };
+
+                arguments.insert(
+                    0,
+                    CArgument {
+                        name: result_name,
+                        qual_type: result_qt,
+                        is_self: false,
+                        is_result: false,
+                    },
+                );
+
+                Some(Box::new(|call_expr| Expr::Assignment {
+                    left: Box::new(result_expr),
+                    right: Box::new(call_expr),
+                }) as Box<dyn FnOnce(Expr) -> Expr>)
+            }
+            ClassBindKind::OpaquePtr => {
+                let cpp_ptr = QualType {
+                    name: format!("{}*", result.name()),
+                    type_ref: TypeRef::Pointer(Box::new(cpp_qt.clone())),
+                    is_const: false,
+                };
+
+                let c_ptr = CQualType {
+                    name: format!("{}*", result.name()),
+                    cpp_type_ref: TypeRef::Pointer(Box::new(cpp_qt)),
+                    type_ref: CTypeRef::Pointer(Box::new(c_qt)),
+                    is_const: false,
+                    needs_alloc: false,
+                    needs_deref: false,
+                    needs_move: false,
+                };
+
+                let result_qt = CQualType {
+                    name: format!("{}**", result.name()),
+                    cpp_type_ref: TypeRef::Pointer(Box::new(cpp_ptr)),
+                    type_ref: CTypeRef::Pointer(Box::new(c_ptr)),
+                    is_const: false,
+                    needs_alloc: false,
+                    needs_deref: false,
+                    needs_move: false,
+                };
+
+                let to_type = get_cpp_cast_expr(&result_qt, ast)?;
+                let result_expr = Expr::Deref {
+                    value: Box::new(Expr::Cast {
+                        to_type,
+                        value: Box::new(Expr::Token(result_name.clone())),
+                    }),
+                };
+
+                arguments.insert(
+                    0,
+                    CArgument {
+                        name: result_name,
+                        qual_type: result_qt,
+                        is_self: false,
+                        is_result: false,
+                    },
+                );
+
+                Some(Box::new(|call_expr| Expr::Assignment {
+                    left: Box::new(result_expr),
+                    right: Box::new(Expr::New(Box::new(call_expr))),
+                }) as Box<dyn FnOnce(Expr) -> Expr>)
+            }
+            ClassBindKind::OpaqueBytes => {
+                todo!("Handle opaquebytes")
+            }
+        }
     } else {
         None
     };
@@ -941,6 +1044,7 @@ pub enum Expr {
         value: Box<Expr>,
     },
     Move(Box<Expr>),
+    New(Box<Expr>),
     Return(Box<Expr>),
     Token(String),
 }
