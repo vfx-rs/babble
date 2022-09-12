@@ -280,61 +280,72 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
         Expr::Compound(stmts) => {
             writeln!(body, " {{")?;
             for expr in stmts {
-                write!(body, "{:width$}", "", width=(depth+1)*4)?;
-                write_expr(body, expr, depth+1)?;
+                write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
+                write_expr(body, expr, depth + 1)?;
                 writeln!(body, ";")?;
             }
-            writeln!(body, "{:width$}}}", "", width=depth*4)?;
+            writeln!(body, "{:width$}}}", "", width = depth * 4)?;
         }
-        Expr::CppMethodCall { receiver, function, arguments } => {
+        Expr::CppMethodCall {
+            receiver,
+            function,
+            arguments,
+        } => {
             write_expr(body, receiver, depth)?;
             write!(body, "->{function}(")?;
             if !arguments.is_empty() {
                 writeln!(body)?;
             }
             for arg in arguments {
-                write!(body, "{:width$}", "", width=(depth+1)*4)?;
-                write_expr(body, arg, depth+1)?;
+                write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
+                write_expr(body, arg, depth + 1)?;
                 writeln!(body)?;
             }
             if arguments.is_empty() {
                 write!(body, ")")?;
             } else {
-                write!(body, "{:width$})", "", width=depth*4)?;
+                write!(body, "{:width$})", "", width = depth * 4)?;
             }
         }
-        Expr::CppStaticMethodCall { receiver, function, arguments } => {
+        Expr::CppStaticMethodCall {
+            receiver,
+            function,
+            arguments,
+        } => {
             write_expr(body, receiver, depth)?;
             write!(body, "::{function}(")?;
             if !arguments.is_empty() {
                 writeln!(body)?;
             }
             for arg in arguments {
-                write!(body, "{:width$}", "", width=(depth+1)*4)?;
-                write_expr(body, arg, depth+1)?;
+                write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
+                write_expr(body, arg, depth + 1)?;
                 writeln!(body)?;
             }
             if arguments.is_empty() {
                 write!(body, ")")?;
             } else {
-                write!(body, "{:width$})", "", width=depth*4)?;
+                write!(body, "{:width$})", "", width = depth * 4)?;
             }
         }
-        Expr::CppConstructor { receiver, arguments } => {
+        Expr::CppConstructor {
+            receiver,
+            arguments,
+        } => {
             write_expr(body, receiver, depth)?;
             write!(body, "(")?;
             if !arguments.is_empty() {
                 writeln!(body)?;
             }
             for arg in arguments {
-                write!(body, "{:width$}", "", width=(depth+1)*4)?;
-                write_expr(body, arg, depth+1)?;
+                write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
+                write_expr(body, arg, depth + 1)?;
                 writeln!(body)?;
             }
             if arguments.is_empty() {
                 write!(body, ")")?;
             } else {
-                write!(body, "{:width$})", "", width=depth*4)?;
+                write!(body, "{:width$})", "", width = depth * 4)?;
             }
         }
         Expr::Cast { to_type, value } => {
@@ -397,6 +408,7 @@ fn gen_function_definition(fun: &CFunction, ast: &AST, c_ast: &CAST) -> Result<S
 /// Generate the spelling for this C type
 #[instrument(level = "trace", skip(c_ast))]
 fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<String> {
+    let const_ = if qt.is_const() { " const" } else { "" };
     Ok(match qt.type_ref() {
         CTypeRef::Builtin(tk) => match tk {
             TypeKind::Bool => "bool".to_string(),
@@ -420,13 +432,16 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<St
         CTypeRef::Ref(usr) => {
             // first check to see if there's a direct class reference
             if let Some(st) = c_ast.get_struct(*usr) {
-                st.format(use_public_names)
+                format!("{}{const_}", st.format(use_public_names))
             } else if let Some(td) = c_ast.get_typedef(*usr) {
                 // no struct with this USR, see if there's a typedef instead
-                td.name_external.clone()
+                format!("{}{const_}", td.name_external.clone())
             } else {
                 unimplemented!("no struct or typedef")
             }
+        }
+        CTypeRef::Pointer(pointee) => {
+            format!("{}*{const_}", gen_c_type(pointee, c_ast, use_public_names)?)
         }
         _ => qt.format(c_ast, use_public_names)?,
     })
