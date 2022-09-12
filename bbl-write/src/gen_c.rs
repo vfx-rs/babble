@@ -342,6 +342,10 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
             write!(body, "new ")?;
             write_expr(body, expr, depth)?;
         }
+        Expr::Delete(expr) => {
+            write!(body, "delete ")?;
+            write_expr(body, expr, depth)?;
+        }
         Expr::Assignment { left, right } => {
             write_expr(body, left, depth)?;
             write!(body, " = ")?;

@@ -385,6 +385,8 @@ pub fn translate_function(
     Ok(())
 }
 
+// TODO(AL): This function is a monstrosity. We'll need to refactor it into chunks to be able to reuse pieces for
+// translate_function, which does almost the same thing.
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip(used_names, ast), level = "trace")]
 pub fn translate_method(
@@ -580,7 +582,7 @@ pub fn translate_method(
     // - If the return is a value and kind is opaqueptr and the method IS a constructor
     //      o Add an extra pointer around it and tag as deref, insert new expression
     //
-    let result_expr = if !matches!(result.type_ref, CTypeRef::Builtin(TypeKind::Void)) {
+    let assign_expr_fn = if !matches!(result.type_ref, CTypeRef::Builtin(TypeKind::Void)) {
         let result_name = get_unique_argument_name("result", &mut used_argument_names);
 
         let (result_qt, result_expr) = match result.type_ref() {
@@ -815,21 +817,68 @@ pub fn translate_method(
     };
 
     // insert self pointer ahead of all the arguments
-    let call_expr = if method.is_static() {
-        Expr::CppStaticMethodCall {
+    if method.is_static() {
+        let call_expr = Expr::CppStaticMethodCall {
             receiver: Box::new(Expr::Token(class_qname.to_string())),
             function: method.name().to_string(),
             arguments: arg_pass,
+        };
+        if let Some(assign_expr_fn) = assign_expr_fn {
+            body.push(assign_expr_fn(call_expr));
+        } else {
+            body.push(call_expr);
         }
     } else if method.is_any_constructor() {
-        Expr::CppConstructor {
+        let call_expr = Expr::CppConstructor {
             receiver: Box::new(Expr::Token(class_qname.to_string())),
             arguments: arg_pass,
+        };
+        if let Some(assign_expr_fn) = assign_expr_fn {
+            body.push(assign_expr_fn(call_expr));
+        } else {
+            body.push(call_expr);
         }
-    } else if method.is_destructor() {
-        Expr::CppDestructor {
-            receiver: Box::new(Expr::Token(class_qname.to_string())),
-        }
+    } else if method.is_destructor() && get_bind_kind(class.usr(), ast)? == ClassBindKind::OpaquePtr
+    {
+        let qt = CQualType {
+            name: format!("{}*", st_c_name_private),
+            is_const: false,
+            type_ref: CTypeRef::Pointer(Box::new(CQualType {
+                name: st_c_name_private.into(),
+                is_const: method.is_const(),
+                type_ref: CTypeRef::Ref(type_replacements.replace(class.usr())),
+                cpp_type_ref: TypeRef::Ref(class.usr()),
+                needs_deref: false,
+                needs_move: false,
+                needs_alloc: false,
+            })),
+            cpp_type_ref: TypeRef::Pointer(Box::new(QualType {
+                name: class.name().to_string(),
+                is_const: method.is_const(),
+                type_ref: TypeRef::Ref(class.usr()),
+            })),
+            needs_deref: false,
+            needs_move: false,
+            needs_alloc: false,
+        };
+
+        let to_type = get_cpp_cast_expr(&qt, ast)?;
+        let self_name = get_unique_argument_name("self", &mut used_argument_names);
+
+        arguments.insert(
+            0,
+            CArgument {
+                name: self_name.clone(),
+                qual_type: qt,
+                is_self: true,
+                is_result: false,
+            },
+        );
+
+        body.push(Expr::Delete(Box::new(Expr::Cast {
+            to_type,
+            value: Box::new(Expr::Token(self_name)),
+        })));
     } else {
         // regular method
         let qt = CQualType {
@@ -867,20 +916,19 @@ pub fn translate_method(
             },
         );
 
-        Expr::CppMethodCall {
+        let call_expr = Expr::CppMethodCall {
             receiver: Box::new(Expr::Cast {
                 to_type,
                 value: Box::new(Expr::Token(self_name)),
             }),
             function: method.name().to_string(),
             arguments: arg_pass,
+        };
+        if let Some(assign_expr_fn) = assign_expr_fn {
+            body.push(assign_expr_fn(call_expr));
+        } else {
+            body.push(call_expr);
         }
-    };
-
-    if let Some(result_expr) = result_expr {
-        body.push(result_expr(call_expr));
-    } else {
-        body.push(call_expr);
     }
 
     let fn_name = if let Some(name) = method.replacement_name() {
@@ -1045,6 +1093,7 @@ pub enum Expr {
     },
     Move(Box<Expr>),
     New(Box<Expr>),
+    Delete(Box<Expr>),
     Return(Box<Expr>),
     Token(String),
 }

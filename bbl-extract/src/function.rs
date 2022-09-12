@@ -325,7 +325,7 @@ impl Method {
     }
 
     pub fn is_destructor(&self) -> bool {
-        matches!(self.kind, MethodKind::Constructor)
+        matches!(self.kind, MethodKind::Destructor)
     }
 
     pub fn is_regular_method(&self) -> bool {
