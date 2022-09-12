@@ -1,7 +1,7 @@
 use bbl_clang::ty::TypeKind;
 use bbl_extract::{ast::AST, class::ClassBindKind, function::Method, index_map::IndexMapKey};
 use bbl_translate::{
-    cfunction::{CArgument, CFunction, CFunctionSource},
+    cfunction::{CArgument, CFunction, CFunctionSource, Expr},
     cstruct::CStruct,
     ctype::{CQualType, CTypeRef},
     ctypedef::CTypedef,
@@ -275,121 +275,98 @@ fn gen_cpp_call(fun: &CFunction, ast: &AST) -> Result<String, TypeError> {
     }
 }
 
+fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
+    match expr {
+        Expr::Compound(stmts) => {
+            writeln!(body, " {{")?;
+            for expr in stmts {
+                write!(body, "{:width$}", "", width=(depth+1)*4)?;
+                write_expr(body, expr, depth+1)?;
+                writeln!(body, ";")?;
+            }
+            writeln!(body, "{:width$}}}", "", width=depth*4)?;
+        }
+        Expr::CppMethodCall { receiver, function, arguments } => {
+            write_expr(body, receiver, depth)?;
+            write!(body, "->{function}(")?;
+            if !arguments.is_empty() {
+                writeln!(body)?;
+            }
+            for arg in arguments {
+                write!(body, "{:width$}", "", width=(depth+1)*4)?;
+                write_expr(body, arg, depth+1)?;
+                writeln!(body)?;
+            }
+            if arguments.is_empty() {
+                write!(body, ")")?;
+            } else {
+                write!(body, "{:width$})", "", width=depth*4)?;
+            }
+        }
+        Expr::CppConstructor { receiver, arguments } => {
+            write_expr(body, receiver, depth)?;
+            write!(body, "(")?;
+            if !arguments.is_empty() {
+                writeln!(body)?;
+            }
+            for arg in arguments {
+                write!(body, "{:width$}", "", width=(depth+1)*4)?;
+                write_expr(body, arg, depth+1)?;
+                writeln!(body)?;
+            }
+            if arguments.is_empty() {
+                write!(body, ")")?;
+            } else {
+                write!(body, "{:width$})", "", width=depth*4)?;
+            }
+        }
+        Expr::Cast { to_type, value } => {
+            write!(body, "(({to_type})")?;
+            write_expr(body, value, depth)?;
+            write!(body, ")")?;
+        }
+        Expr::Deref { value } => {
+            write!(body, "*")?;
+            write_expr(body, value, depth)?;
+        }
+        Expr::AddrOf { value } => {
+            write!(body, "&")?;
+            write_expr(body, value, depth)?;
+        }
+        Expr::Move(expr) => {
+            write!(body, "std::move(")?;
+            write_expr(body, expr, depth)?;
+            write!(body, ")")?;
+        }
+        Expr::Assignment { left, right } => {
+            write_expr(body, left, depth)?;
+            write!(body, " = ")?;
+            write_expr(body, right, depth)?;
+        }
+        Expr::Token(v) => {
+            write!(body, "{v}")?;
+        }
+        _ => (),
+    }
+
+    Ok(())
+}
+
 /// Generate the definition of this function
 ///
 /// This means calling its cpp counterpart and generating all necessary casting
 #[instrument(level = "trace", skip(ast, c_ast))]
 fn gen_function_definition(fun: &CFunction, ast: &AST, c_ast: &CAST) -> Result<String, Error> {
-    let mut body = format!(
-        "{} {{\n",
-        gen_function_signature(fun, c_ast, false).map_err(|e| {
-            Error::FailedToGenerateSignature {
-                name: fun.name_private.clone(),
-                source: Box::new(e),
-            }
-        })?
-    );
-    // TODO (AL): clean up this nastiness
-    let mut indent = "    ";
-    let mut indent2 = "        ";
-    let mut indent3 = "            ";
+    let mut body = gen_function_signature(fun, c_ast, false).map_err(|e| {
+        Error::FailedToGenerateSignature {
+            name: fun.name_private.clone(),
+            source: Box::new(e),
+        }
+    })?;
 
-    if !fun.is_noexcept {
-        writeln!(&mut body, "{indent}try {{")?;
-        indent = "        ";
-        indent2 = "            ";
-        indent3 = "                ";
-    }
-
-    let result_is_moved = if let Some(result) = fun.return_value() {
-        // Get the cast expression to cast the cpp return type to c
-        let cast = gen_cast(&result.qual_type, ast, c_ast)
-            .map_err(|e| Error::FailedToGenerateArgument {
-                name: result.name.clone(),
-                source: Box::new(e),
-            })?
-            .map(|s| format!("({s})"))
-            .unwrap_or_else(|| "".to_string());
-
-        // Append the call to the cpp function
-        write!(
-            &mut body,
-            "{indent}*({cast}{}) = std::move(\n{indent2}{}",
-            result.name,
-            gen_cpp_call(fun, ast).map_err(|e| Error::FailedToGenerateCall {
-                name: fun.name_private.clone(),
-                source: Box::new(e)
-            })?
-        )?;
-
-        true
-    } else {
-        write!(
-            &mut body,
-            "{indent}{}",
-            gen_cpp_call(fun, ast).map_err(|e| Error::FailedToGenerateCall {
-                name: fun.name_private.clone(),
-                source: Box::new(e)
-            })?
-        )?;
-
-        false
-    };
-
-    // Get all the arguments for the call
-    gen_call_arguments(&mut body, fun, ast, c_ast)?;
-
-    writeln!(
-        &mut body,
-        "{indent}{};\n{indent}return 0;",
-        if result_is_moved { ")" } else { "" }
-    )?;
-
-    if !fun.is_noexcept {
-        indent = "    ";
-        indent2 = "        ";
-        writeln!(&mut body, "{indent}}} catch (std::exception& e) {{")?;
-        writeln!(&mut body, "{indent2}return 1;")?;
-        writeln!(&mut body, "{indent}}}")?;
-    }
-
-    writeln!(&mut body, "}}")?;
+    write_expr(&mut body, &fun.body, 0)?;
 
     Ok(body)
-}
-
-/// Create the call arguments string
-fn gen_call_arguments(body: &mut String, fun: &CFunction, ast: &AST, c_ast: &CAST) -> Result<()> {
-    let indent = "        ";
-    let indent2 = "            ";
-    let indent3 = "                ";
-
-    let arguments: Vec<&CArgument> = fun
-        .arguments
-        .iter()
-        .filter(|a| !(a.is_result || a.is_self))
-        .collect();
-
-    if arguments.is_empty() {
-        writeln!(body, "()")?;
-    } else {
-        let mut args = Vec::new();
-        for arg in arguments {
-            match generate_arg_pass(&arg.name, &arg.qual_type, ast, c_ast) {
-                Ok(s) => args.push(format!("{indent3}{s}")),
-                Err(source) => {
-                    return Err(Error::FailedToGenerateArgument {
-                        name: arg.name.to_string(),
-                        source: Box::new(source),
-                    })
-                }
-            }
-        }
-
-        writeln!(body, "(\n{}\n{indent2})\n", args.join(",\n"),)?;
-    };
-
-    Ok(())
 }
 
 /// Generate the spelling for this C type

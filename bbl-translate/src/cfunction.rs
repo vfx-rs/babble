@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use bbl_clang::ty::TypeKind;
+use bbl_clang::{cursor::USR, ty::TypeKind};
 use bbl_extract::{
     ast::{ClassId, FunctionId, MethodId, AST},
     class::{ClassBindKind, ClassDecl, MethodSpecializationId},
@@ -8,6 +8,7 @@ use bbl_extract::{
     index_map::{IndexMapKey, UstrIndexMap},
     qualtype::{QualType, TypeRef},
     template_argument::{TemplateParameterDecl, TemplateType},
+    type_alias::{ClassTemplateSpecialization, TypeAlias},
 };
 use hashbrown::HashSet;
 use tracing::{error, instrument, trace};
@@ -60,7 +61,7 @@ pub enum CFunctionSource {
 }
 
 /// Cached information we'll want to know about the method when writing the C function.
-/// 
+///
 /// We cache this on translation to save doing a whole bunch of AST lookup stuff, and also so that specialized class
 /// templates can override the qualified name for the class, i.e. so that when we call back to cpp when writing we can
 /// easily call std::string::foo() rather than std::__cxx11::basic_string<char>::foo().
@@ -86,6 +87,8 @@ pub struct CFunction {
     pub method_info: Option<MethodInfo>,
     /// Is the cpp source of this function absolutely definitely not going to throw?
     pub is_noexcept: bool,
+    /// The body of the function as a tree of statements
+    pub body: Expr,
 }
 
 impl CFunction {
@@ -138,44 +141,62 @@ impl CFunction {
         }
     }
 
-    /// Returns true if this function represents a cpp method and the class it is a member of is bound as opaqueptr, 
+    /// Returns true if this function represents a cpp method and the class it is a member of is bound as opaqueptr,
     /// false otherwise
     pub fn parent_class_is_opaqueptr(&self, ast: &AST) -> bool {
         match self.source {
             CFunctionSource::Function(_) => false,
             CFunctionSource::Method((class_id, _)) => {
-                matches!(ast.classes()[class_id].bind_kind(), ClassBindKind::OpaquePtr)
+                matches!(
+                    ast.classes()[class_id].bind_kind(),
+                    ClassBindKind::OpaquePtr
+                )
             }
             CFunctionSource::SpecializedMethod((class_id, _)) => {
-                matches!(ast.classes()[class_id].bind_kind(), ClassBindKind::OpaquePtr)
+                matches!(
+                    ast.classes()[class_id].bind_kind(),
+                    ClassBindKind::OpaquePtr
+                )
             }
         }
     }
 
-    /// Returns true if this function represents a cpp method and the class it is a member of is bound as opaquebytes, 
+    /// Returns true if this function represents a cpp method and the class it is a member of is bound as opaquebytes,
     /// false otherwise
     pub fn parent_class_is_opaquebytes(&self, ast: &AST) -> bool {
         match self.source {
             CFunctionSource::Function(_) => false,
             CFunctionSource::Method((class_id, _)) => {
-                matches!(ast.classes()[class_id].bind_kind(), ClassBindKind::OpaqueBytes)
+                matches!(
+                    ast.classes()[class_id].bind_kind(),
+                    ClassBindKind::OpaqueBytes
+                )
             }
             CFunctionSource::SpecializedMethod((class_id, _)) => {
-                matches!(ast.classes()[class_id].bind_kind(), ClassBindKind::OpaqueBytes)
+                matches!(
+                    ast.classes()[class_id].bind_kind(),
+                    ClassBindKind::OpaqueBytes
+                )
             }
         }
     }
 
-    /// Returns true if this function represents a cpp method and the class it is a member of is bound as valuetype, 
+    /// Returns true if this function represents a cpp method and the class it is a member of is bound as valuetype,
     /// false otherwise
     pub fn parent_class_is_valuetype(&self, ast: &AST) -> bool {
         match self.source {
             CFunctionSource::Function(_) => false,
             CFunctionSource::Method((class_id, _)) => {
-                matches!(ast.classes()[class_id].bind_kind(), ClassBindKind::ValueType)
+                matches!(
+                    ast.classes()[class_id].bind_kind(),
+                    ClassBindKind::ValueType
+                )
             }
             CFunctionSource::SpecializedMethod((class_id, _)) => {
-                matches!(ast.classes()[class_id].bind_kind(), ClassBindKind::ValueType)
+                matches!(
+                    ast.classes()[class_id].bind_kind(),
+                    ClassBindKind::ValueType
+                )
             }
         }
     }
@@ -357,6 +378,7 @@ pub fn translate_function(
             source,
             method_info: None,
             is_noexcept: false,
+            body: Expr::Compound(Vec::new()),
         },
     );
 
@@ -386,6 +408,8 @@ pub fn translate_method(
         .cloned()
         .chain(class_template_parms.iter().cloned())
         .collect::<Vec<_>>();
+
+    let mut body = Vec::new();
 
     // get the return type
     let result = translate_qual_type(
@@ -417,95 +441,294 @@ pub fn translate_method(
         source: Box::new(e),
     })?;
 
-    // insert the result as the first argument, since we'll be forcing an int return type in order to return exception
-    // status. Here we also do the necessary conversion to out pointers depending on the bind kind of the type in question
-    if !matches!(result.type_ref, CTypeRef::Builtin(TypeKind::Void)) {
-        let result_name = get_unique_argument_name("result", &mut used_argument_names);
-
-        // Rules
-        //
-        // - If the return type is a pointer:
-        //      o Add an extra pointer around it and tag the outer pointer as needing a deref
-        //        i.e. `*(Type**) result) = cpp()`
-        // 
-        // - If the return type is a reference:
-        //      o Add an extra pointer around the translated pointer. The outer pointer needs a deref and the inner
-        //        pointer needs the address of the cpp expression taken, 
-        //        i.e. `*((Type**) result) = &cpp()`
-        //
-        // - If the return type is a value and kind is valuetype
-        //      o Add an extra pointer and tag as deref and move
-        //        i.e. `*((Type*) result) = std::move(cpp())`
-        //
-        // - If the return type is a value and kind is opaqueptr and the method is NOT a constructor
-        //      o Add an extra pointer around it and tag as deref
-        //        i.e. `*((Type*) result) = std::move(cpp())`
-        //
-        // - If the return is a value and kind is opaqueptr and the method IS a constructor
-        //      o Add an extra pointer around it and tag as deref, insert new expression
-
-        match class.bind_kind() {
-            ClassBindKind::ValueType => {
-                arguments.insert(
-                    0,
-                    CArgument {
-                        name: result_name.clone(),
-                        qual_type: CQualType {
-                            name: format!("{result_name}*"),
-                            cpp_type_ref: result.cpp_type_ref().clone(),
-                            type_ref: CTypeRef::Pointer(Box::new(result)),
-                            is_const: false,
-                            needs_alloc: false,
-                            needs_deref: false,
-                            needs_move: false,
-                        },
-                        is_self: false,
-                        is_result: true,
-                    },
-                );
+    // For each argument to the original cpp function, modify its c counterpart to handle opaque api and generate the
+    // necessary expressions to cast and deref it correctly back to cpp for passing to the original function.
+    //
+    // The rules are as follows. Given an argument `Type value`:
+    //
+    // + Pass by value
+    //      o builtin
+    //          - just pass it:
+    //              `value`
+    //      o valuetype
+    //          - cast the value to its cpp counterpart by taking its address, casting the pointer, then deref:
+    //              `*((Type*)&value)`
+    //      o opaqueptr
+    //          - we can only pass the CType by pointer, so wrap the CType in an extra pointer, then cast and deref:
+    //              `*((Type*)value)`
+    // + Pass by pointer
+    //      o builtin:
+    //          - just pass it:
+    //              `value`
+    //      o valuetype/opaqueptr
+    //          - No changes needed, just cast the pointer:
+    //              `(Type*)value
+    // + Pass by lvalue/rvalue reference
+    //      o builtin:
+    //         - add a deref:
+    //              `*value`
+    //      o valuetype/opaqueptr
+    //          - translate_qual_type will have converted the reference to a pointer already, so check the cpp_type_ref to
+    //            see if it was a reference. If it was, then cast the pointer and deref:
+    //              `*((Type*)value)`
+    //
+    let mut arg_pass = Vec::new();
+    for arg in &mut arguments {
+        match arg.qual_type.type_ref() {
+            CTypeRef::Builtin(_) => {
+                // builtin pass by value
+                arg_pass.push(Expr::Token(arg.name.clone()))
             }
-            ClassBindKind::OpaquePtr => {
-                // in the case of an opaque type, we can't pass a pointer to a value in to initialize, because we don't
-                // have a value, so it must be a pointer to a pointer
-                let cpp_type_ref = result.cpp_type_ref().clone();
-
-                let inner_pointer = CQualType {
-                            name: format!("{result_name}*"),
-                            cpp_type_ref: cpp_type_ref.clone(),
-                            type_ref: CTypeRef::Pointer(Box::new(result)),
-                            is_const: false,
-                            needs_alloc: false,
-                            needs_deref: false,
-                            needs_move: false,
-                        };
-
-                let outer_pointer = CQualType {
-                            name: format!("{result_name}**"),
-                            cpp_type_ref, // TODO (AL): do we need to put an actual type here?
-                            type_ref: CTypeRef::Pointer(Box::new(inner_pointer)),
-                            is_const: false,
-                            needs_alloc: false,
-                            needs_deref: false,
-                            needs_move: false,
-                        };
-
-                arguments.insert(
-                    0,
-                    CArgument {
-                        name: result_name,
-                        qual_type: outer_pointer,
-                        is_self: false,
-                        is_result: true,
-                    },
-                );
+            CTypeRef::Pointer(_) => {
+                if matches!(
+                    arg.qual_type.cpp_type_ref(),
+                    TypeRef::LValueReference(_) | TypeRef::RValueReference(_)
+                ) {
+                    // pointer converted from a reference - cast and deref
+                    let to_type = get_cpp_cast_expr(&arg.qual_type, ast)?;
+                    let cast = Expr::Cast {
+                        to_type,
+                        value: Box::new(Expr::Token(arg.name.clone())),
+                    };
+                    arg_pass.push(Expr::Deref {
+                        value: Box::new(cast),
+                    });
+                } else {
+                    // just a regular pointer
+                    let to_type = get_cpp_cast_expr(&arg.qual_type, ast)?;
+                    arg_pass.push(Expr::Cast {
+                        to_type,
+                        value: Box::new(Expr::Token(arg.name.clone())),
+                    });
+                }
             }
-            _ => todo!("Handle opaque bytes")
+            CTypeRef::Ref(usr) => {
+                match get_bind_kind(*usr, ast)? {
+                    // user type pass by value. if it's opaqueptr, wrap in a pointer and deref...
+                    ClassBindKind::OpaquePtr => {
+                        arg.qual_type = CQualType::pointer(
+                            &format!("{}*", arg.qual_type.name()),
+                            arg.qual_type.cpp_type_ref().clone(),
+                            arg.qual_type.clone(),
+                            false,
+                            false,
+                            false,
+                            false,
+                        );
+
+                        arg_pass.push(Expr::Deref {
+                            value: Box::new(Expr::Cast {
+                                to_type: get_cpp_cast_expr(&arg.qual_type, ast)?,
+                                value: Box::new(Expr::Token(arg.name.clone())),
+                            }),
+                        });
+                    }
+                    ClassBindKind::ValueType => {
+                        // take the address, cast it, then deref
+                        let value = Expr::Token(arg.name.clone());
+                        let addr = Expr::AddrOf {
+                            value: Box::new(value),
+                        };
+                        let tmp_qual_type = CQualType::pointer(
+                            &format!("{}*", arg.qual_type.name()),
+                            arg.qual_type.cpp_type_ref().clone(),
+                            arg.qual_type.clone(),
+                            false,
+                            false,
+                            false,
+                            false,
+                        );
+                        let to_type = get_cpp_cast_expr(&tmp_qual_type, ast)?;
+                        arg_pass.push(Expr::Deref {
+                            value: Box::new(Expr::Cast {
+                                to_type,
+                                value: Box::new(addr),
+                            }),
+                        });
+                    }
+                    _ => todo!("Handle opaquebytes"),
+                }
+            }
+            CTypeRef::Unknown(tk) => {
+                panic!("unknown type {tk} when converting argument {}", arg.name);
+            }
         }
-
     }
 
+    // insert the result as the first argument, since we'll be forcing an int return type in order to return exception
+    // status. Here we also do the necessary conversion to out pointers depending on the bind kind of the type in question
+    //
+    // Rules
+    //
+    // - If the return type is a pointer:
+    //      o Add an extra pointer around it and tag the outer pointer as needing a deref
+    //        i.e. `*(Type**) result) = cpp()`
+    //
+    // - If the return type is a reference:
+    //      o Add an extra pointer around the translated pointer. The outer pointer needs a deref and the inner
+    //        pointer needs the address of the cpp expression taken,
+    //        i.e. `*((Type**) result) = &cpp()`
+    //
+    // - If the return type is a value and kind is valuetype
+    //      o Add an extra pointer and tag as deref and move
+    //        i.e. `*((Type*) result) = std::move(cpp())`
+    //
+    // - If the return type is a value and kind is opaqueptr and the method is NOT a constructor
+    //      o Add an extra pointer around it and tag as deref
+    //        i.e. `*((Type*) result) = std::move(cpp())`
+    //
+    // - If the return is a value and kind is opaqueptr and the method IS a constructor
+    //      o Add an extra pointer around it and tag as deref, insert new expression
+    //
+    let result_expr = if !matches!(result.type_ref, CTypeRef::Builtin(TypeKind::Void)) {
+        let result_name = get_unique_argument_name("result", &mut used_argument_names);
+
+        let (result_qt, result_expr) = match result.type_ref() {
+            CTypeRef::Builtin(_) => {
+                // add a pointer to the result, then deref when assigning
+                let result_qt = CQualType {
+                    name: format!("{}*", result.name()),
+                    cpp_type_ref: result.cpp_type_ref().clone(),
+                    type_ref: CTypeRef::Pointer(Box::new(result)),
+                    is_const: false,
+                    needs_alloc: false,
+                    needs_deref: false,
+                    needs_move: false,
+                };
+
+                let to_type = get_cpp_cast_expr(&result_qt, ast)?;
+                let result_expr = Expr::Deref {
+                    value: Box::new(Expr::Cast {
+                        to_type,
+                        value: Box::new(Expr::Token(result_name.clone())),
+                    }),
+                };
+
+                (
+                    result_qt,
+                    Box::new(|call_expr| Expr::Assignment {
+                        left: Box::new(result_expr),
+                        right: Box::new(call_expr),
+                    }) as Box<dyn FnOnce(Expr) -> Expr>,
+                )
+            }
+            CTypeRef::Pointer(_) => {
+                let cpp_type_ref = result.cpp_type_ref.clone();
+
+                let result_qt = CQualType {
+                    name: format!("{}*", result.name()),
+                    cpp_type_ref: result.cpp_type_ref().clone(),
+                    type_ref: CTypeRef::Pointer(Box::new(result)),
+                    is_const: false,
+                    needs_alloc: false,
+                    needs_deref: false,
+                    needs_move: false,
+                };
+
+                let to_type = get_cpp_cast_expr(&result_qt, ast)?;
+                let result_expr = Expr::Deref {
+                    value: Box::new(Expr::Cast {
+                        to_type,
+                        value: Box::new(Expr::Token(result_name.clone())),
+                    }),
+                };
+
+                if matches!(
+                    cpp_type_ref,
+                    TypeRef::LValueReference(_) | TypeRef::RValueReference(_)
+                ) {
+                    // pointer converted from a reference
+                    (
+                        result_qt,
+                        Box::new(|call_expr| Expr::Assignment {
+                            left: Box::new(result_expr),
+                            right: Box::new(Expr::AddrOf {
+                                value: Box::new(call_expr),
+                            }),
+                        }) as Box<dyn FnOnce(Expr) -> Expr>,
+                    )
+                } else {
+                    (
+                        result_qt,
+                        Box::new(|call_expr| Expr::Assignment {
+                            left: Box::new(result_expr),
+                            right: Box::new(call_expr),
+                        }) as Box<dyn FnOnce(Expr) -> Expr>,
+                    )
+                }
+            }
+            CTypeRef::Ref(usr) => {
+                // pass by value of a user type
+                // add a pointer to the result, then deref when assigning
+                let result_qt = CQualType {
+                    name: format!("{}*", result.name()),
+                    cpp_type_ref: result.cpp_type_ref().clone(),
+                    type_ref: CTypeRef::Pointer(Box::new(result)),
+                    is_const: false,
+                    needs_alloc: false,
+                    needs_deref: false,
+                    needs_move: false,
+                };
+
+                let to_type = get_cpp_cast_expr(&result_qt, ast)?;
+                let result_expr = Expr::Deref {
+                    value: Box::new(Expr::Cast {
+                        to_type,
+                        value: Box::new(Expr::Token(result_name.clone())),
+                    }),
+                };
+
+                (
+                    result_qt,
+                    Box::new(|call_expr| Expr::Assignment {
+                        left: Box::new(result_expr),
+                        right: Box::new(Expr::Move(Box::new(call_expr))),
+                    }) as Box<dyn FnOnce(Expr) -> Expr>,
+                )
+            }
+            CTypeRef::Unknown(tk) => {
+                panic!("Unkown type {tk} while converting result")
+            }
+        };
+
+        // push the modified argument to the front of the list
+        arguments.insert(
+            0,
+            CArgument {
+                name: result_name,
+                qual_type: result_qt,
+                is_self: false,
+                is_result: false,
+            },
+        );
+
+        Some(result_expr)
+    // } else if method.is_any_constructor() {
+    //     // we need to add a return type.
+    //     // for value type this will just be an out pointer like a regular return
+    //     // for opaqueptr, it will be a pointer to a pointer, and we'll call new on the cpp side
+    } else {
+        None
+    };
+
     // insert self pointer ahead of all the arguments
-    if !method.is_static()  && !method.is_any_constructor() {
+    let call_expr = if method.is_static() {
+        Expr::CppStaticMethodCall {
+            receiver: Box::new(Expr::Token(class_qname.to_string())),
+            function: method.name().to_string(),
+            arguments: arg_pass,
+        }
+    } else if method.is_any_constructor() {
+        Expr::CppConstructor {
+            receiver: Box::new(Expr::Token(class_qname.to_string())),
+            arguments: arg_pass,
+        }
+    } else if method.is_destructor() {
+        Expr::CppDestructor {
+            receiver: Box::new(Expr::Token(class_qname.to_string())),
+        }
+    } else {
+        // regular method
         let qt = CQualType {
             name: format!("{}*", st_c_name_private),
             is_const: false,
@@ -527,15 +750,34 @@ pub fn translate_method(
             needs_move: false,
             needs_alloc: false,
         };
+
+        let to_type = get_cpp_cast_expr(&qt, ast)?;
+        let self_name = get_unique_argument_name("self", &mut used_argument_names);
+
         arguments.insert(
             0,
             CArgument {
-                name: get_unique_argument_name("self", &mut used_argument_names),
+                name: self_name.clone(),
                 qual_type: qt,
                 is_self: true,
                 is_result: false,
             },
         );
+
+        Expr::CppMethodCall {
+            receiver: Box::new(Expr::Cast {
+                to_type,
+                value: Box::new(Expr::Token(self_name)),
+            }),
+            function: method.name().to_string(),
+            arguments: arg_pass,
+        }
+    };
+
+    if let Some(result_expr) = result_expr {
+        body.push(result_expr(call_expr));
+    } else {
+        body.push(call_expr);
     }
 
     let fn_name = if let Some(name) = method.replacement_name() {
@@ -558,7 +800,76 @@ pub fn translate_method(
             class_qname: class_qname.to_string(),
         }),
         is_noexcept: false,
+        body: Expr::Compound(body),
     })
+}
+
+fn get_cpp_cast_expr(qt: &CQualType, ast: &AST) -> Result<String> {
+    let result = match qt.type_ref() {
+        CTypeRef::Builtin(tk) => Ok(builtin_spelling(tk)),
+        CTypeRef::Pointer(pointee) => Ok(format!("{}*", get_cpp_cast_expr(pointee, ast)?)),
+        CTypeRef::Ref(usr) => {
+            // ref might be to a class directly, or to a typedef
+            if let Some(class) = ast.get_class(*usr) {
+                Ok(class.get_qualified_name(ast).map_err(|source| {
+                    Error::FailedToGetQualifiedName {
+                        usr: class.usr(),
+                        source: Box::new(source),
+                    }
+                })?)
+            } else if let Some(cts) = ast.get_type_alias(*usr) {
+                Ok(cts.get_qualified_name(ast).map_err(|source| {
+                    Error::FailedToGetQualifiedName {
+                        usr: cts.usr(),
+                        source: Box::new(source),
+                    }
+                })?)
+            } else {
+                Err(Error::RefNotFound(*usr))
+            }
+        }
+        _ => unreachable!(),
+    }?;
+
+    if qt.is_const() {
+        Ok(format!("{} const", result))
+    } else {
+        Ok(result)
+    }
+}
+
+fn get_bind_kind(usr: USR, ast: &AST) -> Result<ClassBindKind> {
+    if let Some(class) = ast.get_class(usr) {
+        Ok(*class.bind_kind())
+    } else if let Some(TypeAlias::ClassTemplateSpecialization(cts)) = ast.get_type_alias(usr) {
+        get_bind_kind(cts.specialized_decl(), ast)
+    } else if let Some(TypeAlias::TypeAliasType { usr, .. }) = ast.get_type_alias(usr) {
+        get_bind_kind(*usr, ast)
+    } else {
+        Err(Error::RefNotFound(usr))
+    }
+}
+
+fn builtin_spelling(tk: &TypeKind) -> String {
+    match tk {
+        TypeKind::Bool => "bool".to_string(),
+        TypeKind::Char_S => "char".to_string(),
+        TypeKind::Char_U => "unsigned char".to_string(),
+        TypeKind::Double => "double".to_string(),
+        TypeKind::Float => "float".to_string(),
+        TypeKind::Int => "int".to_string(),
+        TypeKind::Long => "long".to_string(),
+        TypeKind::LongDouble => "long double".to_string(),
+        TypeKind::LongLong => "long long".to_string(),
+        TypeKind::Short => "short".to_string(),
+        TypeKind::UChar => "unsigned char".to_string(),
+        TypeKind::UInt => "unsigned int".to_string(),
+        TypeKind::ULong => "unsigned long".to_string(),
+        TypeKind::ULongLong => "unsigned long long".to_string(),
+        TypeKind::UShort => "unsigned short".to_string(),
+        TypeKind::Void => "void".to_string(),
+        _ => unimplemented!(),
+    }
 }
 
 fn get_unique_argument_name(name: &str, used_argument_names: &mut HashSet<String>) -> String {
@@ -586,4 +897,50 @@ impl IndexMapKey for CFunctionId {
     fn get(&self) -> usize {
         self.0
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum Expr {
+    Compound(Vec<Expr>),
+    CppFunctionCall {
+        function: Box<Expr>,
+        arguments: Vec<Expr>,
+    },
+    CppMethodCall {
+        receiver: Box<Expr>,
+        function: String,
+        arguments: Vec<Expr>,
+    },
+    CppStaticMethodCall {
+        receiver: Box<Expr>,
+        function: String,
+        arguments: Vec<Expr>,
+    },
+    CppConstructor {
+        receiver: Box<Expr>,
+        arguments: Vec<Expr>,
+    },
+    CppDestructor {
+        receiver: Box<Expr>,
+    },
+    Assignment {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
+    Cast {
+        to_type: String,
+        value: Box<Expr>,
+    },
+    Deref {
+        value: Box<Expr>,
+    },
+    Ref {
+        value: Box<Expr>,
+    },
+    AddrOf {
+        value: Box<Expr>,
+    },
+    Move(Box<Expr>),
+    Return(Box<Expr>),
+    Token(String),
 }

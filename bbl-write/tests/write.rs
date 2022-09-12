@@ -301,7 +301,12 @@ fn write_take_std_string() -> Result<(), Error> {
     class Class {
     public:
         Class() {}
-        std::string take_string(const std::string& s);
+        std::string take_string(const std::string& s) const;
+        float returns_float() const;
+        Class returns_class();
+        const Class& returns_class_ref() const;
+        const Class* returns_class_ptr() const;
+        // static std::string static_take_string(std::string s);
     };
     }
             "#,
@@ -319,7 +324,7 @@ fn write_take_std_string() -> Result<(), Error> {
         c_ast.pretty_print(0)?;
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 6);
+        assert_eq!(c_ast.functions.len(), 10);
 
         let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");

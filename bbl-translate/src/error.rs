@@ -37,6 +37,8 @@ pub enum Error {
     FailedToFormatFunction{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
     #[error("Failed to format argument \"{name}\"")]
     FailedToFormatArgument{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    #[error("Failed to get qualified name for \"{usr}\"")]
+    FailedToGetQualifiedName{usr: USR, source: Box<dyn std::error::Error + 'static + Send + Sync>},
 }
 
 #[derive(Debug, thiserror::Error)]

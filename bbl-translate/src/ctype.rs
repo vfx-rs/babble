@@ -15,7 +15,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 use crate::CAST;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CTypeRef {
     Builtin(TypeKind),
     Ref(USR),
@@ -23,7 +23,7 @@ pub enum CTypeRef {
     Unknown(TypeKind),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CQualType {
     pub(crate) name: String,
     pub(crate) is_const: bool,
