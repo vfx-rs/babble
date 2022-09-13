@@ -23,6 +23,7 @@ pub enum Error {
     ParseError,
     ClangBinaryNotFound,
     FailedToRunClang(std::io::Error),
+    FailedToRunCMake(std::io::Error),
     NonUTF8Output(std::string::FromUtf8Error),
     FailedToParseOutput(String),
     CMakeError{stdout: String, stderr: String},

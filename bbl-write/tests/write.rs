@@ -2,12 +2,13 @@ mod common;
 
 use std::path::PathBuf;
 
-use bbl_clang::{cli_args, cli_args_with, virtual_file::write_temp_cmake_project};
+use bbl_clang::{cli_args, cli_args_with, virtual_file::configure_temp_cmake_project};
 use bbl_extract::{class::ClassBindKind, parse_file_and_extract_ast, parse_string_and_extract_ast};
 use bbl_translate::translate_cpp_ast_to_c;
 use common::{run_test};
 
 use bbl_write::{cmake::build_project, error::Error, gen_c::gen_c};
+use tracing::debug;
 
 use crate::common::init_log;
 
@@ -384,7 +385,7 @@ fn build_take_std_string() -> Result<(), Error> {
         let find_packages = ["take_string REQUIRED"];
         let link_libraries = ["take_string::take_string"];
 
-        let (source_filename, args) = write_temp_cmake_project(
+        let (source_filename, args) = configure_temp_cmake_project(
             contents,
             &find_packages,
             &link_libraries,

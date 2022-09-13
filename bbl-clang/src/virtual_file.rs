@@ -32,7 +32,7 @@ pub fn write_temp_file(file_contents: &str) -> Result<PathBuf, std::io::Error> {
 
 /// Write a temporary CMake project with a single-file executable containing the `file_contents` that we can use to
 /// get the compiler arguments from its generated compile_commands.json
-pub fn write_temp_cmake_project<P: AsRef<Path>>(
+pub fn configure_temp_cmake_project<P: AsRef<Path>>(
     file_contents: &str,
     find_packages: &[&str],
     link_libraries: &[&str],
@@ -113,17 +113,23 @@ target_link_libraries(babble_get_args {link_libraries_str})
         ),
     )?;
 
+    #[cfg(windows)]
+    let args = [".", "-B", "build", "-G", "Ninja"];
+    
+    #[cfg(unix)]
+    let args = [".", "-B", "build"];
+
     let output = if let Some(pp) = cmake_prefix_path {
         std::process::Command::new("cmake")
-            .args([".", "-B", "build"])
+            .args(&args)
             .current_dir(&dirname)
             .env("CMAKE_PREFIX_PATH", pp.as_ref())
-            .output()?
+            .output().map_err(Error::FailedToRunCMake)?
     } else {
         std::process::Command::new("cmake")
-            .args([".", "-B", "build"])
+            .args(&args)
             .current_dir(&dirname)
-            .output()?
+            .output().map_err(Error::FailedToRunCMake)?
     };
 
     if !output.status.success() {
@@ -174,7 +180,7 @@ mod tests {
     use crate::*;
     use log::*;
 
-    use super::write_temp_cmake_project;
+    use super::configure_temp_cmake_project;
 
     #[test]
     fn test_virtual_file() -> Result<(), crate::error::Error> {
@@ -228,7 +234,7 @@ public:
             .join("testdata")
             .join("imath");
 
-        let (_, _args) = write_temp_cmake_project(
+        let (_, _args) = configure_temp_cmake_project(
             contents,
             &["Imath 3.1 REQUIRED"],
             &["Imath::Imath"],

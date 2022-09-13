@@ -1,6 +1,6 @@
 use std::path::{PathBuf, Path};
 
-use bbl_clang::{cli_args_with, virtual_file::write_temp_cmake_project};
+use bbl_clang::{cli_args_with, virtual_file::configure_temp_cmake_project};
 use bbl_extract::parse_file_and_extract_ast;
 use bbl_write::{cmake::build_project, gen_c::gen_c, gen_rust_ffi::write_rust_ffi_module};
 
@@ -9,7 +9,7 @@ pub use bbl_translate::translate_cpp_ast_to_c;
 use tracing::debug;
 
 pub fn parse(header: &str, options: &BindOptions) -> Result<AST, Error> {
-    let (source_filename, mut args) = write_temp_cmake_project(
+    let (source_filename, mut args) = configure_temp_cmake_project(
         header,
         options.find_packages,
         options.link_libraries,

@@ -2,7 +2,7 @@ mod common;
 
 use std::path::Path;
 
-use bbl_clang::{cli_args, cli_args_with, virtual_file::write_temp_cmake_project};
+use bbl_clang::{cli_args, cli_args_with, virtual_file::configure_temp_cmake_project};
 use bbl_extract::{
     parse_file_and_extract_ast, parse_string_and_extract_ast, qualtype::QualType,
     template_argument::TemplateType,
@@ -457,7 +457,7 @@ public:
 }
         "#;
 
-    let (filename, args) = write_temp_cmake_project::<&Path>(
+    let (filename, args) = configure_temp_cmake_project::<&Path>(
         contents,
         &["Imath 3.1 REQUIRED"],
         &["Imath::Imath"],
