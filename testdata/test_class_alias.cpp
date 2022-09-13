@@ -11,4 +11,7 @@ class A {int a;};
 class B {int b;};
 
 using APtr = shared_ptr<A>;
-using BPtr = shared_ptr<B>;
+typedef shared_ptr<B> BPtr;
+
+using APtr2 = APtr;
+typedef BPtr BPtr2;
