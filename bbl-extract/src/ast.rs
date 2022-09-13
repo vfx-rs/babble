@@ -4,7 +4,7 @@ use std::ops::{Index, IndexMut};
 
 use bbl_clang::cursor::Cursor;
 use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::TranslationUnit};
-use tracing::{error, warn, info, debug, trace, instrument};
+use tracing::{debug, error, info, instrument, trace, warn};
 use ustr::{Ustr, UstrMap};
 
 use crate::class::{ClassBindKind, ClassDecl, MethodSpecializationId};
@@ -433,7 +433,10 @@ pub fn get_qualified_name(decl: &str, namespaces: &[USR], ast: &AST) -> Result<S
 }
 
 /// Main recursive function to walk the AST and extract the pieces we're interested in
-#[instrument(skip(depth, max_depth, tu, namespaces, already_visited), level="trace")]
+#[instrument(
+    skip(depth, max_depth, tu, namespaces, already_visited),
+    level = "trace"
+)]
 pub fn extract_ast(
     c: Cursor,
     depth: usize,
@@ -576,17 +579,21 @@ pub fn extract_ast(
     Ok(())
 }
 
+use colored::*;
 pub fn dump(
     c: Cursor,
     depth: usize,
     max_depth: usize,
     already_visited: &mut Vec<USR>,
     tu: &TranslationUnit,
+    skip_kinds: &[CursorKind],
+    color_s: Option<Color>,
 ) {
     if depth > max_depth {
         println!("⋱");
         return;
     }
+
     let indent = format!("{:width$}", "", width = depth * 4);
 
     let template_args = if c.num_template_arguments() != -1 {
@@ -595,16 +602,26 @@ pub fn dump(
         "".to_string()
     };
 
+    let color_s = if let Some(color_s) = color_s {
+        color_s
+    } else {
+        Color::White
+    };
+
     match c.kind() {
         CursorKind::IntegerLiteral => {
             println!("{}: {}", c.kind(), tu.token(c.location()).spelling());
         }
         _ => println!(
-            "{}: {} {} {}",
-            c.kind(),
-            c.display_name(),
-            c.usr(),
-            template_args
+            "{}",
+            format!(
+                "{}: {} {} {}",
+                c.kind(),
+                c.display_name(),
+                c.usr(),
+                template_args
+            )
+            .color(color_s)
         ),
     }
 
@@ -631,10 +648,15 @@ pub fn dump(
         let pod = if ty.is_pod() { "[POD]" } else { "" };
 
         println!(
-            "{indent}𝜏 {}: {} {} {pod}",
-            ty.spelling(),
-            ty.kind(),
-            template_args
+            "{}",
+            format!(
+                "{indent}𝜏 {}: {} {} {pod}",
+                ty.spelling(),
+                ty.kind(),
+                template_args
+            )
+            .italic()
+            .color(color_s)
         );
     }
 
@@ -648,18 +670,32 @@ pub fn dump(
                 };
 
                 println!(
-                    "{indent}↪ {}: {} {} {} 🗸",
-                    cr.kind(),
-                    cr.display_name(),
-                    cr.usr(),
-                    template_args
+                    "{}",
+                    format!(
+                        "{indent}↪ {}: {} {} {} 🗸",
+                        cr.kind(),
+                        cr.display_name(),
+                        cr.usr(),
+                        template_args
+                    )
+                    .color(Color::BrightBlack)
                 );
             } else {
                 if !cr.usr().is_empty() {
                     already_visited.push(cr.usr());
                 }
-                print!("{indent}↪ ");
-                dump(cr, depth + 1, max_depth, already_visited, tu);
+                if !skip_kinds.contains(&cr.kind()) {
+                    print!("{indent}↪ ");
+                    dump(
+                        cr,
+                        depth + 1,
+                        max_depth,
+                        already_visited,
+                        tu,
+                        skip_kinds,
+                        Some(Color::Cyan),
+                    );
+                }
             }
         }
     }
@@ -671,22 +707,40 @@ pub fn dump(
             already_visited.push(child.usr());
         }
 
-        let icon = match child.kind() {
-            CursorKind::ClassDecl => "●",
-            CursorKind::ClassTemplate => "○",
-            CursorKind::FunctionDecl => "ƒ",
-            CursorKind::FunctionTemplate => "ⓕ",
-            CursorKind::CXXMethod => "ɱ",
-            _ => "▸",
+        if skip_kinds.contains(&child.kind()) {
+            continue;
+        }
+
+        let (icon, color_s) = match child.kind() {
+            CursorKind::ClassDecl => ("●", Color::BrightGreen),
+            CursorKind::ClassTemplate => ("○", Color::BrightGreen),
+            CursorKind::FieldDecl => ("▸", Color::Green),
+            CursorKind::CXXAccessSpecifier => ("▸", Color::Green),
+            CursorKind::FunctionDecl => ("ƒ", Color::BrightCyan),
+            CursorKind::FunctionTemplate => ("ⓕ", Color::BrightCyan),
+            CursorKind::CXXMethod => ("ɱ", Color::BrightBlue),
+            CursorKind::TemplateTypeParameter
+            | CursorKind::TemplateTemplateParameter
+            | CursorKind::NonTypeTemplateParameter => ("▸", Color::Yellow),
+            CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => ("Τ", Color::BrightMagenta),
+            _ => ("▸", Color::White),
         };
 
-        print!("{indent}{icon} ");
+        print!("{}", format!("{indent}{icon} ").color(color_s));
 
-        dump(child, depth + 1, max_depth, already_visited, tu);
+        dump(
+            child,
+            depth + 1,
+            max_depth,
+            already_visited,
+            tu,
+            skip_kinds,
+            Some(color_s),
+        );
     }
 }
 
-#[instrument(level="trace", skip(tu))]
+#[instrument(level = "trace", skip(tu))]
 pub fn extract_ast_from_namespace(
     name: Option<&str>,
     c_tu: Cursor,

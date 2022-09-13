@@ -121,16 +121,17 @@ pub fn parse_string_and_dump_ast<
         }
     }
 
+    let skip_kinds = &[];
     let mut already_visited = Vec::new();
     if let Some(namespace) = namespace {
         let children =
             tu.get_cursor()?
                 .children_of_kind_with_name(CursorKind::Namespace, namespace, true);
         for child in children {
-            dump(child, 0, 20, &mut already_visited, &tu);
+            dump(child, 0, 20, &mut already_visited, &tu, skip_kinds, None);
         }
     } else {
-        dump(tu.get_cursor()?, 0, 20, &mut already_visited, &tu);
+        dump(tu.get_cursor()?, 0, 20, &mut already_visited, &tu, skip_kinds, None);
     }
 
     Ok(())

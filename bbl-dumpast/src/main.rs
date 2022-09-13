@@ -20,8 +20,12 @@ struct Args {
     verbosity: Option<Verbosity>,
 
     /// Max depth to traverse the AST
-    #[clap(short, long, value_parser)]
-    max_depth: Option<usize>,
+    #[clap(short, long, value_parser, default_value_t = 20)]
+    max_depth: usize,
+
+    /// Whether to show macro definitions or not
+    #[clap(short, long, value_parser, default_value_t = false)]
+    show_macro_definitions: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -63,7 +67,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    let max_depth = args.max_depth.unwrap_or(6);
+    let mut skip_kinds = vec![];
+    if !args.show_macro_definitions {
+        skip_kinds.push(CursorKind::MacroDefinition)
+    }
 
     let mut already_visited = Vec::new();
     if let Some(namespace) = args.namespace {
@@ -71,10 +78,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             tu.get_cursor()?
                 .children_of_kind_with_name(CursorKind::Namespace, &namespace, true);
         for child in children {
-            dump(child, 0, max_depth, &mut already_visited, &tu);
+            dump(child, 0, args.max_depth, &mut already_visited, &tu, &skip_kinds, None);
         }
     } else {
-        dump(tu.get_cursor()?, 0, max_depth, &mut already_visited, &tu);
+        dump(tu.get_cursor()?, 0, args.max_depth, &mut already_visited, &tu, &skip_kinds, None);
     }
 
     Ok(())
