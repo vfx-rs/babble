@@ -11,3 +11,4 @@ bbl-translate = { path = "../bbl-translate", version = "0.1.0" }
 bbl-clang = { path = "../bbl-clang", version = "0.1.0" }
 bbl-write = { path = "../bbl-write", version = "0.1.0" }
 thiserror = "1.0.34"
+tracing = "0.1.36"

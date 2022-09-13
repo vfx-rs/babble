@@ -6,6 +6,7 @@ use bbl_translate::CAST;
 
 use crate::error::Error;
 use crate::gen_c::gen_c;
+use crate::gen_rust_ffi::write_rust_ffi;
 
 use std::fmt::Write;
 

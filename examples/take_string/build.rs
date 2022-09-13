@@ -1,9 +1,8 @@
 use bbl::{parse, bind, BindOptions};
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use anyhow::Result;
 
 pub fn main() -> Result<()> {
-    /*
     let cmake_prefix_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent().unwrap()
         .parent().unwrap()
@@ -34,9 +33,12 @@ pub fn main() -> Result<()> {
     let ns = ast.find_namespace("Test_1_0")?;
     ast.rename_namespace(ns, "Test");
 
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    let ffi_path = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("src").join("ffi.rs").to_string_lossy().to_string();
+    // panic!("cargo:warn=out_dir: {out_dir}");
+
     // Now bind the AST, which will write, compile and link a shim library, and create the rust ffi binding
-    bind("take_string", "/tmp", &ast, &options)?;
-    */
+    bind("take_string", &out_dir, Some(&ffi_path), &ast, &options)?;
 
     Ok(())
 }

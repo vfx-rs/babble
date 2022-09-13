@@ -407,7 +407,7 @@ fn build_take_std_string() -> Result<(), Error> {
         c_ast.pretty_print(0)?;
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 2);
+        assert_eq!(c_ast.functions.len(), 6);
 
         let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");

@@ -1,11 +1,11 @@
 use bbl_clang::{
     cursor::{Cursor, USR},
-    exception::ExceptionSpecificationKind,
+    exception::ExceptionSpecificationKind, ty::TypeKind,
 };
 
 use crate::{
-    class::{ClassDecl, RuleOfFive, MethodState},
-    function::Argument,
+    class::{ClassDecl, MethodState, RuleOfFive},
+    function::{Argument, Static, Virtual, PureVirtual, Const},
     function::{Method, MethodKind},
     namespace,
     qualtype::{QualType, TypeRef},
@@ -18,7 +18,7 @@ pub fn create_std_string(class: Cursor, namespaces: Vec<USR>) -> ClassDecl {
 
     let methods = vec![
         Method::new(
-            USR::new("basic_string_ctor"),
+            USR::new("BBL:basic_string_ctor"),
             "string".to_string(),
             MethodKind::Constructor,
             QualType::void(),
@@ -27,13 +27,33 @@ pub fn create_std_string(class: Cursor, namespaces: Vec<USR>) -> ClassDecl {
             method_namespaces.clone(),
             Vec::new(),
             ExceptionSpecificationKind::None,
-            false,
-            false,
-            false,
-            false,
+            Const(false),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
         ),
         Method::new(
-            USR::new("basic_string_dtor"),
+            USR::new("BBL:basic_string_ctor_char_ptr"),
+            "string".to_string(),
+            MethodKind::Constructor,
+            QualType::void(),
+            vec![
+                Argument::new(
+                    "char_ptr",
+                    QualType::pointer("const char*", QualType::char(true)),
+                )
+            ],
+            Some("from_char_ptr".to_string()),
+            method_namespaces.clone(),
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(false),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
+        ),
+        Method::new(
+            USR::new("BBL:basic_string_dtor"),
             "~string".to_string(),
             MethodKind::Destructor,
             QualType::void(),
@@ -42,13 +62,13 @@ pub fn create_std_string(class: Cursor, namespaces: Vec<USR>) -> ClassDecl {
             method_namespaces.clone(),
             Vec::new(),
             ExceptionSpecificationKind::None,
-            false,
-            false,
-            false,
-            false,
+            Const(false),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
         ),
         Method::new(
-            USR::new("basic_string_copy_ctor"),
+            USR::new("BBL:basic_string_copy_ctor"),
             "string".to_string(),
             MethodKind::CopyConstructor,
             QualType::void(),
@@ -63,13 +83,13 @@ pub fn create_std_string(class: Cursor, namespaces: Vec<USR>) -> ClassDecl {
             method_namespaces.clone(),
             Vec::new(),
             ExceptionSpecificationKind::None,
-            false,
-            false,
-            false,
-            false,
+            Const(false),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
         ),
         Method::new(
-            USR::new("basic_string_move_ctor"),
+            USR::new("BBL:basic_string_move_ctor"),
             "string".to_string(),
             MethodKind::MoveConstructor,
             QualType::void(),
@@ -84,10 +104,33 @@ pub fn create_std_string(class: Cursor, namespaces: Vec<USR>) -> ClassDecl {
             method_namespaces.clone(),
             Vec::new(),
             ExceptionSpecificationKind::None,
-            false,
-            false,
-            false,
-            false,
+            Const(false),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
+        ),
+        Method::new(
+            USR::new("BBL:basic_string_c_str"),
+            "c_str".to_string(),
+            MethodKind::Method,
+            QualType {
+                name: "char const*".to_string(),
+                is_const: false,
+                type_ref: TypeRef::Pointer(Box::new(QualType {
+                    name: "char const".to_string(),
+                    is_const: true,
+                    type_ref: TypeRef::Builtin(TypeKind::Char_S),
+                })),
+            },
+            vec![],
+            Some("c_str".to_string()),
+            method_namespaces.clone(),
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(true),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
         ),
     ];
 
@@ -106,6 +149,6 @@ pub fn create_std_string(class: Cursor, namespaces: Vec<USR>) -> ClassDecl {
             copy_assign: MethodState::Undefined,
             move_assign: MethodState::Undefined,
             dtor: MethodState::Defined,
-        }
+        },
     )
 }

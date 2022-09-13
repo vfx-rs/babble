@@ -255,6 +255,18 @@ pub struct Method {
     pub(crate) specializations: Vec<MethodSpecializationId>,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct Const(pub bool);
+
+#[derive(Copy, Clone, Debug)]
+pub struct Static(pub bool);
+
+#[derive(Copy, Clone, Debug)]
+pub struct Virtual(pub bool);
+
+#[derive(Copy, Clone, Debug)]
+pub struct PureVirtual(pub bool);
+
 #[allow(clippy::too_many_arguments)]
 impl Method {
     pub fn new(
@@ -267,10 +279,10 @@ impl Method {
         namespaces: Vec<USR>,
         template_parameters: Vec<TemplateParameterDecl>,
         exception_specification_kind: ExceptionSpecificationKind,
-        is_const: bool,
-        is_static: bool,
-        is_virtual: bool,
-        is_pure_virtual: bool,
+        is_const: Const,
+        is_static: Static,
+        is_virtual: Virtual,
+        is_pure_virtual: PureVirtual,
     ) -> Self {
         Method {
             function: Function::new(
@@ -284,9 +296,9 @@ impl Method {
                 exception_specification_kind,
             ),
             kind,
-            is_const,
-            is_virtual,
-            is_pure_virtual,
+            is_const: is_const.0,
+            is_virtual: is_virtual.0,
+            is_pure_virtual: is_virtual.0,
             specializations: Vec::new(),
         }
     }

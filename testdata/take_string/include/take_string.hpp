@@ -6,8 +6,8 @@
 namespace Test_1_0 {
 
 class Class {
-    // int a;
 public:
+    int a;
     // Class(){}
 
     std::string take_string(const std::string& s) {

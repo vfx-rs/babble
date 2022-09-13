@@ -1,11 +1,12 @@
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 
 use bbl_clang::{cli_args_with, virtual_file::write_temp_cmake_project};
 use bbl_extract::parse_file_and_extract_ast;
-use bbl_write::{cmake::build_project, gen_c::gen_c};
+use bbl_write::{cmake::build_project, gen_c::gen_c, gen_rust_ffi::write_rust_ffi_module};
 
 pub use bbl_extract::ast::AST;
 pub use bbl_translate::translate_cpp_ast_to_c;
+use tracing::debug;
 
 pub fn parse(header: &str, options: &BindOptions) -> Result<AST, Error> {
     let (source_filename, mut args) = write_temp_cmake_project(
@@ -31,11 +32,11 @@ pub fn parse(header: &str, options: &BindOptions) -> Result<AST, Error> {
     Ok(ast)
 }
 
-pub fn bind(project_name: &str, output_directory: &str, ast: &AST, options: &BindOptions) -> Result<(), Error> {
+pub fn bind(project_name: &str, output_directory: &str, copy_to: Option<&str>, ast: &AST, options: &BindOptions) -> Result<(), Error> {
     let c_ast = translate_cpp_ast_to_c(ast)?;
 
     let (c_header, c_source) = gen_c(project_name, ast, &c_ast)?;
-    println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+    debug!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
     build_project(
         project_name,
@@ -48,6 +49,26 @@ pub fn bind(project_name: &str, output_directory: &str, ast: &AST, options: &Bin
     )?;
 
     // now that the cmake project has built successfully let's translate the c ast to rust and write out the ffi module
+    let module_path = Path::new(output_directory).join("ffi.rs").to_string_lossy().to_string();
+    write_rust_ffi_module(output_directory, &module_path, &c_ast)?;
+
+    // copy to the source tree (or somewhere else) if we asked to
+    if let Some(copy_to) = copy_to {
+        std::fs::copy(module_path, copy_to).unwrap();
+    }
+
+    let c_project_name = format!("{}-c", project_name);
+
+    // link
+    println!("cargo:rustc-link-search=native={}/{}/install/lib", std::env::var("OUT_DIR").unwrap(), c_project_name);
+    println!("cargo:rustc-link-lib=static={}", c_project_name);
+
+    #[cfg(target_os="macos")]
+    println!("cargo:rustc-link-lib=dylib=cxx");
+
+    #[cfg(target_os="linux")]
+    println!("cargo:rustc-link-lib=dylib=stdc++");
+
 
     Ok(())
 }

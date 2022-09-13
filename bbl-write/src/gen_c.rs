@@ -178,103 +178,6 @@ fn gen_cast(qual_type: &CQualType, ast: &AST, c_ast: &CAST) -> Result<Option<Str
     }
 }
 
-/// Generate the c++ required to cast and pass an argument from c to the cpp fuction call
-///
-/// For example:
-/// NS::Class    -> *(NS::Class*)&arg
-/// NS::Class*   -> (NS::Class*)arg
-/// NS::Class&   -> *(NS::Class*)arg
-/// NS::Class*&  -> *(NS::Class**)arg
-#[instrument(level = "trace", skip(ast, c_ast))]
-fn generate_arg_pass(
-    arg_name: &str,
-    qual_type: &CQualType,
-    ast: &AST,
-    c_ast: &CAST,
-) -> Result<String, ArgumentError> {
-    match qual_type.type_ref() {
-        CTypeRef::Builtin(_tk) => Ok(arg_name.to_string()),
-        CTypeRef::Pointer(_) => {
-            // needs_deref() will be true if this pointer was a reference in the cpp ast, or if it's a conversion of a
-            // non-value-type passed by value
-            let deref = if qual_type.needs_deref() { "*" } else { "" };
-            if let Some(cast) = gen_cast(qual_type, ast, c_ast)? {
-                Ok(format!("{deref}({cast}){arg_name}"))
-            } else {
-                Ok(format!("{deref}{arg_name}"))
-            }
-        }
-        CTypeRef::Ref(_) => {
-            if let Some(cast) = gen_cast(qual_type, ast, c_ast)? {
-                Ok(format!("*({cast}*)&{arg_name}"))
-            } else {
-                Ok(arg_name.to_string())
-            }
-        }
-        CTypeRef::Unknown(tk) => Err(TypeError::UnknownType(*tk))?,
-    }
-}
-
-/// Generate the cpp function call expression, including casting all arguments
-#[instrument(level = "trace", skip(ast))]
-fn gen_cpp_call(fun: &CFunction, ast: &AST) -> Result<String, TypeError> {
-    match fun.source {
-        CFunctionSource::Function(cpp_fun_id) => {
-            let cpp_fun = &ast.functions()[cpp_fun_id];
-            Ok(cpp_fun.get_qualified_name(ast).map_err(|e| {
-                TypeError::FailedToGetQualifiedName {
-                    name: cpp_fun.name().to_string(),
-                    source: e,
-                }
-            })?)
-        }
-        CFunctionSource::Method((class_id, method_id)) => {
-            // TODO(AL): if this is a class template specialiation, we need to use the specialized name here in order to
-            // get the typedef name rather then the underlying name
-            let class = &ast.classes()[class_id];
-            let method: &Method = &class.methods()[method_id.get()];
-
-            let qname = fun
-                .method_info
-                .as_ref()
-                .map(|info| info.class_qname.clone())
-                .unwrap(); // safe to unwrap here because we only ever populate method_info for methods
-
-            if method.is_static() {
-                Ok(qname)
-            } else if method.is_any_constructor() {
-                match class.bind_kind() {
-                    ClassBindKind::ValueType => Ok(qname),
-                    ClassBindKind::OpaquePtr => Ok(format!("new {qname}")),
-                    ClassBindKind::OpaqueBytes => {
-                        todo!("Handle opaque bytes")
-                    }
-                }
-            } else {
-                Ok(format!("(({}*)self)->{}", qname, method.name()))
-            }
-        }
-        CFunctionSource::SpecializedMethod((class_id, method_id)) => {
-            let class = &ast.classes()[class_id];
-            let spec_method = &class.specialized_methods()[method_id.0];
-            let temp_method = &class.methods()[spec_method.specialized_decl().get()];
-
-            let qname = temp_method.get_qualified_name(ast).map_err(|e| {
-                TypeError::FailedToGetQualifiedName {
-                    name: class.name().to_string(),
-                    source: e,
-                }
-            })?;
-
-            if temp_method.is_static() {
-                Ok(qname)
-            } else {
-                Ok(format!("(({}*)self)->{}", qname, temp_method.name()))
-            }
-        }
-    }
-}
-
 fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
     match expr {
         Expr::Compound(stmts) => {
@@ -427,7 +330,8 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<St
             TypeKind::ULongLong => "unsigned long long".to_string(),
             TypeKind::UShort => "unsigned short".to_string(),
             TypeKind::Void => "void".to_string(),
-            _ => qt.format(c_ast, use_public_names)?,
+            // _ => qt.format(c_ast, use_public_names)?,
+            _ => unimplemented!("need to implement builtin {tk}")
         },
         CTypeRef::Ref(usr) => {
             // first check to see if there's a direct class reference
@@ -443,7 +347,8 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<St
         CTypeRef::Pointer(pointee) => {
             format!("{}*{const_}", gen_c_type(pointee, c_ast, use_public_names)?)
         }
-        _ => qt.format(c_ast, use_public_names)?,
+        // _ => qt.format(c_ast, use_public_names)?,
+        _ => unimplemented!("Need to implement {qt:?}")
     })
 }
 

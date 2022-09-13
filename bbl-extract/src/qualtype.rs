@@ -84,6 +84,14 @@ impl QualType {
         }
     }
 
+    pub fn char(is_const: bool) -> Self {
+        QualType {
+            name: "char".into(),
+            is_const,
+            type_ref: TypeRef::Builtin(TypeKind::Char_S),
+        }
+    }
+
     pub fn void() -> Self {
         QualType {
             name: "void".into(),
@@ -98,6 +106,10 @@ impl QualType {
 
     pub fn rvalue_reference(name: &str, pointee: QualType) -> QualType {
         QualType { name: name.to_string(), is_const: false, type_ref: TypeRef::LValueReference(Box::new(pointee)) }
+    }
+
+    pub fn pointer(name: &str, pointee: QualType) -> QualType {
+        QualType { name: name.to_string(), is_const: false, type_ref: TypeRef::Pointer(Box::new(pointee)) }
     }
 
     pub fn type_ref(name: &str, is_const: bool, usr: USR) -> QualType {

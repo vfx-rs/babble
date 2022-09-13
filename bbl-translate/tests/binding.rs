@@ -499,7 +499,7 @@ public:
         c_ast.pretty_print(0)?;
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 2);
+        assert_eq!(c_ast.functions.len(), 5);
 
         Ok(())
     };

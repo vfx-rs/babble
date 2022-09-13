@@ -29,9 +29,6 @@ pub struct CQualType {
     pub(crate) is_const: bool,
     pub(crate) type_ref: CTypeRef,
     pub(crate) cpp_type_ref: TypeRef,
-    pub(crate) needs_deref: bool,
-    pub(crate) needs_move: bool,
-    pub(crate) needs_alloc: bool,
 }
 
 impl CQualType {
@@ -51,14 +48,6 @@ impl CQualType {
         matches!(self.type_ref, CTypeRef::Pointer(_))
     }
 
-    pub fn needs_deref(&self) -> bool {
-        self.needs_deref
-    }
-
-    pub fn needs_move(&self) -> bool {
-        self.needs_move
-    }
-
     pub fn cpp_type_ref(&self) -> &TypeRef {
         &self.cpp_type_ref
     }
@@ -67,11 +56,8 @@ impl CQualType {
         CQualType {
             name: "UNKNOWN".to_string(),
             is_const: false,
-            needs_deref: false,
-            needs_move: false,
             type_ref: CTypeRef::Unknown(tk),
             cpp_type_ref: TypeRef::Unknown(tk),
-            needs_alloc: false,
         }
     }
 
@@ -105,9 +91,6 @@ impl CQualType {
             cpp_type_ref: TypeRef::Builtin(TypeKind::Int),
             type_ref: CTypeRef::Builtin(TypeKind::Int),
             is_const,
-            needs_alloc: false,
-            needs_deref: false,
-            needs_move: false,
         }
     }
 
@@ -125,9 +108,6 @@ impl CQualType {
             is_const,
             type_ref: CTypeRef::Pointer(Box::new(c_qual_type)),
             cpp_type_ref,
-            needs_deref,
-            needs_move,
-            needs_alloc,
         }
     }
 }
@@ -197,9 +177,6 @@ pub fn translate_qual_type(
             is_const: qual_type.is_const,
             type_ref: CTypeRef::Builtin(*tk),
             cpp_type_ref: qual_type.type_ref.clone(),
-            needs_deref: false,
-            needs_move: false,
-            needs_alloc: false,
         }),
         TypeRef::Pointer(qt) => Ok(CQualType {
             name: qual_type.name.clone(),
@@ -211,9 +188,6 @@ pub fn translate_qual_type(
                 type_replacements,
             )?)),
             cpp_type_ref: qual_type.type_ref.clone(),
-            needs_deref: false,
-            needs_move: false,
-            needs_alloc: false,
         }),
         TypeRef::LValueReference(qt) => Ok(CQualType {
             name: qual_type.name.clone(),
@@ -225,9 +199,6 @@ pub fn translate_qual_type(
                 type_replacements,
             )?)),
             cpp_type_ref: qual_type.type_ref.clone(),
-            needs_deref: true,
-            needs_move: false,
-            needs_alloc: false,
         }),
         TypeRef::RValueReference(qt) => Ok(CQualType {
             name: qual_type.name.clone(),
@@ -239,18 +210,12 @@ pub fn translate_qual_type(
                 type_replacements,
             )?)),
             cpp_type_ref: qual_type.type_ref.clone(),
-            needs_deref: false,
-            needs_move: true,
-            needs_alloc: false,
         }),
         TypeRef::Ref(usr) => Ok(CQualType {
             name: qual_type.name.clone(),
             is_const: qual_type.is_const,
             type_ref: CTypeRef::Ref(type_replacements.replace(*usr)),
             cpp_type_ref: qual_type.type_ref.clone(),
-            needs_deref: false,
-            needs_move: false,
-            needs_alloc: false,
         }),
         TypeRef::TemplateTypeParameter(parm_name) => {
             // find the parameter with the given name in the params list, then get the matching arg here

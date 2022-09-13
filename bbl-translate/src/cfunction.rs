@@ -310,9 +310,6 @@ pub fn translate_function(
                     cpp_type_ref: result.cpp_type_ref().clone(),
                     type_ref: CTypeRef::Pointer(Box::new(result)),
                     is_const: false,
-                    needs_alloc: false,
-                    needs_deref: false,
-                    needs_move: false,
                 },
                 is_self: false,
                 is_result: true,
@@ -340,9 +337,6 @@ pub fn translate_function(
                 cpp_type_ref: TypeRef::Builtin(TypeKind::Int),
                 type_ref: CTypeRef::Builtin(TypeKind::Int),
                 is_const: false,
-                needs_alloc: false,
-                needs_deref: false,
-                needs_move: false,
             },
             arguments,
             source,
@@ -563,9 +557,6 @@ pub fn translate_method(
                     cpp_type_ref: result.cpp_type_ref().clone(),
                     type_ref: CTypeRef::Pointer(Box::new(result)),
                     is_const: false,
-                    needs_alloc: false,
-                    needs_deref: false,
-                    needs_move: false,
                 };
 
                 let to_type = get_cpp_cast_expr(&result_qt, ast)?;
@@ -592,9 +583,6 @@ pub fn translate_method(
                     cpp_type_ref: result.cpp_type_ref().clone(),
                     type_ref: CTypeRef::Pointer(Box::new(result)),
                     is_const: false,
-                    needs_alloc: false,
-                    needs_deref: false,
-                    needs_move: false,
                 };
 
                 let to_type = get_cpp_cast_expr(&result_qt, ast)?;
@@ -637,9 +625,6 @@ pub fn translate_method(
                     cpp_type_ref: result.cpp_type_ref().clone(),
                     type_ref: CTypeRef::Pointer(Box::new(result)),
                     is_const: false,
-                    needs_alloc: false,
-                    needs_deref: false,
-                    needs_move: false,
                 };
 
                 let to_type = get_cpp_cast_expr(&result_qt, ast)?;
@@ -688,9 +673,6 @@ pub fn translate_method(
             type_ref: CTypeRef::Ref(usr),
             cpp_type_ref: TypeRef::Ref(usr),
             is_const: false,
-            needs_deref: false,
-            needs_move: false,
-            needs_alloc: false,
         };
 
         match class.bind_kind() {
@@ -700,9 +682,6 @@ pub fn translate_method(
                     cpp_type_ref: TypeRef::Pointer(Box::new(cpp_qt)),
                     type_ref: CTypeRef::Pointer(Box::new(c_qt)),
                     is_const: false,
-                    needs_alloc: false,
-                    needs_deref: false,
-                    needs_move: false,
                 };
 
                 let to_type = get_cpp_cast_expr(&result_qt, ast)?;
@@ -740,9 +719,6 @@ pub fn translate_method(
                     cpp_type_ref: TypeRef::Pointer(Box::new(cpp_qt)),
                     type_ref: CTypeRef::Pointer(Box::new(c_qt)),
                     is_const: false,
-                    needs_alloc: false,
-                    needs_deref: false,
-                    needs_move: false,
                 };
 
                 let result_qt = CQualType {
@@ -750,9 +726,6 @@ pub fn translate_method(
                     cpp_type_ref: TypeRef::Pointer(Box::new(cpp_ptr)),
                     type_ref: CTypeRef::Pointer(Box::new(c_ptr)),
                     is_const: false,
-                    needs_alloc: false,
-                    needs_deref: false,
-                    needs_move: false,
                 };
 
                 let to_type = get_cpp_cast_expr(&result_qt, ast)?;
@@ -818,22 +791,16 @@ pub fn translate_method(
                 is_const: method.is_const(),
                 type_ref: CTypeRef::Ref(type_replacements.replace(class.usr())),
                 cpp_type_ref: TypeRef::Ref(class.usr()),
-                needs_deref: false,
-                needs_move: false,
-                needs_alloc: false,
             })),
             cpp_type_ref: TypeRef::Pointer(Box::new(QualType {
                 name: class.name().to_string(),
                 is_const: method.is_const(),
                 type_ref: TypeRef::Ref(class.usr()),
             })),
-            needs_deref: false,
-            needs_move: false,
-            needs_alloc: false,
         };
 
         let to_type = get_cpp_cast_expr(&qt, ast)?;
-        let self_name = get_unique_argument_name("self", &mut used_argument_names);
+        let self_name = get_unique_argument_name("this_", &mut used_argument_names);
 
         arguments.insert(
             0,
@@ -859,22 +826,16 @@ pub fn translate_method(
                 is_const: method.is_const(),
                 type_ref: CTypeRef::Ref(type_replacements.replace(class.usr())),
                 cpp_type_ref: TypeRef::Ref(class.usr()),
-                needs_deref: false,
-                needs_move: false,
-                needs_alloc: false,
             })),
             cpp_type_ref: TypeRef::Pointer(Box::new(QualType {
                 name: class.name().to_string(),
                 is_const: method.is_const(),
                 type_ref: TypeRef::Ref(class.usr()),
             })),
-            needs_deref: false,
-            needs_move: false,
-            needs_alloc: false,
         };
 
         let to_type = get_cpp_cast_expr(&qt, ast)?;
-        let self_name = get_unique_argument_name("self", &mut used_argument_names);
+        let self_name = get_unique_argument_name("this_", &mut used_argument_names);
 
         arguments.insert(
             0,
@@ -913,7 +874,7 @@ pub fn translate_method(
     Ok(CFunction {
         name_private: fn_name_private,
         name_public: fn_name_public,
-        result: CQualType::int("[result]", false),
+        result: CQualType::int("int", false),
         arguments,
         source,
         method_info: Some(MethodInfo {
