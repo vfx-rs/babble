@@ -1,6 +1,6 @@
 mod common;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use bbl_clang::{cli_args, cli_args_with, virtual_file::write_temp_cmake_project};
 use bbl_extract::{
@@ -55,7 +55,7 @@ public:
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
 
-    c_ast.pretty_print(0);
+    c_ast.pretty_print(0)?;
 
     Ok(())
 }
@@ -98,7 +98,7 @@ public:
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
 
-    c_ast.pretty_print(0);
+    c_ast.pretty_print(0)?;
 
     Ok(())
 }
@@ -199,7 +199,7 @@ public:
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
 
-    c_ast.pretty_print(0);
+    c_ast.pretty_print(0)?;
 
     // This will have to do for now
     assert_eq!(c_ast.structs.len(), 1);
@@ -237,7 +237,10 @@ public:
 
     let class = ast.find_class("Class")?;
     let method = ast.find_method(class, "foo()");
-    assert!(matches!(method, Err(bbl_extract::error::Error::MethodNotFound)));
+    assert!(matches!(
+        method,
+        Err(bbl_extract::error::Error::MethodNotFound)
+    ));
 
     ast.pretty_print(0);
 
@@ -274,7 +277,10 @@ public:
 
     let class = ast.find_class("Class")?;
     let method = ast.find_method(class, "method");
-    assert!(matches!(method, Err(bbl_extract::error::Error::MultipleMatches)));
+    assert!(matches!(
+        method,
+        Err(bbl_extract::error::Error::MultipleMatches)
+    ));
 
     ast.pretty_print(0);
 
@@ -318,7 +324,7 @@ public:
     ast.pretty_print(0);
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0);
+    c_ast.pretty_print(0)?;
 
     Ok(())
 }
@@ -349,7 +355,7 @@ int basic_function(int&& a, float*);
     let c_ast = translate_cpp_ast_to_c(&ast)?;
     assert_eq!(c_ast.structs.len(), 0);
     assert_eq!(c_ast.functions.len(), 1);
-    c_ast.pretty_print(0);
+    c_ast.pretty_print(0)?;
 
     Ok(())
 }
@@ -381,7 +387,7 @@ T function_template(T&& a, float*);
     ast.pretty_print(0);
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0);
+    c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 0);
     assert_eq!(c_ast.functions.len(), 1);
@@ -427,7 +433,7 @@ public:
     ast.pretty_print(0);
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0);
+    c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 1);
     assert_eq!(c_ast.functions.len(), 1);
@@ -451,22 +457,14 @@ public:
 }
         "#;
 
-    let cmake_prefix_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .join("testdata")
-        .join("imath");
-
     let (filename, args) = write_temp_cmake_project::<&Path>(
         contents,
         &["Imath 3.1 REQUIRED"],
         &["Imath::Imath"],
-        // Some(cmake_prefix_path),
         None,
     )?;
 
-    let mut ast =
-        parse_file_and_extract_ast(&filename, &cli_args_with(&args)?, true, Some("Test"))?;
+    let ast = parse_file_and_extract_ast(&filename, &cli_args_with(&args)?, true, Some("Test"))?;
     ast.pretty_print(0);
 
     Ok(())
@@ -477,7 +475,7 @@ fn take_std_string() -> Result<(), Error> {
     common::init_log();
 
     let clo = || -> Result<(), Error> {
-        let mut ast = parse_string_and_extract_ast(
+        let ast = parse_string_and_extract_ast(
             r#"
 #include <string>
 
@@ -499,7 +497,7 @@ public:
         c_ast.pretty_print(0)?;
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 5);
+        assert_eq!(c_ast.functions.len(), 7);
 
         Ok(())
     };

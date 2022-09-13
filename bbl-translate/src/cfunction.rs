@@ -8,7 +8,7 @@ use bbl_extract::{
     index_map::{IndexMapKey, UstrIndexMap},
     qualtype::{QualType, TypeRef},
     template_argument::{TemplateParameterDecl, TemplateType},
-    type_alias::{ClassTemplateSpecialization, TypeAlias},
+    type_alias::{TypeAlias},
 };
 use hashbrown::HashSet;
 use tracing::{error, instrument, trace};
@@ -202,13 +202,12 @@ impl CFunction {
     }
 }
 
-#[instrument(skip(used_argument_names, ast), level = "trace")]
+#[instrument(skip(used_argument_names), level = "trace")]
 pub fn translate_arguments(
     arguments: &[Argument],
     template_parms: &[TemplateParameterDecl],
     template_args: &[Option<TemplateType>],
     used_argument_names: &mut HashSet<String>,
-    ast: &AST,
     type_replacements: &TypeReplacements,
 ) -> Result<Vec<CArgument>, Error> {
     trace!("Translating arguments {:?}", arguments);
@@ -289,7 +288,6 @@ pub fn translate_function(
         function.template_parameters(),
         template_args,
         &mut used_argument_names,
-        ast,
         type_replacements,
     )
     .map_err(|e| Error::TranslateFunction {
@@ -399,7 +397,6 @@ pub fn translate_method(
         &template_parms,
         template_args,
         &mut used_argument_names,
-        ast,
         type_replacements,
     )
     .map_err(|e| Error::TranslateFunction {
@@ -477,9 +474,6 @@ pub fn translate_method(
                             arg.qual_type.cpp_type_ref().clone(),
                             arg.qual_type.clone(),
                             false,
-                            false,
-                            false,
-                            false,
                         );
 
                         arg_pass.push(Expr::Deref {
@@ -499,9 +493,6 @@ pub fn translate_method(
                             &format!("{}*", arg.qual_type.name()),
                             arg.qual_type.cpp_type_ref().clone(),
                             arg.qual_type.clone(),
-                            false,
-                            false,
-                            false,
                             false,
                         );
                         let to_type = get_cpp_cast_expr(&tmp_qual_type, ast)?;
@@ -617,7 +608,7 @@ pub fn translate_method(
                     )
                 }
             }
-            CTypeRef::Ref(usr) => {
+            CTypeRef::Ref(_) => {
                 // pass by value of a user type
                 // add a pointer to the result, then deref when assigning
                 let result_qt = CQualType {

@@ -133,6 +133,7 @@ pub struct ClassDecl {
     pub(crate) rule_of_five: RuleOfFive,
 }
 
+#[allow(clippy::too_many_arguments)]
 impl ClassDecl {
     pub fn new(
         usr: USR,
@@ -338,7 +339,7 @@ impl ClassDecl {
             .iter()
             .map(|u| {
                 ast.get_namespace(*u)
-                    .expect(&format!("Failed to get namespace with usr {u}"))
+                    .unwrap_or_else(|| panic!("Failed to get namespace with usr {u}"))
                     .name
                     .clone()
             })

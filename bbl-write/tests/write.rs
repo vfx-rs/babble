@@ -39,7 +39,7 @@ public:
     assert_eq!(c_ast.structs.len(), 1);
     assert_eq!(c_ast.functions.len(), 2);
 
-    let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
+    let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
 
     Ok(())
@@ -78,7 +78,7 @@ public:
     assert_eq!(c_ast.structs.len(), 1);
     assert_eq!(c_ast.functions.len(), 0);
 
-    let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
+    let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
 
     Ok(())
@@ -116,7 +116,7 @@ void fun(Class c);
     assert_eq!(c_ast.structs.len(), 1);
     assert_eq!(c_ast.functions.len(), 1);
 
-    let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
+    let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
 
     Ok(())
@@ -152,7 +152,7 @@ void fun(Class c);
     assert_eq!(c_ast.structs.len(), 1);
     assert_eq!(c_ast.functions.len(), 1);
 
-    let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
+    let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
     Ok(())
@@ -191,7 +191,7 @@ public:
     assert_eq!(c_ast.structs.len(), 2);
     assert_eq!(c_ast.functions.len(), 0);
 
-    let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
+    let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
     Ok(())
@@ -235,7 +235,7 @@ public:
     assert_eq!(c_ast.structs.len(), 2);
     assert_eq!(c_ast.functions.len(), 1);
 
-    let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
+    let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
     Ok(())
@@ -284,7 +284,7 @@ public:
     assert_eq!(c_ast.structs.len(), 2);
     assert_eq!(c_ast.functions.len(), 1);
 
-    let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
+    let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
     Ok(())
@@ -318,9 +318,9 @@ fn take_std_string_by_value() -> Result<(), Error> {
         c_ast.pretty_print(0)?;
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 5);
+        assert_eq!(c_ast.functions.len(), 7);
 
-        let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
         Ok(())
@@ -361,9 +361,9 @@ fn write_take_std_string() -> Result<(), Error> {
         c_ast.pretty_print(0)?;
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 11);
+        assert_eq!(c_ast.functions.len(), 13);
 
-        let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
         Ok(())
@@ -407,15 +407,14 @@ fn build_take_std_string() -> Result<(), Error> {
         c_ast.pretty_print(0)?;
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 6);
+        assert_eq!(c_ast.functions.len(), 7);
 
-        let (c_header, c_source) = gen_c("test", &ast, &c_ast)?;
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
         build_project(
             "build_take_std_string",
             "/tmp",
-            &ast,
             &c_ast,
             &find_packages,
             &link_libraries,

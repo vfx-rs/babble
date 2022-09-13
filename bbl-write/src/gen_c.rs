@@ -1,15 +1,15 @@
 use bbl_clang::ty::TypeKind;
-use bbl_extract::{ast::AST, class::ClassBindKind, function::Method, index_map::IndexMapKey};
+use bbl_extract::{ast::AST, class::ClassBindKind};
 use bbl_translate::{
-    cfunction::{CArgument, CFunction, CFunctionSource, Expr},
+    cfunction::{CFunction, Expr},
     cstruct::CStruct,
     ctype::{CQualType, CTypeRef},
     ctypedef::CTypedef,
     CAST,
 };
 
-use crate::error::{ArgumentError, Error, TypeError};
-use tracing::{debug, instrument, trace};
+use crate::error::{Error, TypeError};
+use tracing::instrument;
 
 use std::fmt::Write;
 
@@ -19,9 +19,9 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 ///
 /// # Returns
 /// A tuple containing two [`String`]s, the first of which is the header source, the second is the implementation source
-#[instrument(level = "trace", skip(ast, c_ast))]
-pub fn gen_c(module_name: &str, ast: &AST, c_ast: &CAST) -> Result<(String, String)> {
-    let module_name_upper = module_name.to_uppercase().replace("-", "_");
+#[instrument(level = "trace", skip(c_ast))]
+pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
+    let module_name_upper = module_name.to_uppercase().replace('-', "_");
     let mut header = format!("#ifndef __{}_H__\n", module_name_upper);
     header = format!("{header}#define __{}_H__\n\n", module_name_upper);
     header = format!("{header}#ifdef __cplusplus\nextern \"C\" {{\n#endif\n\n");
@@ -39,7 +39,7 @@ pub fn gen_c(module_name: &str, ast: &AST, c_ast: &CAST) -> Result<(String, Stri
     // Generate forward declarations for each struct first
     header = format!("{header}/* Forward declarations */\n");
     for st in c_ast.structs.iter() {
-        let decl = generate_struct_forward_declaration(st, c_ast)?;
+        let decl = generate_struct_forward_declaration(st)?;
         header = format!("{header}{decl}\n")
     }
 
@@ -73,7 +73,7 @@ pub fn gen_c(module_name: &str, ast: &AST, c_ast: &CAST) -> Result<(String, Stri
             }
         })?;
 
-        let defn = gen_function_definition(fun, ast, c_ast).map_err(|source| {
+        let defn = gen_function_definition(fun, c_ast).map_err(|source| {
             Error::FailedToGenerateFunction {
                 name: fun.name_private.clone(),
                 source: Box::new(source),
@@ -294,8 +294,8 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
 /// Generate the definition of this function
 ///
 /// This means calling its cpp counterpart and generating all necessary casting
-#[instrument(level = "trace", skip(ast, c_ast))]
-fn gen_function_definition(fun: &CFunction, ast: &AST, c_ast: &CAST) -> Result<String, Error> {
+#[instrument(level = "trace", skip(c_ast))]
+fn gen_function_definition(fun: &CFunction, c_ast: &CAST) -> Result<String, Error> {
     let mut body = gen_function_signature(fun, c_ast, false).map_err(|e| {
         Error::FailedToGenerateSignature {
             name: fun.name_private.clone(),
@@ -331,7 +331,7 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<St
             TypeKind::UShort => "unsigned short".to_string(),
             TypeKind::Void => "void".to_string(),
             // _ => qt.format(c_ast, use_public_names)?,
-            _ => unimplemented!("need to implement builtin {tk}")
+            _ => unimplemented!("need to implement builtin {tk}"),
         },
         CTypeRef::Ref(usr) => {
             // first check to see if there's a direct class reference
@@ -348,13 +348,13 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<St
             format!("{}*{const_}", gen_c_type(pointee, c_ast, use_public_names)?)
         }
         // _ => qt.format(c_ast, use_public_names)?,
-        _ => unimplemented!("Need to implement {qt:?}")
+        _ => unimplemented!("Need to implement {qt:?}"),
     })
 }
 
 /// Generate a forwad declaration for this struct
-#[instrument(level = "trace", skip(c_ast))]
-fn generate_struct_forward_declaration(st: &CStruct, c_ast: &CAST) -> Result<String> {
+#[instrument(level = "trace")]
+fn generate_struct_forward_declaration(st: &CStruct) -> Result<String> {
     Ok(format!("typedef struct {0} {0};", st.name_internal))
 }
 

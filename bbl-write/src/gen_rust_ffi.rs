@@ -1,5 +1,5 @@
 use bbl_clang::ty::TypeKind;
-use bbl_extract::{ast::AST, class::ClassBindKind};
+use bbl_extract::class::ClassBindKind;
 use bbl_translate::{
     cfunction::CFunction,
     cstruct::CStruct,
@@ -14,7 +14,6 @@ use std::{borrow::Cow, fmt::Write};
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub fn write_rust_ffi_module(
-    c_output_directory: &str,
     module_path: &str,
     c_ast: &CAST,
 ) -> Result<(), Error> {
@@ -29,13 +28,20 @@ pub fn write_rust_ffi_module(
 }
 
 pub fn write_rust_ffi(source: &mut String, c_ast: &CAST) -> Result<()> {
+
+    writeln!(source, r#"#![allow(non_snake_case)]
+#![allow(non_camel_case_types)]
+#![allow(non_upper_case_globals)]
+#![allow(unused_imports)]
+"#)?;
+
     for st in c_ast.structs.iter() {
-        write_struct_external(source, st, c_ast)?;
+        write_struct_external(source, st)?;
     }
 
     writeln!(source)?;
     for fun in c_ast.functions.iter() {
-        write_function_external(source, fun, c_ast)?;
+        write_function_external(source, fun)?;
         writeln!(source)?;
     }
 
@@ -94,7 +100,7 @@ fn write_function_internal(source: &mut String, fun: &CFunction, c_ast: &CAST) -
     Ok(())
 }
 
-fn write_function_external(source: &mut String, fun: &CFunction, c_ast: &CAST) -> Result<()> {
+fn write_function_external(source: &mut String, fun: &CFunction) -> Result<()> {
     let external = if fun.name_public != fun.name_private {
         &fun.name_public
     } else {
@@ -149,7 +155,7 @@ pub struct {0} {{
     Ok(())
 }
 
-fn write_struct_external(source: &mut String, st: &CStruct, c_ast: &CAST) -> Result<()> {
+fn write_struct_external(source: &mut String, st: &CStruct) -> Result<()> {
     let external = if st.name_external != st.name_internal {
         &st.name_external
     } else {
@@ -212,7 +218,7 @@ fn write_type(source: &mut String, qt: &CQualType, c_ast: &CAST) -> Result<()> {
     Ok(())
 }
 
-fn sanitize_name<'a>(name: &'a str) -> Cow<'a, str> {
+fn sanitize_name(name: &str) -> Cow<'_, str> {
     match name {
         "as" | "break" | "const" | "continue" | "crate" | "else" | "enum" | "extern" | "false"
         | "fn" | "for" | "if" | "impl" | "in" | "let" | "loop" | "match" | "mod" | "move"

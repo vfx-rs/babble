@@ -35,13 +35,12 @@ pub fn parse(header: &str, options: &BindOptions) -> Result<AST, Error> {
 pub fn bind(project_name: &str, output_directory: &str, copy_to: Option<&str>, ast: &AST, options: &BindOptions) -> Result<(), Error> {
     let c_ast = translate_cpp_ast_to_c(ast)?;
 
-    let (c_header, c_source) = gen_c(project_name, ast, &c_ast)?;
+    let (c_header, c_source) = gen_c(project_name, &c_ast)?;
     debug!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
     build_project(
         project_name,
         output_directory,
-        ast,
         &c_ast,
         options.find_packages,
         options.link_libraries,
@@ -50,7 +49,7 @@ pub fn bind(project_name: &str, output_directory: &str, copy_to: Option<&str>, a
 
     // now that the cmake project has built successfully let's translate the c ast to rust and write out the ffi module
     let module_path = Path::new(output_directory).join("ffi.rs").to_string_lossy().to_string();
-    write_rust_ffi_module(output_directory, &module_path, &c_ast)?;
+    write_rust_ffi_module(&module_path, &c_ast)?;
 
     // copy to the source tree (or somewhere else) if we asked to
     if let Some(copy_to) = copy_to {

@@ -8,7 +8,7 @@ use bbl_extract::{
     qualtype::{QualType, TypeRef},
     template_argument::{TemplateParameterDecl, TemplateType},
 };
-use tracing::{error, instrument, trace};
+use tracing::{error, instrument};
 
 use crate::error::{Error, TranslateTypeError};
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -99,9 +99,6 @@ impl CQualType {
         cpp_type_ref: TypeRef,
         c_qual_type: CQualType,
         is_const: bool,
-        needs_deref: bool,
-        needs_move: bool,
-        needs_alloc: bool,
     ) -> CQualType {
         CQualType {
             name: name.to_string(),

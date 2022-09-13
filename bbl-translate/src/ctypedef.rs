@@ -8,11 +8,10 @@ use hashbrown::HashSet;
 use tracing::instrument;
 
 use crate::{
-    build_namespace_prefix,
     cfunction::{translate_function, CFunction, CFunctionId},
     cstruct::{CStruct, CStructId, translate_class_template},
     error::Error,
-    get_c_names, ctype::TypeReplacements,
+    ctype::TypeReplacements,
 };
 
 #[instrument(level = "trace", skip(ast, functions, used_names))]
@@ -44,12 +43,12 @@ pub fn translate_function_template_specialization(
     Ok(())
 }
 
-#[instrument(level = "trace", skip(ast, structs, typedefs, functions, used_names))]
+#[instrument(level = "trace", skip(ast, structs, _typedefs, functions, used_names))]
 pub fn translate_class_template_specialization(
     ast: &AST,
     cts: &ClassTemplateSpecialization,
     structs: &mut UstrIndexMap<CStruct, CStructId>,
-    typedefs: &mut UstrIndexMap<CTypedef, CTypedefId>,
+    _typedefs: &mut UstrIndexMap<CTypedef, CTypedefId>,
     functions: &mut UstrIndexMap<CFunction, CFunctionId>,
     used_names: &mut HashSet<String>,
 ) -> Result<(), Error> {
@@ -60,7 +59,7 @@ pub fn translate_class_template_specialization(
         .ok_or_else(|| Error::ClassNotFound(cts.specialized_decl().as_str().to_string()))?;
     let class = &ast.classes()[class_id];
 
-    let (ns_prefix_external, ns_prefix_internal) = build_namespace_prefix(ast, cts.namespaces())?;
+    // let (ns_prefix_external, ns_prefix_internal) = build_namespace_prefix(ast, cts.namespaces())?;
 
     // get unique, prefixed names for the typedef
     // TODO (AL): need to resolve this properly: we're currently storing the name of the typedef class template 

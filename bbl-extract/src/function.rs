@@ -691,7 +691,7 @@ pub fn extract_function(
     let mut arguments: Vec<Argument> = Vec::with_capacity(num_arguments);
     let mut i = 0;
     let mut it = children.iter().skip(skip);
-    while let Some(c_arg) = it.next() {
+    for c_arg in it {
         debug!("{indent}    arg: {}", c_arg.display_name());
 
         if c_arg.kind() == CursorKind::ParmDecl {

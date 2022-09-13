@@ -1,19 +1,16 @@
 use std::path::Path;
 use std::process::Command;
 
-use bbl_extract::ast::AST;
 use bbl_translate::CAST;
 
 use crate::error::Error;
 use crate::gen_c::gen_c;
-use crate::gen_rust_ffi::write_rust_ffi;
 
 use std::fmt::Write;
 
 pub fn build_project<P: AsRef<Path>>(
     project_name: &str,
     output_directory: P,
-    ast: &AST,
     c_ast: &CAST,
     find_packages: &[&str],
     link_libraries: &[&str],
@@ -32,7 +29,7 @@ pub fn build_project<P: AsRef<Path>>(
     let header_path = output_directory.join(format!("{}.h", &project_name));
     let source_path = output_directory.join(format!("{}.cpp", &project_name));
 
-    let (header_contents, source_contents) = gen_c(&project_name, ast, c_ast)?;
+    let (header_contents, source_contents) = gen_c(&project_name, c_ast)?;
 
     let source_contents = format!("#include \"{project_name}.h\"\n\n{source_contents}");
 
