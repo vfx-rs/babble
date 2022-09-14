@@ -298,7 +298,7 @@ pub fn translate_class_template(
             fields,
             bind_kind: *class.bind_kind(),
             class_id,
-            usr: class.usr(), // TODO: what do we store here?
+            usr: class.usr(),
         },
     );
 

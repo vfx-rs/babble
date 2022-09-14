@@ -132,7 +132,6 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
     for (class_id, class) in ast.classes().iter().enumerate() {
         debug!("translating {class:?}");
         // if this is a template class, we'll ignore it and translate its specializations instead
-        // TODO (AL): do we want to use a separate type for ClassTemplate again?
         if class.is_templated() {
             if !class.is_specialized() {
                 warn!(

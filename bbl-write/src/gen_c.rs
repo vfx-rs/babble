@@ -385,7 +385,7 @@ fn generate_struct_declaration(st: &CStruct, c_ast: &CAST) -> Result<String> {
     match &st.bind_kind {
         ClassBindKind::OpaquePtr => generate_opaqueptr_declaration(st),
         ClassBindKind::ValueType => generate_valuetype_declaration(st, c_ast),
-        _ => todo!(),
+        _ => todo!("Handle opaquebytes"),
     }
 }
 
