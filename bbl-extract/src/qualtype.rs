@@ -4,15 +4,15 @@ use bbl_clang::{
     translation_unit::TranslationUnit,
     ty::{Type, TypeKind},
 };
-use tracing::{error, warn, info, debug, trace, instrument};
-use std::{fmt::Display, convert::TryInto};
+use std::{convert::TryInto, fmt::Display};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::{
     ast::AST,
     class::{specialize_template_parameter, ClassBindKind},
     error::Error,
     template_argument::{TemplateParameterDecl, TemplateType},
-    type_alias::{extract_type_alias_type, extract_typedef_decl},
+    type_alias::extract_typedef_decl,
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -101,15 +101,27 @@ impl QualType {
     }
 
     pub fn lvalue_reference(name: &str, pointee: QualType) -> QualType {
-        QualType { name: name.to_string(), is_const: true, type_ref: TypeRef::LValueReference(Box::new(pointee)) }
+        QualType {
+            name: name.to_string(),
+            is_const: true,
+            type_ref: TypeRef::LValueReference(Box::new(pointee)),
+        }
     }
 
     pub fn rvalue_reference(name: &str, pointee: QualType) -> QualType {
-        QualType { name: name.to_string(), is_const: false, type_ref: TypeRef::LValueReference(Box::new(pointee)) }
+        QualType {
+            name: name.to_string(),
+            is_const: false,
+            type_ref: TypeRef::LValueReference(Box::new(pointee)),
+        }
     }
 
     pub fn pointer(name: &str, pointee: QualType) -> QualType {
-        QualType { name: name.to_string(), is_const: false, type_ref: TypeRef::Pointer(Box::new(pointee)) }
+        QualType {
+            name: name.to_string(),
+            is_const: false,
+            type_ref: TypeRef::Pointer(Box::new(pointee)),
+        }
     }
 
     pub fn type_ref(name: &str, is_const: bool, usr: USR) -> QualType {
@@ -192,7 +204,7 @@ impl QualType {
 
 /// Given a template parameter in type position for which we only know the name, try to look up the type to replace it
 /// with
-#[instrument(level="trace")]
+#[instrument(level = "trace")]
 fn specialize_template_type(
     t: &str,
     class_template_parameters: &[TemplateParameterDecl],
@@ -240,7 +252,7 @@ impl Display for QualType {
 }
 
 /// Get a qualified type from a reference to a type
-#[instrument(skip(depth), level="trace")]
+#[instrument(skip(depth), level = "trace")]
 pub fn extract_type_from_typeref(c_tr: Cursor, depth: usize) -> Result<QualType> {
     if let Ok(c_ref) = c_tr.referenced() {
         let c_ref =
@@ -299,7 +311,7 @@ pub fn extract_type_from_typeref(c_tr: Cursor, depth: usize) -> Result<QualType>
 }
 
 /// Extract a qualified type from a clang Type
-#[instrument(skip(depth, already_visited, ast, tu), level="trace")]
+#[instrument(skip(depth, already_visited, ast, tu), level = "trace")]
 pub fn extract_type(
     ty: Type,
     depth: usize,
@@ -347,7 +359,14 @@ pub fn extract_type(
         match ty.kind() {
             TypeKind::Pointer => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(pointee, depth + 1, template_parameters, already_visited, ast, tu)?;
+                let ty_ref = extract_type(
+                    pointee,
+                    depth + 1,
+                    template_parameters,
+                    already_visited,
+                    ast,
+                    tu,
+                )?;
                 Ok(QualType {
                     name,
                     is_const,
@@ -356,7 +375,14 @@ pub fn extract_type(
             }
             TypeKind::LValueReference => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(pointee, depth + 1, template_parameters, already_visited, ast, tu)?;
+                let ty_ref = extract_type(
+                    pointee,
+                    depth + 1,
+                    template_parameters,
+                    already_visited,
+                    ast,
+                    tu,
+                )?;
                 Ok(QualType {
                     name,
                     is_const,
@@ -365,7 +391,14 @@ pub fn extract_type(
             }
             TypeKind::RValueReference => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(pointee, depth + 1, template_parameters, already_visited, ast, tu)?;
+                let ty_ref = extract_type(
+                    pointee,
+                    depth + 1,
+                    template_parameters,
+                    already_visited,
+                    ast,
+                    tu,
+                )?;
                 Ok(QualType {
                     name,
                     is_const,
