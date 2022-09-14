@@ -5,8 +5,9 @@ See `ARCHITECTURE.md` for an architectural overview.
 
 # Requirements
 You will need the clang+llvm-14 package for your system downloaded from here: https://github.com/llvm/llvm-project/releases/tag/llvmorg-14.0.0
-
 Version 13 will also work, other versions have not been tested.
+
+You will also need a compiler and CMake-3. We've tested gcc-9.4 on Ubuntu-20.04 and VS-2019 on Windows 11.
 
 # Building
 You will need to point the crates to your clang installation. There are three ways to do this:
