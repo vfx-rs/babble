@@ -528,11 +528,7 @@ pub fn extract_class_decl(
                 continue;
             }
         } else {
-            // TODO(AL): return error here
-            error!(
-                "Could not get access specifier from member {}",
-                member.display_name()
-            );
+            return Err(Error::FailedToGetAccessSpecifierFor(member.display_name().into()));
         }
         match member.kind() {
             CursorKind::TemplateTypeParameter => {
@@ -579,9 +575,7 @@ pub fn extract_class_decl(
                         ) {
                             Ok(method) => methods.push(method),
                             Err(e) => {
-                                error!(
-                                    "Could not extract method {member:?} from class {class_template:?}: {e:?}"
-                                );
+                                return Err(Error::FailedToExtractMethod { name: member.display_name(), source: Box::new(e) })
                             }
                         }
                     }
@@ -611,10 +605,7 @@ pub fn extract_class_decl(
                         _ => (),
                     }
                 } else {
-                    error!(
-                        "Could not get access specifier from member {}",
-                        member.display_name()
-                    );
+                    return Err(Error::FailedToGetAccessSpecifierFor(member.display_name()));
                 }
             }
             CursorKind::FieldDecl => {
@@ -640,10 +631,7 @@ pub fn extract_class_decl(
                         has_private_fields = true;
                     }
                 } else {
-                    error!(
-                        "Could not get access specifier from member {}",
-                        member.display_name()
-                    );
+                    return Err(Error::FailedToGetAccessSpecifierFor(member.display_name()));
                 }
             }
             _ => {
@@ -682,6 +670,8 @@ pub fn extract_class_decl(
     // If this is a template decl we won't be able to get a type from it so just set POD to false
     // Note that we have a slightly different definition of POD from cpp: we do not consider records with private fields
     // to be POD as they're not correctly representable in C.
+    // TODO(AL): well, actually... they're not in C but they are in Rust. Though if you have a private field you probably
+    // have a non-trivial constructor, but we should probably not force that here 
     let is_pod = if template_parameters.is_empty() {
         match class_template.ty() {
             Ok(ty) => ty.is_pod() && !has_private_fields,

@@ -101,9 +101,6 @@ pub fn get_default_cli_args() -> Result<Vec<String>, error::Error> {
 
     let mut result = vec!["-resource-dir".to_string(), line.to_string()];
 
-    // #[cfg(windows)]
-    // todo!();
-
     #[cfg(unix)]
     {
         result.push("-I/usr/include".to_string());

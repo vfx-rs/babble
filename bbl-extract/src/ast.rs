@@ -221,7 +221,6 @@ impl AST {
                     class_decl.set_bind_kind(bind_kind);
                     Ok(())
                 }
-                ClassBindKind::OpaqueBytes => todo!(),
                 ClassBindKind::ValueType => {
                     if could_be {
                         class_decl.set_bind_kind(bind_kind);
@@ -229,6 +228,7 @@ impl AST {
 
                     Ok(())
                 }
+                ClassBindKind::OpaqueBytes => todo!("Handle opaquebytes"),
             }
         } else {
             Err(Error::ClassCannotBeValueType(class_decl.name().to_string()))

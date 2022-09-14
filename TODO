@@ -1,2 +1,1 @@
 - [ ] automatically rename const/non-const method pairs
-- [ ] handle namespacing classes for lookup (build qualified name on class creation?)

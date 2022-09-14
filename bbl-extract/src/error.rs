@@ -60,6 +60,8 @@ pub enum Error {
     },
     #[error("Cannot set class \"{0}\" to value type as one of its fields is not value type. Try fixing that first.")]
     ClassCannotBeValueType(String),
+    #[error("Failed to get access specifier for \"{0}\"")]
+    FailedToGetAccessSpecifierFor(String),
 }
 
 impl From<bbl_clang::error::Error> for Error {
