@@ -8,7 +8,7 @@ use bbl_extract::{
     index_map::{IndexMapKey, UstrIndexMap},
     qualtype::{QualType, TypeRef},
     template_argument::{TemplateParameterDecl, TemplateType},
-    type_alias::{TypeAlias},
+    type_alias::TypeAlias,
 };
 use hashbrown::HashSet;
 use tracing::{error, instrument, trace};
@@ -751,16 +751,16 @@ pub fn translate_method(
     };
 
     // insert self pointer ahead of all the arguments
-    if method.is_static() {
+    let inner_block = if method.is_static() {
         let call_expr = Expr::CppStaticMethodCall {
             receiver: Box::new(Expr::Token(class_qname.to_string())),
             function: method.name().to_string(),
             arguments: arg_pass,
         };
         if let Some(assign_expr_fn) = assign_expr_fn {
-            body.push(assign_expr_fn(call_expr));
+            assign_expr_fn(call_expr)
         } else {
-            body.push(call_expr);
+            call_expr
         }
     } else if method.is_any_constructor() {
         let call_expr = Expr::CppConstructor {
@@ -768,9 +768,9 @@ pub fn translate_method(
             arguments: arg_pass,
         };
         if let Some(assign_expr_fn) = assign_expr_fn {
-            body.push(assign_expr_fn(call_expr));
+            assign_expr_fn(call_expr)
         } else {
-            body.push(call_expr);
+            call_expr
         }
     } else if method.is_destructor() && get_bind_kind(class.usr(), ast)? == ClassBindKind::OpaquePtr
     {
@@ -803,10 +803,10 @@ pub fn translate_method(
             },
         );
 
-        body.push(Expr::Delete(Box::new(Expr::Cast {
+        Expr::Delete(Box::new(Expr::Cast {
             to_type,
             value: Box::new(Expr::Token(self_name)),
-        })));
+        }))
     } else {
         // regular method
         let qt = CQualType {
@@ -846,12 +846,34 @@ pub fn translate_method(
             function: method.name().to_string(),
             arguments: arg_pass,
         };
+
+        // call the closure we might have created earlier to generate the assignment expression (if there's a return value)
         if let Some(assign_expr_fn) = assign_expr_fn {
-            body.push(assign_expr_fn(call_expr));
+            assign_expr_fn(call_expr)
         } else {
-            body.push(call_expr);
+            call_expr
         }
+    };
+
+    let is_noexcept = method.exception_specification_kind().is_noexcept();
+
+    // generate the try/catch block if this function is not noexcept
+    if !is_noexcept {
+        let trycatch_expr = Expr::TryCatch {
+            try_block: Box::new(inner_block),
+            catch_blocks: vec![Catch {
+                exception: Expr::Token("std::exception& e".into()),
+                stmt: Expr::Return(Box::new(Expr::Token("1".into()))),
+            }],
+        };
+
+        body.push(trycatch_expr);
+    } else {
+        body.push(inner_block);
     }
+
+    // finally, push the return statement
+    body.push(Expr::Return(Box::new(Expr::Token("0".into()))));
 
     let fn_name = if let Some(name) = method.replacement_name() {
         name
@@ -872,7 +894,7 @@ pub fn translate_method(
             kind: method.kind(),
             class_qname: class_qname.to_string(),
         }),
-        is_noexcept: false,
+        is_noexcept,
         body: Expr::Compound(body),
     })
 }
@@ -1018,4 +1040,14 @@ pub enum Expr {
     Delete(Box<Expr>),
     Return(Box<Expr>),
     Token(String),
+    TryCatch {
+        try_block: Box<Expr>,
+        catch_blocks: Vec<Catch>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct Catch {
+    pub exception: Expr,
+    pub stmt: Expr,
 }
