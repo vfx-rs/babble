@@ -28,7 +28,7 @@ impl Namespace {
     }
 }
 
-#[instrument(skip(depth, tu), level="trace")]
+#[instrument(skip(depth, tu), level = "trace")]
 pub fn extract_namespace(c_namespace: Cursor, depth: usize, tu: &TranslationUnit) -> Namespace {
     let indent = format!("{:width$}", "", width = depth * 2);
     Namespace {

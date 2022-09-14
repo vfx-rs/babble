@@ -10,7 +10,7 @@ use crate::namespace::extract_namespace;
 use crate::qualtype::extract_type;
 use crate::stdlib::create_std_string;
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
-use bbl_clang::cursor::{Cursor, USR, CurTemplateRef, CurTypedef};
+use bbl_clang::cursor::{CurTemplateRef, CurTypedef, Cursor, USR};
 use bbl_clang::ty::Type;
 
 use crate::error::Error;
@@ -103,7 +103,6 @@ pub fn extract_typedef_decl<'a>(
     }
 }
 
-
 #[instrument(skip(depth, tu, namespaces, ast, already_visited), level = "trace")]
 pub fn extract_class_template_specialization(
     c_typedef: CurTypedef,
@@ -127,10 +126,11 @@ pub fn extract_class_template_specialization(
 
     if let Ok(ty) = c_typedef.ty() {
         let template_args =
-            extract_template_args(&c_typedef, depth + 1, &ty, tu, already_visited, ast)
-                .map_err(|e| Error::FailedToExtractTemplateArgs {
+            extract_template_args(&c_typedef, depth + 1, &ty, tu, already_visited, ast).map_err(
+                |e| Error::FailedToExtractTemplateArgs {
                     source: Box::new(e),
-                })?;
+                },
+            )?;
 
         debug!("Template args:");
         template_args.iter().flatten().map(|a| debug!("    {a}"));
@@ -165,7 +165,7 @@ pub fn extract_class_template_specialization(
                             } else {
                                 &local_namespaces
                             };
-                            
+
                             if cref.display_name().starts_with("basic_string<") {
                                 // do string here and break out of the loop so we don't try extracting char traits and
                                 // allocator on windows which are both template types
@@ -189,7 +189,6 @@ pub fn extract_class_template_specialization(
                                 ast.insert_class(cd);
                                 already_visited.push(cref.usr());
                             }
-
                         }
                         specialized_decl = Some(cref.usr());
                         debug!("{indent}    -> {}", cref.usr());
@@ -197,9 +196,7 @@ pub fn extract_class_template_specialization(
                         unimplemented!();
                     }
                 } else {
-                    return Err(Error::FailedToGetTemplateRefFrom(
-                        c_typedef.display_name(),
-                    ));
+                    return Err(Error::FailedToGetTemplateRefFrom(c_typedef.display_name()));
                 }
             }
         }
@@ -484,7 +481,7 @@ impl FunctionTemplateSpecialization {
 mod tests {
     use bbl_clang::cli_args;
 
-    use crate::{class::ClassBindKind, parse_string_and_extract_ast, error::Error};
+    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast};
 
     #[test]
     fn extract_typealias_typedef() -> Result<(), Error> {

@@ -26,8 +26,8 @@ pub enum Error {
     FailedToRunCMake(std::io::Error),
     NonUTF8Output(std::string::FromUtf8Error),
     FailedToParseOutput(String),
-    CMakeError{stdout: String, stderr: String},
-    CompilationDatabaseError(CompilationDatabaseError)
+    CMakeError { stdout: String, stderr: String },
+    CompilationDatabaseError(CompilationDatabaseError),
 }
 
 impl std::fmt::Display for Error {
@@ -48,9 +48,7 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl std::error::Error for Error {
-
-}
+impl std::error::Error for Error {}
 
 impl From<CompilationDatabaseError> for Error {
     fn from(e: CompilationDatabaseError) -> Self {

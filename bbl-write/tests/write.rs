@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use bbl_clang::{cli_args, cli_args_with, virtual_file::configure_temp_cmake_project};
 use bbl_extract::{class::ClassBindKind, parse_file_and_extract_ast, parse_string_and_extract_ast};
 use bbl_translate::translate_cpp_ast_to_c;
-use common::{run_test};
+use common::run_test;
 
 use bbl_write::{cmake::build_project, error::Error, gen_c::gen_c};
 use tracing::debug;
@@ -434,13 +434,13 @@ fn fun_a(arg: &str) {
     fun_b("blah blah blah");
 }
 
-#[cfg(feature="telemetry")]
+#[cfg(feature = "telemetry")]
 #[test]
 fn test_tracing() {
-    use tracing::span;
-    use tracing_subscriber::Registry;
     use opentelemetry::global;
+    use tracing::span;
     use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::Registry;
 
     global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
     let tracer = opentelemetry_jaeger::new_pipeline()

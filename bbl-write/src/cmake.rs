@@ -82,7 +82,8 @@ add_library({project_name} STATIC {project_name}.cpp)
 
 install(TARGETS {project_name} EXPORT {project_name} DESTINATION lib)
 install(EXPORT {project_name} DESTINATION lib/cmake)
-"#, install_dir
+"#,
+            install_dir
         ),
     )
     .map_err(|e| Error::FailedToGenerateCMake {
@@ -99,7 +100,7 @@ install(EXPORT {project_name} DESTINATION lib/cmake)
         .output()?;
 
     if !configure_output.status.success() {
-        return Err(Error::FailedToConfigureCMake { 
+        return Err(Error::FailedToConfigureCMake {
             stdout: std::str::from_utf8(&configure_output.stdout)
                 .expect("UTF-8 error parsing cmake stdout")
                 .to_string(),
@@ -114,12 +115,13 @@ install(EXPORT {project_name} DESTINATION lib/cmake)
         .args(&[
             "--build",
             build_dir.as_os_str().to_string_lossy().as_ref(),
-            "--config", "Release",
+            "--config",
+            "Release",
         ])
         .output()?;
 
     if !build_output.status.success() {
-        return Err(Error::FailedToBuildCMake { 
+        return Err(Error::FailedToBuildCMake {
             stdout: std::str::from_utf8(&build_output.stdout)
                 .expect("UTF-8 error parsing cmake stdout")
                 .to_string(),
@@ -138,7 +140,7 @@ install(EXPORT {project_name} DESTINATION lib/cmake)
         .output()?;
 
     if !install_output.status.success() {
-        return Err(Error::FailedToInstallCMake { 
+        return Err(Error::FailedToInstallCMake {
             stdout: std::str::from_utf8(&install_output.stdout)
                 .expect("UTF-8 error parsing cmake stdout")
                 .to_string(),

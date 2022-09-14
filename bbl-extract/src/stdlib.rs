@@ -1,11 +1,12 @@
 use bbl_clang::{
     cursor::{Cursor, USR},
-    exception::ExceptionSpecificationKind, ty::TypeKind,
+    exception::ExceptionSpecificationKind,
+    ty::TypeKind,
 };
 
 use crate::{
     class::{ClassDecl, MethodState, RuleOfFive},
-    function::{Argument, Static, Virtual, PureVirtual, Const},
+    function::{Argument, Const, PureVirtual, Static, Virtual},
     function::{Method, MethodKind},
     namespace,
     qualtype::{QualType, TypeRef},
@@ -37,12 +38,10 @@ pub fn create_std_string(class: Cursor, namespaces: Vec<USR>) -> ClassDecl {
             "string".to_string(),
             MethodKind::Constructor,
             QualType::void(),
-            vec![
-                Argument::new(
-                    "char_ptr",
-                    QualType::pointer("const char*", QualType::char(true)),
-                )
-            ],
+            vec![Argument::new(
+                "char_ptr",
+                QualType::pointer("const char*", QualType::char(true)),
+            )],
             Some("from_char_ptr".to_string()),
             method_namespaces.clone(),
             Vec::new(),

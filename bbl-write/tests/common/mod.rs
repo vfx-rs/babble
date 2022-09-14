@@ -95,7 +95,6 @@ pub(crate) fn init_log() {
         })
         // .is_test(true)
         .try_init();
-
 }
 
 pub(crate) fn source_iter(

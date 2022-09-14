@@ -43,7 +43,7 @@ pub fn main() -> Result<()> {
         .to_string();
 
     // Now bind the AST, which will write, compile and link a shim library, and create the rust ffi binding
-    // we also copy the generated ffi.rs into the source tree. This isn't hygienic but using the "correct" method of 
+    // we also copy the generated ffi.rs into the source tree. This isn't hygienic but using the "correct" method of
     // include!'ing it into the source stops rust-analyzer from working on it, which is worse.
     bind("take_string", &out_dir, Some(&ffi_path), &ast, &options)?;
 

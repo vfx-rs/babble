@@ -78,10 +78,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             tu.get_cursor()?
                 .children_of_kind_with_name(CursorKind::Namespace, &namespace, true);
         for child in children {
-            dump(child, 0, args.max_depth, &mut already_visited, &tu, &skip_kinds, None);
+            dump(
+                child,
+                0,
+                args.max_depth,
+                &mut already_visited,
+                &tu,
+                &skip_kinds,
+                None,
+            );
         }
     } else {
-        dump(tu.get_cursor()?, 0, args.max_depth, &mut already_visited, &tu, &skip_kinds, None);
+        dump(
+            tu.get_cursor()?,
+            0,
+            args.max_depth,
+            &mut already_visited,
+            &tu,
+            &skip_kinds,
+            None,
+        );
     }
 
     Ok(())

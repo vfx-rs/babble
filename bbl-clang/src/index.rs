@@ -1,7 +1,10 @@
 use std::ffi::CString;
 use std::path::Path;
 
-use clang_sys::{clang_createIndex, clang_parseTranslationUnit, CXIndex, clang_createTranslationUnitFromSourceFile};
+use clang_sys::{
+    clang_createIndex, clang_createTranslationUnitFromSourceFile, clang_parseTranslationUnit,
+    CXIndex,
+};
 
 use crate::error::Error;
 use crate::translation_unit::TranslationUnit;

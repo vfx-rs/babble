@@ -13,10 +13,7 @@ use std::{borrow::Cow, fmt::Write};
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub fn write_rust_ffi_module(
-    module_path: &str,
-    c_ast: &CAST,
-) -> Result<(), Error> {
+pub fn write_rust_ffi_module(module_path: &str, c_ast: &CAST) -> Result<(), Error> {
     // write the rust ffi module
     let mut ffi_source = String::new();
     write_rust_ffi(&mut ffi_source, c_ast)?;
@@ -28,12 +25,14 @@ pub fn write_rust_ffi_module(
 }
 
 pub fn write_rust_ffi(source: &mut String, c_ast: &CAST) -> Result<()> {
-
-    writeln!(source, r#"#![allow(non_snake_case)]
+    writeln!(
+        source,
+        r#"#![allow(non_snake_case)]
 #![allow(non_camel_case_types)]
 #![allow(non_upper_case_globals)]
 #![allow(unused_imports)]
-"#)?;
+"#
+    )?;
 
     for st in c_ast.structs.iter() {
         write_struct_external(source, st)?;

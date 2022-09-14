@@ -11,13 +11,21 @@ pub struct PrintingPolicy {
 impl PrintingPolicy {
     pub fn set_suppress_scope(&self, value: bool) {
         unsafe {
-            clang_PrintingPolicy_setProperty(self.inner, PrintingPolicyProperty::SuppressScope.into(), value as u32);
+            clang_PrintingPolicy_setProperty(
+                self.inner,
+                PrintingPolicyProperty::SuppressScope.into(),
+                value as u32,
+            );
         }
-    }   
+    }
 
     pub fn set_fully_qualified_name(&self, value: bool) {
         unsafe {
-            clang_PrintingPolicy_setProperty(self.inner, PrintingPolicyProperty::FullyQualifiedName.into(), value as u32);
+            clang_PrintingPolicy_setProperty(
+                self.inner,
+                PrintingPolicyProperty::FullyQualifiedName.into(),
+                value as u32,
+            );
         }
     }
 }
@@ -66,7 +74,9 @@ impl From<CXPrintingPolicyProperty> for PrintingPolicyProperty {
             CXPrintingPolicy_AnonymousTagLocations => AnonymousTagLocations,
             CXPrintingPolicy_SuppressStrongLifetime => SuppressStrongLifetime,
             CXPrintingPolicy_SuppressLifetimeQualifiers => SuppressLifetimeQualifiers,
-            CXPrintingPolicy_SuppressTemplateArgsInCXXConstructors => SuppressTemplateArgsInCXXConstructors,
+            CXPrintingPolicy_SuppressTemplateArgsInCXXConstructors => {
+                SuppressTemplateArgsInCXXConstructors
+            }
             CXPrintingPolicy_Bool => Bool,
             CXPrintingPolicy_Restrict => Restrict,
             CXPrintingPolicy_Alignof => Alignof,
@@ -81,10 +91,10 @@ impl From<CXPrintingPolicyProperty> for PrintingPolicyProperty {
             CXPrintingPolicy_ConstantsAsWritten => ConstantsAsWritten,
             CXPrintingPolicy_SuppressImplicitBase => SuppressImplicitBase,
             CXPrintingPolicy_FullyQualifiedName => FullyQualifiedName,
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
-} 
+}
 
 impl From<PrintingPolicyProperty> for CXPrintingPolicyProperty {
     fn from(p: PrintingPolicyProperty) -> Self {
@@ -101,7 +111,9 @@ impl From<PrintingPolicyProperty> for CXPrintingPolicyProperty {
             AnonymousTagLocations => CXPrintingPolicy_AnonymousTagLocations,
             SuppressStrongLifetime => CXPrintingPolicy_SuppressStrongLifetime,
             SuppressLifetimeQualifiers => CXPrintingPolicy_SuppressLifetimeQualifiers,
-            SuppressTemplateArgsInCXXConstructors => CXPrintingPolicy_SuppressTemplateArgsInCXXConstructors,
+            SuppressTemplateArgsInCXXConstructors => {
+                CXPrintingPolicy_SuppressTemplateArgsInCXXConstructors
+            }
             Bool => CXPrintingPolicy_Bool,
             Restrict => CXPrintingPolicy_Restrict,
             Alignof => CXPrintingPolicy_Alignof,
@@ -116,6 +128,6 @@ impl From<PrintingPolicyProperty> for CXPrintingPolicyProperty {
             ConstantsAsWritten => CXPrintingPolicy_ConstantsAsWritten,
             SuppressImplicitBase => CXPrintingPolicy_SuppressImplicitBase,
             FullyQualifiedName => CXPrintingPolicy_FullyQualifiedName,
-        }       
+        }
     }
 }

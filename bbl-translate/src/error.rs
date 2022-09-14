@@ -30,15 +30,30 @@ pub enum Error {
     #[error("Could not find a struct or typedef for \"{0}\"")]
     RefNotFound(USR),
     #[error("Failed to format field \"{name}\"")]
-    FailedToFormatField{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    FailedToFormatField {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     #[error("Failed to format struct \"{name}\"")]
-    FailedToFormatStruct{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    FailedToFormatStruct {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     #[error("Failed to format function \"{name}\"")]
-    FailedToFormatFunction{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    FailedToFormatFunction {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     #[error("Failed to format argument \"{name}\"")]
-    FailedToFormatArgument{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    FailedToFormatArgument {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     #[error("Failed to get qualified name for \"{usr}\"")]
-    FailedToGetQualifiedName{usr: USR, source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    FailedToGetQualifiedName {
+        usr: USR,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]

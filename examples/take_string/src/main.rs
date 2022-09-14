@@ -1,6 +1,9 @@
 pub mod ffi;
 
-use std::{ffi::{CStr, CString}, ops::Deref};
+use std::{
+    ffi::{CStr, CString},
+    ops::Deref,
+};
 
 pub struct CppString {
     inner: *mut ffi::std_string,
@@ -35,9 +38,7 @@ impl CppString {
 
 impl Drop for CppString {
     fn drop(&mut self) {
-        unsafe {
-            ffi::std_string_dtor(self.inner)
-        }
+        unsafe { ffi::std_string_dtor(self.inner) }
     }
 }
 
@@ -57,7 +58,7 @@ impl Deref for CppString {
 
 pub fn main() {
     let result = unsafe {
-        let mut tc = ffi::Test_Class{a: 0};
+        let mut tc = ffi::Test_Class { a: 0 };
 
         let name = CppString::from("VFX Rustaceans");
 

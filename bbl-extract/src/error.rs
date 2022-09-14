@@ -38,21 +38,40 @@ pub enum Error {
     #[error("Could not extract class")]
     FailedToExtractClass(#[from] ExtractClassError),
     #[error("Could not extract class template specialization \"{name}\"")]
-    FailedToExtractClassTemplateSpecialization{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    FailedToExtractClassTemplateSpecialization {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     #[error("Could not extract argument \"{name}\"")]
-    FailedToExtractArgument{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    FailedToExtractArgument {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     #[error("Could not extract result")]
-    FailedToExtractResult{source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    FailedToExtractResult {
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     #[error("Could not extract template args")]
-    FailedToExtractTemplateArgs{source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    FailedToExtractTemplateArgs {
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     #[error("Could not extract function \"{name}\"")]
-    FailedToExtractFunction{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    FailedToExtractFunction {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     #[error("Could not extract method \"{name}\"")]
-    FailedToExtractMethod{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    FailedToExtractMethod {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     #[error("Could not extract typedef \"{0}\"")]
     FailedToExtractTypedef(USR),
     #[error("Could not extract type alias \"{name}\"")]
-    FailedToExtractTypeAlias{name: String, source: Box<dyn std::error::Error + 'static + Send + Sync>},
+    FailedToExtractTypeAlias {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     #[error("Failed to get qualified name for \"{name}\"")]
     FailedToGetQualifiedNameFor {
         name: String,

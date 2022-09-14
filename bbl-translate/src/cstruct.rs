@@ -9,7 +9,7 @@ use bbl_extract::{
     type_alias::ClassTemplateSpecialization,
 };
 use hashbrown::HashSet;
-use tracing::{trace, error, instrument, warn};
+use tracing::{error, instrument, trace, warn};
 
 use crate::{
     build_namespace_prefix,

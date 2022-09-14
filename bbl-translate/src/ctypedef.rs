@@ -9,9 +9,9 @@ use tracing::instrument;
 
 use crate::{
     cfunction::{translate_function, CFunction, CFunctionId},
-    cstruct::{CStruct, CStructId, translate_class_template},
-    error::Error,
+    cstruct::{translate_class_template, CStruct, CStructId},
     ctype::TypeReplacements,
+    error::Error,
 };
 
 #[instrument(level = "trace", skip(ast, functions, used_names))]
@@ -62,7 +62,7 @@ pub fn translate_class_template_specialization(
     // let (ns_prefix_external, ns_prefix_internal) = build_namespace_prefix(ast, cts.namespaces())?;
 
     // get unique, prefixed names for the typedef
-    // TODO (AL): need to resolve this properly: we're currently storing the name of the typedef class template 
+    // TODO (AL): need to resolve this properly: we're currently storing the name of the typedef class template
     // specialization and then using this name when creating the monomorphizations of the class. This works well when
     // other functions and types only refer to the CTS by its typedef name, but if they use the underlying class template
     // name, we'll still have references to the underlying template instead of the typedef, and we'll need to patch those

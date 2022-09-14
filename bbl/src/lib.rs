@@ -1,4 +1,4 @@
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 use bbl_clang::{cli_args_with, virtual_file::configure_temp_cmake_project};
 use bbl_extract::parse_file_and_extract_ast;
@@ -32,7 +32,13 @@ pub fn parse(header: &str, options: &BindOptions) -> Result<AST, Error> {
     Ok(ast)
 }
 
-pub fn bind(project_name: &str, output_directory: &str, copy_to: Option<&str>, ast: &AST, options: &BindOptions) -> Result<(), Error> {
+pub fn bind(
+    project_name: &str,
+    output_directory: &str,
+    copy_to: Option<&str>,
+    ast: &AST,
+    options: &BindOptions,
+) -> Result<(), Error> {
     let c_ast = translate_cpp_ast_to_c(ast)?;
 
     let (c_header, c_source) = gen_c(project_name, &c_ast)?;
@@ -48,7 +54,10 @@ pub fn bind(project_name: &str, output_directory: &str, copy_to: Option<&str>, a
     )?;
 
     // now that the cmake project has built successfully let's translate the c ast to rust and write out the ffi module
-    let module_path = Path::new(output_directory).join("ffi.rs").to_string_lossy().to_string();
+    let module_path = Path::new(output_directory)
+        .join("ffi.rs")
+        .to_string_lossy()
+        .to_string();
     write_rust_ffi_module(&module_path, &c_ast)?;
 
     // copy to the source tree (or somewhere else) if we asked to
@@ -59,15 +68,18 @@ pub fn bind(project_name: &str, output_directory: &str, copy_to: Option<&str>, a
     let c_project_name = format!("{}-c", project_name);
 
     // link
-    println!("cargo:rustc-link-search=native={}/{}/install/lib", std::env::var("OUT_DIR").unwrap(), c_project_name);
+    println!(
+        "cargo:rustc-link-search=native={}/{}/install/lib",
+        std::env::var("OUT_DIR").unwrap(),
+        c_project_name
+    );
     println!("cargo:rustc-link-lib=static={}", c_project_name);
 
-    #[cfg(target_os="macos")]
+    #[cfg(target_os = "macos")]
     println!("cargo:rustc-link-lib=dylib=cxx");
 
-    #[cfg(target_os="linux")]
+    #[cfg(target_os = "linux")]
     println!("cargo:rustc-link-lib=dylib=stdc++");
-
 
     Ok(())
 }

@@ -2,7 +2,7 @@ use std::{ffi::CString, path::Path};
 
 use clang_sys::*;
 
-use crate::{string::CXStringEx};
+use crate::string::CXStringEx;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CompilationDatabaseError {
@@ -26,12 +26,12 @@ impl CompilationDatabase {
         let c_dir = CString::new(dir).unwrap();
 
         let mut err = 0;
-        let inner = unsafe {
-            clang_CompilationDatabase_fromDirectory(c_dir.as_ptr(), &mut err)
-        };
+        let inner = unsafe { clang_CompilationDatabase_fromDirectory(c_dir.as_ptr(), &mut err) };
 
         if err != CXCompilationDatabase_NoError {
-            return Err(CompilationDatabaseError::CannotLoadDatabase(dir.to_string()));
+            return Err(CompilationDatabaseError::CannotLoadDatabase(
+                dir.to_string(),
+            ));
         }
 
         Ok(CompilationDatabase { inner })

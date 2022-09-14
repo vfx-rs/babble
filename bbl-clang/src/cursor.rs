@@ -25,8 +25,10 @@ use clang_sys::{
     CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor,
 };
 use std::{
+    convert::TryFrom,
     fmt::{Debug, Display},
-    os::raw::{c_longlong, c_ulonglong, c_void}, ops::Deref, convert::TryFrom,
+    ops::Deref,
+    os::raw::{c_longlong, c_ulonglong, c_void},
 };
 
 use crate::ty::{to_type, Type};
@@ -363,7 +365,7 @@ impl TryFrom<Cursor> for CurTemplateRef {
     }
 }
 
-/// This is either a typedef or a type alias. Split later if we need the distinction but their sturcture appears to be 
+/// This is either a typedef or a type alias. Split later if we need the distinction but their sturcture appears to be
 /// the same in the AST
 #[derive(Debug, Copy, Clone)]
 pub struct CurTypedef(Cursor);
@@ -379,7 +381,10 @@ impl Deref for CurTypedef {
 impl TryFrom<Cursor> for CurTypedef {
     type Error = Error;
     fn try_from(c: Cursor) -> Result<Self, Self::Error> {
-        if matches!(c.kind(), CursorKind::TypedefDecl | CursorKind::TypeAliasDecl) {
+        if matches!(
+            c.kind(),
+            CursorKind::TypedefDecl | CursorKind::TypeAliasDecl
+        ) {
             Ok(CurTypedef(c))
         } else {
             Err(Error::InvalidCursor)

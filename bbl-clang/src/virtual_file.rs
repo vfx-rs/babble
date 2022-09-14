@@ -115,7 +115,7 @@ target_link_libraries(babble_get_args {link_libraries_str})
 
     #[cfg(windows)]
     let args = [".", "-B", "build", "-G", "Ninja"];
-    
+
     #[cfg(unix)]
     let args = [".", "-B", "build"];
 
@@ -124,12 +124,14 @@ target_link_libraries(babble_get_args {link_libraries_str})
             .args(&args)
             .current_dir(&dirname)
             .env("CMAKE_PREFIX_PATH", pp.as_ref())
-            .output().map_err(Error::FailedToRunCMake)?
+            .output()
+            .map_err(Error::FailedToRunCMake)?
     } else {
         std::process::Command::new("cmake")
             .args(&args)
             .current_dir(&dirname)
-            .output().map_err(Error::FailedToRunCMake)?
+            .output()
+            .map_err(Error::FailedToRunCMake)?
     };
 
     if !output.status.success() {

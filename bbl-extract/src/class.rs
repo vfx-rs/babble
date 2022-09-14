@@ -88,7 +88,7 @@ pub struct RuleOfFive {
     pub(crate) dtor: MethodState,
 }
 
-// TODO(AL): the rules here are complex and version-dependent. Will need to try and add to libclang here to have clang 
+// TODO(AL): the rules here are complex and version-dependent. Will need to try and add to libclang here to have clang
 // decide for us
 impl RuleOfFive {
     pub fn needs_implicit_ctor(&self) -> bool {
@@ -528,7 +528,9 @@ pub fn extract_class_decl(
                 continue;
             }
         } else {
-            return Err(Error::FailedToGetAccessSpecifierFor(member.display_name().into()));
+            return Err(Error::FailedToGetAccessSpecifierFor(
+                member.display_name().into(),
+            ));
         }
         match member.kind() {
             CursorKind::TemplateTypeParameter => {
@@ -575,7 +577,10 @@ pub fn extract_class_decl(
                         ) {
                             Ok(method) => methods.push(method),
                             Err(e) => {
-                                return Err(Error::FailedToExtractMethod { name: member.display_name(), source: Box::new(e) })
+                                return Err(Error::FailedToExtractMethod {
+                                    name: member.display_name(),
+                                    source: Box::new(e),
+                                })
                             }
                         }
                     }
@@ -590,16 +595,16 @@ pub fn extract_class_decl(
                         CursorKind::Constructor if member.cxx_constructor_is_move_constructor() => {
                             rule_of_five.move_ctor = get_method_state(member)
                         }
-                        CursorKind::Constructor => {
-                            rule_of_five.ctor = get_method_state(member)
-                        }
-                        CursorKind::Destructor => {
-                            rule_of_five.dtor = get_method_state(member)
-                        }
-                        CursorKind::CXXMethod if member.cxx_method_is_copy_assignment_operator() => {
+                        CursorKind::Constructor => rule_of_five.ctor = get_method_state(member),
+                        CursorKind::Destructor => rule_of_five.dtor = get_method_state(member),
+                        CursorKind::CXXMethod
+                            if member.cxx_method_is_copy_assignment_operator() =>
+                        {
                             rule_of_five.copy_assign = get_method_state(member)
                         }
-                        CursorKind::CXXMethod if member.cxx_method_is_move_assignment_operator() => {
+                        CursorKind::CXXMethod
+                            if member.cxx_method_is_move_assignment_operator() =>
+                        {
                             rule_of_five.move_assign = get_method_state(member)
                         }
                         _ => (),
@@ -671,7 +676,7 @@ pub fn extract_class_decl(
     // Note that we have a slightly different definition of POD from cpp: we do not consider records with private fields
     // to be POD as they're not correctly representable in C.
     // TODO(AL): well, actually... they're not in C but they are in Rust. Though if you have a private field you probably
-    // have a non-trivial constructor, but we should probably not force that here 
+    // have a non-trivial constructor, but we should probably not force that here
     let is_pod = if template_parameters.is_empty() {
         match class_template.ty() {
             Ok(ty) => ty.is_pod() && !has_private_fields,
@@ -940,8 +945,6 @@ public:
     assert!(!class.rule_of_five().needs_implicit_copy_ctor());
     assert!(!class.rule_of_five().needs_implicit_move_ctor());
     assert!(!class.rule_of_five().needs_implicit_dtor());
-
-
 
     Ok(())
 }

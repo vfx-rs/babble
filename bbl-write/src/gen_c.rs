@@ -285,10 +285,13 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
         Expr::Token(v) => {
             write!(body, "{v}")?;
         }
-        Expr::TryCatch { try_block, catch_blocks } => {
+        Expr::TryCatch {
+            try_block,
+            catch_blocks,
+        } => {
             writeln!(body, "try {{")?;
             write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
-            write_expr(body, try_block, depth+1)?;
+            write_expr(body, try_block, depth + 1)?;
             writeln!(body, ";")?;
             write!(body, "{:width$}}}", "", width = depth * 4)?;
 
@@ -297,7 +300,7 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
                 write_expr(body, &catch.exception, depth)?;
                 writeln!(body, ") {{")?;
                 write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
-                write_expr(body, &catch.stmt, depth+1)?;
+                write_expr(body, &catch.stmt, depth + 1)?;
                 writeln!(body, ";")?;
                 write!(body, "{:width$}}}", "", width = depth * 4)?;
             }

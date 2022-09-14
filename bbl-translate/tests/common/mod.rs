@@ -1,6 +1,6 @@
-use std::io::Write;
 use env_logger::fmt::Color;
 use log::Level;
+use std::io::Write;
 
 pub fn init_log() {
     let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))

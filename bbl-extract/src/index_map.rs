@@ -1,5 +1,8 @@
-use std::{marker::PhantomData, ops::{Index, IndexMut}};
-use ustr::{UstrMap, Ustr};
+use std::{
+    marker::PhantomData,
+    ops::{Index, IndexMut},
+};
+use ustr::{Ustr, UstrMap};
 
 pub trait IndexMapKey {
     fn get(&self) -> usize;
@@ -83,4 +86,3 @@ where
         &mut self.storage[index.get()]
     }
 }
-

@@ -54,7 +54,10 @@ pub enum TemplateParameterDecl {
 
 impl TemplateParameterDecl {
     pub fn typ(name: &str, index: usize) -> TemplateParameterDecl {
-        TemplateParameterDecl::Type { name: name.into(), index }
+        TemplateParameterDecl::Type {
+            name: name.into(),
+            index,
+        }
     }
 
     pub fn name(&self) -> &str {

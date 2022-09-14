@@ -1,6 +1,9 @@
-use std::fmt::{Display, Debug};
+use std::fmt::{Debug, Display};
 
-use clang_sys::{clang_getSpellingLocation, clang_getTokenSpelling, CXSourceLocation, CXToken, CXSourceRange, clang_getTokenExtent};
+use clang_sys::{
+    clang_getSpellingLocation, clang_getTokenExtent, clang_getTokenSpelling, CXSourceLocation,
+    CXSourceRange, CXToken,
+};
 
 use crate::{file::File, string::CXStringEx, translation_unit::TranslationUnit};
 
@@ -16,7 +19,7 @@ impl<'tu> Token<'tu> {
 
     pub fn extent(&self) -> SourceRange {
         SourceRange {
-            inner: unsafe { clang_getTokenExtent(self.tu.inner, self.inner)}
+            inner: unsafe { clang_getTokenExtent(self.tu.inner, self.inner) },
         }
     }
 }
