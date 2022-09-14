@@ -2,15 +2,15 @@ use bbl_write::error::Error;
 use env_logger::fmt::Color;
 use log::Level;
 
-#[cfg(feature="telemetry")]
+#[cfg(feature = "telemetry")]
 pub(crate) fn run_test<F>(closure: F) -> Result<(), Error>
 where
     F: FnOnce() -> Result<(), Error>,
 {
-    use tracing::{error, span};
-    use tracing_subscriber::Registry;
     use opentelemetry::global;
+    use tracing::{error, span};
     use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::Registry;
 
     global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
     let tracer = opentelemetry_jaeger::new_pipeline()
@@ -44,12 +44,17 @@ where
     })
 }
 
-#[cfg(not(feature="telemetry"))]
+#[cfg(not(feature = "telemetry"))]
 pub(crate) fn run_test<F>(closure: F) -> Result<(), Error>
 where
     F: FnOnce() -> Result<(), Error>,
 {
     use tracing::error;
+    use tracing_subscriber::fmt;
+    use tracing_subscriber::fmt::format::FmtSpan;
+    let subscriber = fmt()
+        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        .finish();
 
     init_log();
     let res = closure();
@@ -90,6 +95,7 @@ pub(crate) fn init_log() {
         })
         // .is_test(true)
         .try_init();
+
 }
 
 pub(crate) fn source_iter(

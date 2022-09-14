@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
@@ -475,7 +476,7 @@ pub fn extract_ast(
             // check if this type alias has a TemplateRef child, in which case it's a class template specialization
             if c.has_child_of_kind(CursorKind::TemplateRef) {
                 let cts = extract_class_template_specialization(
-                    c,
+                    c.try_into()?,
                     depth + 1,
                     already_visited,
                     ast,

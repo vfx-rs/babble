@@ -5,7 +5,7 @@ use bbl_clang::{
     ty::{Type, TypeKind},
 };
 use tracing::{error, warn, info, debug, trace, instrument};
-use std::fmt::Display;
+use std::{fmt::Display, convert::TryInto};
 
 use crate::{
     ast::AST,
@@ -328,12 +328,12 @@ pub fn extract_type(
         );
         // extract here if we need to
         match c_ref.kind() {
-            CursorKind::TypedefDecl => {
-                extract_typedef_decl(c_ref, depth + 1, already_visited, ast, tu)?;
+            CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
+                extract_typedef_decl(c_ref.try_into()?, depth + 1, already_visited, ast, tu)?;
             }
-            CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
-                extract_type_alias_type(c_ref, depth + 1, already_visited, ast, tu)?;
-            }
+            // CursorKind::TypeAliasDecl  => {
+            //     extract_type_alias_type(c_ref.try_into()?, depth + 1, already_visited, ast, tu)?;
+            // }
             CursorKind::TypeRef => warn!("Should extract class here"),
             _ => warn!("Unhandled type kind {}", c_ref.kind()),
         }

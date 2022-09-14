@@ -26,7 +26,7 @@ use clang_sys::{
 };
 use std::{
     fmt::{Debug, Display},
-    os::raw::{c_longlong, c_ulonglong, c_void},
+    os::raw::{c_longlong, c_ulonglong, c_void}, ops::Deref, convert::TryFrom,
 };
 
 use crate::ty::{to_type, Type};
@@ -339,6 +339,51 @@ impl Cursor {
 
     pub fn pretty_printed(&self, policy: PrintingPolicy) -> String {
         unsafe { clang_getCursorPrettyPrinted(self.inner, policy.inner).to_string() }
+    }
+}
+#[derive(Debug, Copy, Clone)]
+pub struct CurTemplateRef(Cursor);
+
+impl Deref for CurTemplateRef {
+    type Target = Cursor;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryFrom<Cursor> for CurTemplateRef {
+    type Error = Error;
+    fn try_from(c: Cursor) -> Result<Self, Self::Error> {
+        if c.kind() == CursorKind::TemplateRef {
+            Ok(CurTemplateRef(c))
+        } else {
+            Err(Error::InvalidCursor)
+        }
+    }
+}
+
+/// This is either a typedef or a type alias. Split later if we need the distinction but their sturcture appears to be 
+/// the same in the AST
+#[derive(Debug, Copy, Clone)]
+pub struct CurTypedef(Cursor);
+
+impl Deref for CurTypedef {
+    type Target = Cursor;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryFrom<Cursor> for CurTypedef {
+    type Error = Error;
+    fn try_from(c: Cursor) -> Result<Self, Self::Error> {
+        if matches!(c.kind(), CursorKind::TypedefDecl | CursorKind::TypeAliasDecl) {
+            Ok(CurTypedef(c))
+        } else {
+            Err(Error::InvalidCursor)
+        }
     }
 }
 

@@ -57,13 +57,13 @@ pub fn build_project<P: AsRef<Path>>(
     }
 
     let prefix_str = if let Some(cmake_prefix_path) = cmake_prefix_path {
-        format!("set(CMAKE_PREFIX_PATH \"{}\")", cmake_prefix_path.display())
+        format!("set(CMAKE_PREFIX_PATH \"{}\")", cmake_prefix_path.display()).replace('\\', "/")
     } else {
         String::new()
     };
 
     let build_dir = output_directory.join("build");
-    let install_dir = output_directory.join("install");
+    let install_dir = format!("{}", output_directory.join("install").display()).replace('\\', "/");
 
     std::fs::write(
         cmakelists_path,
@@ -82,7 +82,7 @@ add_library({project_name} STATIC {project_name}.cpp)
 
 install(TARGETS {project_name} EXPORT {project_name} DESTINATION lib)
 install(EXPORT {project_name} DESTINATION lib/cmake)
-"#, install_dir.display()
+"#, install_dir
         ),
     )
     .map_err(|e| Error::FailedToGenerateCMake {
