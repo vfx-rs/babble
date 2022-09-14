@@ -2,6 +2,11 @@
 name = "bbl-extract"
 version = "0.1.0"
 edition = "2021"
+description = "Library to parse C++ code and extract a flattened AST representation from Clang's AST"
+license = "Apache-2.0"
+authors = ["Anders Langlands <anderslanglands@gmail.com>"]
+repository = "https://github.com/vfx-rs/babble"
+
 
 [lib]
 name = "bbl_extract"

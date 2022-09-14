@@ -2,8 +2,10 @@
 name = "bbl-clang"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "High-level bindings to libclang"
+license = "Apache-2.0"
+authors = ["Anders Langlands <anderslanglands@gmail.com>"]
+repository = "https://github.com/vfx-rs/babble"
 
 [dependencies]
 clang-sys = {version = "1.3.3", features = ["clang_13_0"] }
