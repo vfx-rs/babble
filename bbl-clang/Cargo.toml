@@ -8,10 +8,15 @@ authors = ["Anders Langlands <anderslanglands@gmail.com>"]
 repository = "https://github.com/vfx-rs/babble"
 
 [dependencies]
-clang-sys = {version = "1.3.3", features = ["clang_13_0"] }
+clang-sys = { git = "https://github.com/anderslanglands/clang-sys.git", optional=true }
 ustr = "0.9.0"
 env_logger = "0.9.0"
 log = "0.4.17"
 thiserror = "1.0.32"
 backtrace = "0.3.66"
 tracing = { version = "0.1.36", features = ["log", "log-always"] }
+
+[features]
+clang_16 = ["clang-sys/clang_16_0"]
+clang_13 = ["clang-sys/clang_13_0"]
+default = ["clang_13"]
