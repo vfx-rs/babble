@@ -529,7 +529,7 @@ pub fn extract_class_decl(
             }
         } else {
             return Err(Error::FailedToGetAccessSpecifierFor(
-                member.display_name().into(),
+                member.display_name(),
             ));
         }
         match member.kind() {

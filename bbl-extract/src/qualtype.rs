@@ -9,7 +9,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::{
     ast::AST,
-    class::{specialize_template_parameter, ClassBindKind},
+    class::{specialize_template_parameter, ClassBindKind, extract_class_decl},
     error::Error,
     template_argument::{TemplateParameterDecl, TemplateType},
     type_alias::extract_typedef_decl,
@@ -343,11 +343,14 @@ pub fn extract_type(
             CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
                 extract_typedef_decl(c_ref.try_into()?, depth + 1, already_visited, ast, tu)?;
             }
-            // CursorKind::TypeAliasDecl  => {
-            //     extract_type_alias_type(c_ref.try_into()?, depth + 1, already_visited, ast, tu)?;
-            // }
+            CursorKind::ClassDecl => {
+                if !already_visited.contains(&c_ref.usr()) {
+                    already_visited.push(c_ref.usr());
+                    let cd = extract_class_decl(c_ref, depth+1, tu, &Vec::new(), ast, already_visited)?;
+                }
+            }
             CursorKind::TypeRef => warn!("Should extract class here"),
-            _ => warn!("Unhandled type kind {}", c_ref.kind()),
+            _ => warn!("Unhandled type decl {:?}", c_ref),
         }
 
         Ok(QualType {
