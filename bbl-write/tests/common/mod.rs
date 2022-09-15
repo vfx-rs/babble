@@ -50,13 +50,17 @@ where
     F: FnOnce() -> Result<(), Error>,
 {
     use tracing::error;
-    use tracing_subscriber::fmt;
+    use tracing::level_filters::LevelFilter;
     use tracing_subscriber::fmt::format::FmtSpan;
-    let subscriber = fmt()
+    /* 
+    tracing_subscriber::fmt()
         .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
-        .finish();
+        .with_max_level(LevelFilter::TRACE)
+        .init();
+    */
 
     init_log();
+
     let res = closure();
 
     res.map_err(|err| {

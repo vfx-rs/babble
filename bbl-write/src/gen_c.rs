@@ -231,6 +231,25 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
                 write!(body, "{:width$})", "", width = depth * 4)?;
             }
         }
+        Expr::CppFunctionCall {
+            function,
+            arguments,
+        } => {
+            write!(body, "{function}(")?;
+            if !arguments.is_empty() {
+                writeln!(body)?;
+            }
+            for arg in arguments {
+                write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
+                write_expr(body, arg, depth + 1)?;
+                writeln!(body)?;
+            }
+            if arguments.is_empty() {
+                write!(body, ")")?;
+            } else {
+                write!(body, "{:width$})", "", width = depth * 4)?;
+            }
+        }
         Expr::CppConstructor {
             receiver,
             arguments,
