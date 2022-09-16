@@ -12,6 +12,7 @@ use crate::stdlib::create_std_string;
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
 use bbl_clang::cursor::{CurTemplateRef, CurTypedef, Cursor, USR};
 use bbl_clang::ty::Type;
+use std::fmt::Debug;
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -20,6 +21,34 @@ pub enum TypeAlias {
     TypeAliasType { name: String, usr: USR },
     ClassTemplateSpecialization(ClassTemplateSpecialization),
     FunctionTemplateSpecialization(FunctionTemplateSpecialization),
+}
+
+impl Debug for TypeAlias {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeAlias::TypeAliasType { name, usr } => {
+                write!(f, "TypeAlias {usr} {name}")
+            }
+            TypeAlias::ClassTemplateSpecialization(ClassTemplateSpecialization {
+                specialized_decl,
+                usr,
+                name,
+                template_arguments,
+                namespaces,
+            }) => {
+                write!(f, "ClassTemplateSpecialization {usr} {name} specializes={specialized_decl} template_arguments={template_arguments:?} namespaces={namespaces:?}")
+            }
+            TypeAlias::FunctionTemplateSpecialization(FunctionTemplateSpecialization{
+                specialized_decl,
+                usr,
+                name,
+                template_arguments,
+                namespaces,
+            }) => {
+                write!(f, "FunctionTemplateSpecialization {usr} {name} specializes={specialized_decl} template_arguments={template_arguments:?} namespaces={namespaces:?}")
+            }
+        }
+    }
 }
 
 impl TypeAlias {
@@ -480,38 +509,51 @@ impl FunctionTemplateSpecialization {
 #[cfg(test)]
 mod tests {
     use bbl_clang::cli_args;
+    use indoc::indoc;
 
     use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast};
 
     #[test]
     fn extract_typealias_typedef() -> Result<(), Error> {
-        // test that adding a constructor forces non-pod
         let ast = parse_string_and_extract_ast(
-            r#"
-template <typename T, int N=4>
-class shared_ptr {
-    T* t;
+            indoc!(r#"
+            template <typename T, int N=4>
+            class shared_ptr {
+                T* t;
 
-public:
-    const T* get() const;
-    T* get();
-};
+            public:
+                const T* get() const;
+                T* get();
+            };
 
-class A {int a;};
-class B {int b;};
+            class A {int a;};
+            class B {int b;};
 
-using APtr = shared_ptr<A>;
-typedef shared_ptr<B> BPtr;
+            using APtr = shared_ptr<A>;
+            typedef shared_ptr<B> BPtr;
 
-using APtr2 = APtr;
-typedef BPtr BPtr2;
-        "#,
+            using APtr2 = APtr;
+            typedef BPtr BPtr2;
+        "#),
             &cli_args()?,
             true,
             None,
         )?;
 
-        ast.pretty_print(0);
+        println!("{ast:?}");
+        assert_eq!(format!("{ast:?}"), indoc!(r#"
+            Namespace c:@ST>2#T#NI@shared_ptr shared_ptr<T, N> None
+            ClassDecl c:@ST>2#T#NI@shared_ptr shared_ptr rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[Type(T), Int(N=4)] specializations=[] namespaces=[]
+            Method Method const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
+            Method Method const=false virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get# get rename=None ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
+
+            ClassDecl c:@S@A A rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+
+            ClassDecl c:@S@B B rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+
+            ClassTemplateSpecialization c:@APtr APtr specializes=c:@ST>2#T#NI@shared_ptr template_arguments=[Some(Type(c:@S@A))] namespaces=[]
+            ClassTemplateSpecialization c:ec50d40f103284de.cpp@T@BPtr BPtr specializes=c:@ST>2#T#NI@shared_ptr template_arguments=[Some(Type(c:@S@B))] namespaces=[]
+        "#));
 
         Ok(())
     }

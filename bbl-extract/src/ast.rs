@@ -33,15 +33,27 @@ pub struct AST {
 
 impl Debug for AST {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "AST({} classes, {} functions, {} namespaces, {} type aliases, {} includes)",
-            self.classes().len(),
-            self.functions().len(),
-            self.namespaces().len(),
-            self.type_aliases().len(),
-            self.includes().len()
-        )
+        for include in self.includes.iter() {
+            writeln!(f, "{include:?}")?;
+        }
+
+        for namespace in self.namespaces.iter() {
+            writeln!(f, "{namespace:?}")?;
+        }
+
+        for class in self.classes.iter() {
+            writeln!(f, "{class:?}")?;
+        }
+
+        for function in self.functions.iter() {
+            writeln!(f, "{function:?}")?;
+        }
+
+        for type_alias in self.type_aliases.iter() {
+            writeln!(f, "{type_alias:?}")?;
+        }
+
+        Ok(())
     }
 }
 

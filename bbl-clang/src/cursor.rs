@@ -38,7 +38,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 use ustr::Ustr;
 
-#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct USR(Ustr);
 
 impl USR {
@@ -58,6 +58,12 @@ impl USR {
 impl Display for USR {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl Debug for USR {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
     }
 }
 

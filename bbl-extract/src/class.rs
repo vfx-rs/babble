@@ -6,7 +6,7 @@ use bbl_clang::cli_args;
 use bbl_clang::cursor::{Cursor, USR};
 use bbl_clang::translation_unit::TranslationUnit;
 use log::*;
-use std::fmt::Display;
+use std::fmt::{Display, Debug};
 use tracing::instrument;
 use ustr::Ustr;
 
@@ -78,7 +78,7 @@ impl Default for MethodState {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct RuleOfFive {
     pub(crate) ctor: MethodState,
     pub(crate) copy_ctor: MethodState,
@@ -86,6 +86,32 @@ pub struct RuleOfFive {
     pub(crate) copy_assign: MethodState,
     pub(crate) move_assign: MethodState,
     pub(crate) dtor: MethodState,
+}
+
+fn write_method_state(f: &mut std::fmt::Formatter<'_>, name: &str, ms: MethodState) -> std::fmt::Result {
+    use MethodState::*;
+
+    match ms {
+        Defined => write!(f, "{} ", name),
+        Undefined => Ok(()),
+        Defaulted => write!(f, "{}=default ", name),
+        Deleted => write!(f, "{}=delete ", name),
+    }
+}
+
+impl Debug for RuleOfFive {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[")?;
+        write_method_state(f, "ctor", self.ctor)?;
+        write_method_state(f, "copy_ctor", self.copy_ctor)?;
+        write_method_state(f, "move_ctor", self.move_ctor)?;
+        write_method_state(f, "copy_assign", self.copy_assign)?;
+        write_method_state(f, "move_assign", self.move_assign)?;
+        write_method_state(f, "dtor", self.dtor)?;
+        write!(f, "]")?;
+
+        Ok(())
+    }
 }
 
 // TODO(AL): the rules here are complex and version-dependent. Will need to try and add to libclang here to have clang
@@ -131,6 +157,33 @@ pub struct ClassDecl {
     pub(crate) is_pod: bool,
 
     pub(crate) rule_of_five: RuleOfFive,
+}
+
+impl std::fmt::Debug for ClassDecl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "ClassDecl {usr} {name} rename={rename:?} {bind_kind:?} is_pod={pod} ignore={ignore} rof={rof:?} template_parameters={template_parameters:?} specializations={specializations:?} namespaces={namespaces:?}", 
+            usr=self.usr, 
+            name=self.name(),
+            rename = self.rename,
+            bind_kind = self.bind_kind(),
+            pod = self.is_pod,
+            ignore = self.ignore,
+            rof = self.rule_of_five,
+            specializations = self.specializations,
+            template_parameters = self.template_parameters(),
+            namespaces = self.namespaces(),
+        )?;
+
+        for field in self.fields() {
+            writeln!(f, "Field {:?}", field)?;
+        }
+
+        for method in self.methods() {
+            writeln!(f, "{:?}", method)?;
+        }
+
+        Ok(())
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -483,12 +536,6 @@ impl Display for ClassDecl {
     }
 }
 
-impl std::fmt::Debug for ClassDecl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ClassDecl{{\"{}\"}}", self.name())
-    }
-}
-
 #[instrument(skip(depth, tu, namespaces, ast, already_visited), level = "trace")]
 pub fn extract_class_decl(
     class_template: Cursor,
@@ -758,6 +805,12 @@ pub struct Field {
     pub(crate) qual_type: QualType,
 }
 
+impl Debug for Field {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {:?}", self.name(), self.qual_type())
+    }
+}
+
 impl Display for Field {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: {}", self.name, self.qual_type)
@@ -813,24 +866,37 @@ pub(crate) fn specialize_template_parameter(
     decl.default_name()
 }
 
+#[cfg(test)]
+
+mod tests {
+    use bbl_clang::cli_args;
+    use indoc::indoc;
+
+    use crate::{error::Error, parse_string_and_extract_ast, class::ClassBindKind};
+
 #[test]
 fn extract_pod() -> Result<(), Error> {
     // test that a POD extracts as a valuetype
     let ast = parse_string_and_extract_ast(
-        r#"
-class Class {
-public:
-    int a;
-    float b;
-};
-}
-        "#,
+        indoc!(r#"
+            class Class {
+            public:
+                int a;
+                float b;
+            };
+        "#),
         &cli_args()?,
         true,
         None,
     )?;
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
+    assert_eq!(format!("{ast:?}"), indoc!(r#"
+        ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+        Field a: int
+        Field b: float
+
+    "#));
 
     let class_id = ast.find_class("Class")?;
     let class = &ast.classes()[class_id];
@@ -843,21 +909,24 @@ public:
 fn extract_non_pod() -> Result<(), Error> {
     // test that adding a private field to a POD forces opaqueptr
     let ast = parse_string_and_extract_ast(
-        r#"
-class Class {
-    int a;
-public:
-    float b;
-};
-}
-    
-        "#,
+        indoc!(r#"
+            class Class {
+                int a;
+            public:
+                float b;
+            };
+        "#),
         &cli_args()?,
         true,
         None,
     )?;
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
+    assert_eq!(format!("{ast:?}"), indoc!(r#"
+        ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+        Field b: float
+ 
+    "#));
 
     let class_id = ast.find_class("Class")?;
     let class = &ast.classes()[class_id];
@@ -870,21 +939,28 @@ public:
 fn extract_non_pod2() -> Result<(), Error> {
     // test that adding a constructor forces non-pod
     let ast = parse_string_and_extract_ast(
-        r#"
-class Class {
-public:
-    Class();
-    float b;
-};
-}
+        indoc!(r#"
+            class Class {
+            public:
+                Class();
+                float b;
+            };
+            }
     
-        "#,
+        "#),
         &cli_args()?,
         true,
         None,
     )?;
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
+    assert_eq!(format!("{ast:?}"), indoc!(r#"
+        Namespace c:@S@Class Class None
+        ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[ctor ] template_parameters=[] specializations=[] namespaces=[]
+        Field b: float
+        Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@Class# Class rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+
+    "#));
 
     let class_id = ast.find_class("Class")?;
     let class = &ast.classes()[class_id];
@@ -897,32 +973,44 @@ public:
 fn extract_rof() -> Result<(), Error> {
     // test that adding a constructor forces non-pod
     let ast = parse_string_and_extract_ast(
-        r#"
-class NeedsImplicitAll {
-public:
-};
+        indoc!(r#"
+            class NeedsImplicitAll {
+            public:
+            };
 
-class NeedsImplicitCopyCtor {
-public:
-    ~NeedsImplicitCopyCtor();
-};
+            class NeedsImplicitCopyCtor {
+            public:
+                ~NeedsImplicitCopyCtor();
+            };
 
-class NeedsImplicitNone {
-public:
-    NeedsImplicitNone();
-    NeedsImplicitNone(const NeedsImplicitNone&);
-    ~NeedsImplicitNone();
-};
+            class NeedsImplicitNone {
+            public:
+                NeedsImplicitNone();
+                NeedsImplicitNone(const NeedsImplicitNone&);
+                ~NeedsImplicitNone();
+            };
 
-}
-    
-        "#,
+        "#),
         &cli_args()?,
         true,
         None,
     )?;
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
+    assert_eq!(format!("{ast:?}"), indoc!(r#"
+        Namespace c:@S@NeedsImplicitCopyCtor NeedsImplicitCopyCtor None
+        Namespace c:@S@NeedsImplicitNone NeedsImplicitNone None
+        ClassDecl c:@S@NeedsImplicitAll NeedsImplicitAll rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+
+        ClassDecl c:@S@NeedsImplicitCopyCtor NeedsImplicitCopyCtor rename=None OpaquePtr is_pod=false ignore=false rof=[dtor ] template_parameters=[] specializations=[] namespaces=[]
+        Method Destructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitCopyCtor@F@~NeedsImplicitCopyCtor# ~NeedsImplicitCopyCtor rename=Some("dtor") ignore=false return=void args=[] noexcept=Unevaluated template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitCopyCtor]
+
+        ClassDecl c:@S@NeedsImplicitNone NeedsImplicitNone rename=None OpaquePtr is_pod=false ignore=false rof=[ctor copy_ctor dtor ] template_parameters=[] specializations=[] namespaces=[]
+        Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@NeedsImplicitNone# NeedsImplicitNone rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
+        Method CopyConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@NeedsImplicitNone#&1$@S@NeedsImplicitNone# NeedsImplicitNone rename=Some("copy_ctor") ignore=false return=void args=[Argument { name: "", qual_type: const NeedsImplicitNone & }] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
+        Method Destructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@~NeedsImplicitNone# ~NeedsImplicitNone rename=Some("dtor") ignore=false return=void args=[] noexcept=Unevaluated template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
+
+    "#));
 
     let class_id = ast.find_class("NeedsImplicitAll")?;
     let class = &ast.classes()[class_id];
@@ -947,4 +1035,5 @@ public:
     assert!(!class.rule_of_five().needs_implicit_dtor());
 
     Ok(())
+}
 }

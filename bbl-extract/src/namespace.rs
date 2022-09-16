@@ -1,12 +1,19 @@
 use crate::ast::AST;
 use bbl_clang::{cursor::Cursor, cursor::USR, translation_unit::TranslationUnit};
 use tracing::instrument;
+use std::fmt::Debug;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Namespace {
     pub(crate) usr: USR,
     pub(crate) name: String,
     pub(crate) rename: Option<String>,
+}
+
+impl Debug for Namespace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Namespace {} {} {:?}", self.usr, self.name, self.rename)
+    }
 }
 
 impl Namespace {

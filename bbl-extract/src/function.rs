@@ -74,7 +74,18 @@ pub struct Function {
 
 impl Debug for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Function{{\"{}\"}}", self.name())
+        write!(f, "Function {usr} {name} rename={rename:?} ignore={ignore} return={result:?} args={args:?} noexcept={noexcept:?} template_parameters={template_parameters:?} specializations={specializations:?} namespaces={namespaces:?}", 
+            usr = self.usr, 
+            name = self.name(),
+            rename = self.replacement_name,
+            ignore = self.ignored,
+            result=self.result(),
+            args = self.arguments(),
+            noexcept=self.exception_specification_kind,
+            template_parameters = self.template_parameters(),
+            specializations = self.specializations,
+            namespaces = self.namespaces,
+        )
     }
 }
 
@@ -245,7 +256,6 @@ impl Function {
     }
 }
 
-#[derive(Debug)]
 pub struct Method {
     pub(crate) function: Function,
     pub(crate) kind: MethodKind,
@@ -253,6 +263,12 @@ pub struct Method {
     pub(crate) is_virtual: bool,
     pub(crate) is_pure_virtual: bool,
     pub(crate) specializations: Vec<MethodSpecializationId>,
+}
+
+impl Debug for Method {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Method {:?} const={} virtual={} pure_virtual={} specializations={:?} {:?}", self.kind, self.is_const, self.is_virtual, self.is_pure_virtual, self.specializations, self.function)
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -902,6 +918,7 @@ fn get_default_replacement_name(c_method: Cursor) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use bbl_clang::cli_args;
+    use indoc::indoc;
 
     use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast};
 
@@ -909,22 +926,29 @@ mod tests {
     fn extract_static_method() -> Result<(), Error> {
         // test that a POD extracts as a valuetype
         let ast = parse_string_and_extract_ast(
-            r#"
-class Class {
-public:
-    int a;
-    float b;
+            indoc!(r#"
+            class Class {
+            public:
+                int a;
+                float b;
 
-    static float static_method(float b);
-};
-}
-        "#,
+                static float static_method(float b);
+            };
+        "#),
             &cli_args()?,
             true,
             None,
         )?;
 
-        ast.pretty_print(0);
+        println!("{ast:?}");
+        assert_eq!(format!("{ast:?}"), indoc!(r#"
+            Namespace c:@S@Class Class None
+            ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+            Field a: int
+            Field b: float
+            Method StaticMethod const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#f#S static_method rename=None ignore=false return=float args=[Argument { name: "b", qual_type: float }] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+
+        "#));
 
         let class_id = ast.find_class("Class")?;
         let class = &ast.classes()[class_id];
@@ -937,22 +961,29 @@ public:
     fn extract_static_method_taking_class() -> Result<(), Error> {
         // test that a POD extracts as a valuetype
         let ast = parse_string_and_extract_ast(
-            r#"
-class Class {
-public:
-    int a;
-    float b;
+            indoc!(r#"
+            class Class {
+            public:
+                int a;
+                float b;
 
-    static float static_method(Class c);
-};
-}
-        "#,
+                static float static_method(Class c);
+            };
+        "#),
             &cli_args()?,
             true,
             None,
         )?;
 
-        ast.pretty_print(0);
+        println!("{ast:?}");
+        assert_eq!(format!("{ast:?}"), indoc!(r#"
+            Namespace c:@S@Class Class None
+            ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+            Field a: int
+            Field b: float
+            Method StaticMethod const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#$@S@Class#S static_method rename=None ignore=false return=float args=[Argument { name: "c", qual_type: Class }] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+
+        "#));
 
         let class_id = ast.find_class("Class")?;
         let class = &ast.classes()[class_id];

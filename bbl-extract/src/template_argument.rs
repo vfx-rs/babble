@@ -39,7 +39,7 @@ impl Debug for TemplateType {
 }
 
 /// A template parameter as defined in a class- or function-template declaration
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TemplateParameterDecl {
     Type {
         name: String,
@@ -91,6 +91,22 @@ impl Display for TemplateParameterDecl {
                 if let Some(default) = default {
                     write!(f, "={default}")?;
                 }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl Debug for TemplateParameterDecl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TemplateParameterDecl::Type { name, .. } => write!(f, "Type({name})"),
+            TemplateParameterDecl::Integer { name, default, .. } => {
+                write!(f, "Int({name}")?;
+                if let Some(default) = default {
+                    write!(f, "={default}")?;
+                }
+                write!(f, ")")?;
                 Ok(())
             }
         }

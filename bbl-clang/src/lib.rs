@@ -52,7 +52,6 @@ pub fn get_clang_binary() -> Result<String, error::Error> {
     // First check if we've specified it explicitly
     if let Ok(path) = std::env::var("CLANG_PATH") {
         if Command::new(&path).output().is_ok() {
-            println!("Got clang from CLANG_PATH");
             return Ok(path);
         }
     }
@@ -67,14 +66,12 @@ pub fn get_clang_binary() -> Result<String, error::Error> {
                 .next()
                 .ok_or_else(|| Error::FailedToParseOutput(stdout.clone()))?;
 
-            println!("Got clang from LLVM_CONFIG_PATH");
             return Ok(PathBuf::from(line).join("clang").display().to_string());
         }
     }
 
     // Finally just check if it's in the PATH
     if Command::new("clang").output().is_ok() {
-        println!("Got clang from PATH");
         return Ok("clang".to_string());
     }
 

@@ -9,7 +9,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::{
     ast::AST,
-    class::{specialize_template_parameter, ClassBindKind, extract_class_decl},
+    class::{extract_class_decl, specialize_template_parameter, ClassBindKind},
     error::Error,
     template_argument::{TemplateParameterDecl, TemplateType},
     type_alias::extract_typedef_decl,
@@ -60,11 +60,22 @@ impl TypeRef {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct QualType {
     pub name: String,
     pub is_const: bool,
     pub type_ref: TypeRef,
+}
+
+impl std::fmt::Debug for QualType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}{}",
+            self.name,
+            if self.is_const { " const" } else { "" }
+        )
+    }
 }
 
 impl QualType {
@@ -346,7 +357,14 @@ pub fn extract_type(
             CursorKind::ClassDecl => {
                 if !already_visited.contains(&c_ref.usr()) {
                     already_visited.push(c_ref.usr());
-                    let cd = extract_class_decl(c_ref, depth+1, tu, &Vec::new(), ast, already_visited)?;
+                    let cd = extract_class_decl(
+                        c_ref,
+                        depth + 1,
+                        tu,
+                        &Vec::new(),
+                        ast,
+                        already_visited,
+                    )?;
                 }
             }
             CursorKind::TypeRef => warn!("Should extract class here"),
