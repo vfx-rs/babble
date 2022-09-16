@@ -16,7 +16,7 @@ You will need to point the crates to your clang installation. There are three wa
 2. Set the `CLANG_PATH` environment variable to point to the clang executable
 3. Set the `LLVM_CONFIG_PATH` environment variable to point to the llvm-config executable
 
-Then, just run `cargo test`
+Then, just run `cargo test` (or `RUST_LOG=trace cargo test -- --nocapture` to inspect output)
 
 # Examples
 Currently there is a single example building a simple, header-only library:
