@@ -414,7 +414,6 @@ impl ClassTemplateSpecialization {
             args.join(", ")
         );
 
-        // this will be complicated...
         let class = ast.get_class(self.specialized_decl).unwrap();
         class.pretty_print(depth, ast, Some(self.template_arguments()));
     }
@@ -584,17 +583,17 @@ mod tests {
             format!("{ast:?}"),
             indoc!(
                 r#"
-            Namespace c:@ST>2#T#NI@shared_ptr shared_ptr<T, N> None
-            ClassDecl c:@ST>2#T#NI@shared_ptr shared_ptr rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[Type(T), Int(N=4)] specializations=[] namespaces=[]
-            Method Method const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
-            Method Method const=false virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get# get rename=None ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
+                Namespace c:@ST>2#T#NI@shared_ptr shared_ptr<T, N> None
+                ClassDecl c:@ST>2#T#NI@shared_ptr shared_ptr rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[Type(T), Int(N=4)] specializations=[] namespaces=[]
+                Method Method const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
+                Method Method const=false virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get# get rename=None ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
 
-            ClassDecl c:@S@A A rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+                ClassDecl c:@S@A A rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
 
-            ClassDecl c:@S@B B rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+                ClassDecl c:@S@B B rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
 
-            ClassTemplateSpecialization c:@APtr APtr specializes=c:@ST>2#T#NI@shared_ptr template_arguments=[Some(Type(c:@S@A))] namespaces=[]
-            ClassTemplateSpecialization c:ec50d40f103284de.cpp@T@BPtr BPtr specializes=c:@ST>2#T#NI@shared_ptr template_arguments=[Some(Type(c:@S@B))] namespaces=[]
+                ClassTemplateSpecialization c:@APtr APtr specializes=c:@ST>2#T#NI@shared_ptr template_arguments=[Some(Type(c:@S@A))] namespaces=[]
+                ClassTemplateSpecialization c:ec50d40f103284de.cpp@T@BPtr BPtr specializes=c:@ST>2#T#NI@shared_ptr template_arguments=[Some(Type(c:@S@B))] namespaces=[]
         "#
             )
         );
@@ -623,19 +622,12 @@ mod tests {
             )?;
 
             println!("{ast:?}");
-            // assert_eq!(format!("{ast:?}"), indoc!(r#"
-            //     Namespace c:@ST>2#T#NI@shared_ptr shared_ptr<T, N> None
-            //     ClassDecl c:@ST>2#T#NI@shared_ptr shared_ptr rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[Type(T), Int(N=4)] specializations=[] namespaces=[]
-            //     Method Method const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
-            //     Method Method const=false virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get# get rename=None ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
+            assert_eq!(format!("{ast:?}"), indoc!(r#"
+                ClassDecl c:@S@Class_ Class_ rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
 
-            //     ClassDecl c:@S@A A rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
-
-            //     ClassDecl c:@S@B B rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
-
-            //     ClassTemplateSpecialization c:@APtr APtr specializes=c:@ST>2#T#NI@shared_ptr template_arguments=[Some(Type(c:@S@A))] namespaces=[]
-            //     ClassTemplateSpecialization c:ec50d40f103284de.cpp@T@BPtr BPtr specializes=c:@ST>2#T#NI@shared_ptr template_arguments=[Some(Type(c:@S@B))] namespaces=[]
-            // "#));
+                Function c:@F@take_class#&1$@S@Class_# take_class rename=None ignore=false return=void args=[Argument { name: "c", qual_type: const Class & }] noexcept=None template_parameters=[] specializations=[] namespaces=[]
+                TypeAlias c:@S@Class_ Class
+            "#));
 
             Ok(())
         })
