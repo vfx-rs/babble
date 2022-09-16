@@ -4,7 +4,7 @@ use std::convert::TryInto;
 use std::fmt::Display;
 use tracing::{debug, error, info, instrument, trace, warn};
 
-use crate::ast::{get_namespaces_for_decl, get_qualified_name, TypeAliasId, AST};
+use crate::ast::{dump_cursor, get_namespaces_for_decl, get_qualified_name, TypeAliasId, AST};
 use crate::class::extract_class_decl;
 use crate::namespace::extract_namespace;
 use crate::qualtype::extract_type;
@@ -38,7 +38,7 @@ impl Debug for TypeAlias {
             }) => {
                 write!(f, "ClassTemplateSpecialization {usr} {name} specializes={specialized_decl} template_arguments={template_arguments:?} namespaces={namespaces:?}")
             }
-            TypeAlias::FunctionTemplateSpecialization(FunctionTemplateSpecialization{
+            TypeAlias::FunctionTemplateSpecialization(FunctionTemplateSpecialization {
                 specialized_decl,
                 usr,
                 name,
@@ -126,8 +126,43 @@ pub fn extract_typedef_decl<'a>(
 
         let id = ast.insert_type_alias(type_alias);
         return Ok(&ast.type_aliases()[TypeAliasId::new(id)]);
+    } else if let Some(type_ref) = c_typedef.first_child_of_kind(CursorKind::TypeRef) {
+        let c_ref = type_ref.referenced().unwrap_or_else(|e| {
+            dump_cursor(c_typedef.into(), tu);
+            panic!("Could not get referenced decl from TypeRef: {e}");
+        });
+        trace!("Got type ref. referenced is {:?}", c_ref);
+
+        match c_ref.kind() {
+            CursorKind::ClassDecl => {
+                println!("Got ClassDecl {:?}", c_ref);
+                already_visited.push(c_typedef.usr());
+                if !already_visited.contains(&c_ref.usr()) {
+                    already_visited.push(c_ref.usr());
+                    let cd = extract_class_decl(
+                        c_ref,
+                        depth + 1,
+                        tu,
+                        &Vec::new(),
+                        ast,
+                        already_visited,
+                    )?;
+                    ast.insert_class(cd);
+                }
+
+                let id = ast.insert_type_alias(TypeAlias::TypeAliasType {
+                    name: c_typedef.display_name(),
+                    usr: c_ref.usr(),
+                });
+                return Ok(&ast.type_aliases()[TypeAliasId::new(id)]);
+            }
+            _ => {
+                panic!("Got unhandled cursor ref kind in extract_typedef_decl: {c_ref:?}");
+            }
+        }
     } else {
         // dunno
+        dump_cursor(c_typedef.into(), tu);
         unimplemented!();
     }
 }
@@ -509,14 +544,17 @@ impl FunctionTemplateSpecialization {
 #[cfg(test)]
 mod tests {
     use bbl_clang::cli_args;
+    use env_logger::fmt::Color;
     use indoc::indoc;
+    use log::Level;
 
     use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast};
 
     #[test]
     fn extract_typealias_typedef() -> Result<(), Error> {
         let ast = parse_string_and_extract_ast(
-            indoc!(r#"
+            indoc!(
+                r#"
             template <typename T, int N=4>
             class shared_ptr {
                 T* t;
@@ -534,14 +572,18 @@ mod tests {
 
             using APtr2 = APtr;
             typedef BPtr BPtr2;
-        "#),
+        "#
+            ),
             &cli_args()?,
             true,
             None,
         )?;
 
         println!("{ast:?}");
-        assert_eq!(format!("{ast:?}"), indoc!(r#"
+        assert_eq!(
+            format!("{ast:?}"),
+            indoc!(
+                r#"
             Namespace c:@ST>2#T#NI@shared_ptr shared_ptr<T, N> None
             ClassDecl c:@ST>2#T#NI@shared_ptr shared_ptr rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[Type(T), Int(N=4)] specializations=[] namespaces=[]
             Method Method const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
@@ -553,8 +595,127 @@ mod tests {
 
             ClassTemplateSpecialization c:@APtr APtr specializes=c:@ST>2#T#NI@shared_ptr template_arguments=[Some(Type(c:@S@A))] namespaces=[]
             ClassTemplateSpecialization c:ec50d40f103284de.cpp@T@BPtr BPtr specializes=c:@ST>2#T#NI@shared_ptr template_arguments=[Some(Type(c:@S@B))] namespaces=[]
-        "#));
+        "#
+            )
+        );
 
         Ok(())
+    }
+
+    #[test]
+    fn extract_pod_typedef() -> Result<(), Error> {
+        run_test(|| {
+            let ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                class Class_ {
+                    int a;
+                };
+
+                typedef Class_ Class;
+
+                void take_class(const Class& c);
+            "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+            )?;
+
+            println!("{ast:?}");
+            // assert_eq!(format!("{ast:?}"), indoc!(r#"
+            //     Namespace c:@ST>2#T#NI@shared_ptr shared_ptr<T, N> None
+            //     ClassDecl c:@ST>2#T#NI@shared_ptr shared_ptr rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[Type(T), Int(N=4)] specializations=[] namespaces=[]
+            //     Method Method const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
+            //     Method Method const=false virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get# get rename=None ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
+
+            //     ClassDecl c:@S@A A rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+
+            //     ClassDecl c:@S@B B rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+
+            //     ClassTemplateSpecialization c:@APtr APtr specializes=c:@ST>2#T#NI@shared_ptr template_arguments=[Some(Type(c:@S@A))] namespaces=[]
+            //     ClassTemplateSpecialization c:ec50d40f103284de.cpp@T@BPtr BPtr specializes=c:@ST>2#T#NI@shared_ptr template_arguments=[Some(Type(c:@S@B))] namespaces=[]
+            // "#));
+
+            Ok(())
+        })
+    }
+
+    pub(crate) fn run_test<F>(closure: F) -> Result<(), Error>
+    where
+        F: FnOnce() -> Result<(), Error>,
+    {
+        use tracing::error;
+        use tracing::level_filters::LevelFilter;
+        /*
+        use tracing_subscriber::fmt::format::FmtSpan;
+        tracing_subscriber::fmt()
+            .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+            .with_max_level(LevelFilter::TRACE)
+            .init();
+        */
+
+        init_log();
+
+        let res = closure();
+
+        res.map_err(|err| {
+            error!("{err}");
+            for e in source_iter(&err) {
+                error!("  because: {e}")
+            }
+
+            err
+        })
+    }
+
+    pub(crate) fn init_log() {
+        use std::io::Write;
+
+        let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
+            .format_timestamp(None)
+            .format(|buf, record| -> Result<(), std::io::Error> {
+                let mut level_style = buf.style();
+                match record.level() {
+                    Level::Trace => level_style.set_color(Color::Blue),
+                    Level::Debug => level_style.set_color(Color::White),
+                    Level::Info => level_style.set_color(Color::Cyan),
+                    Level::Warn => level_style.set_color(Color::Yellow),
+                    Level::Error => level_style.set_color(Color::Red),
+                };
+
+                writeln!(
+                    buf,
+                    "{} [{}:{}] {}",
+                    level_style.value(record.level()),
+                    record.file().unwrap_or(""),
+                    record.line().unwrap_or(0),
+                    record.args()
+                )
+            })
+            // .is_test(true)
+            .try_init();
+    }
+
+    pub(crate) fn source_iter(
+        error: &impl std::error::Error,
+    ) -> impl Iterator<Item = &(dyn std::error::Error + 'static)> {
+        SourceIter {
+            current: error.source(),
+        }
+    }
+
+    struct SourceIter<'a> {
+        current: Option<&'a (dyn std::error::Error + 'static)>,
+    }
+
+    impl<'a> Iterator for SourceIter<'a> {
+        type Item = &'a (dyn std::error::Error + 'static);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            let current = self.current;
+            self.current = self.current.and_then(std::error::Error::source);
+            current
+        }
     }
 }

@@ -52,7 +52,7 @@ where
     use tracing::error;
     use tracing::level_filters::LevelFilter;
     use tracing_subscriber::fmt::format::FmtSpan;
-    /* 
+    /*
     tracing_subscriber::fmt()
         .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
         .with_max_level(LevelFilter::TRACE)

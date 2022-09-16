@@ -1,7 +1,7 @@
 use crate::ast::AST;
 use bbl_clang::{cursor::Cursor, cursor::USR, translation_unit::TranslationUnit};
-use tracing::instrument;
 use std::fmt::Debug;
+use tracing::instrument;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Namespace {

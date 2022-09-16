@@ -21,7 +21,7 @@ use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Stores all the extracted AST information that we care about in a flat structure.
-/// 
+///
 /// The flat structure makes it easier to translate to C by storing only the information that we care about.
 pub struct AST {
     pub(crate) classes: UstrIndexMap<ClassDecl, ClassId>,
@@ -60,8 +60,8 @@ impl Debug for AST {
 /// A `#include` directive pulled from the parsed translation unit
 #[derive(Debug, Clone)]
 pub struct Include {
-    name: String,       //< The filename from the include directive
-    bracket: String,    //< What kind of "bracket" was around the filename, i.e. '<' or '"'
+    name: String,    //< The filename from the include directive
+    bracket: String, //< What kind of "bracket" was around the filename, i.e. '<' or '"'
 }
 
 impl Include {
@@ -71,21 +71,21 @@ impl Include {
     }
 
     /// Get the name of the included file.
-    /// 
+    ///
     /// i.e. for `#include <dir/file.h>` this would return "dir/file.h"
     pub fn name(&self) -> &str {
         &self.name
     }
 
     /// Get the type of "bracket" around the file.
-    /// 
+    ///
     /// i.e. for `#include <dir/file.h>` this would return "<"
     pub fn bracket(&self) -> &str {
         &self.bracket
     }
 
     /// Get the formatted filename, including brackets.
-    /// 
+    ///
     /// i.e. for `#include <dir/file.h>` this would return "<dir/file.h>""
     pub fn get_bracketed_name(&self) -> String {
         format!("{0}{1}{0}", self.bracket(), self.name())
@@ -147,7 +147,7 @@ impl AST {
 
     /// Find a namespace by exact match on the name and return its id, which can then be used to get a reference to the
     /// actual [`Namespace`]
-    /// 
+    ///
     /// # Returns
     /// * [`NamespaceId`] if a [`Namespace`] with name `name` exists
     /// * [`Error::NamespaceNotFound`] if no [`Namespace`] with name `name` exists
@@ -167,7 +167,7 @@ impl AST {
 
     /// Find a class by exact match on the name and return its id, which can then be used to get a reference to the
     /// actual [`ClassDecl`]
-    /// 
+    ///
     /// # Returns
     /// * [`ClassDeclId`] if a [`ClassDecl`] with name `name` exists
     /// * [`Error::ClassDeclNotFound`] if no [`ClassDecl`] with name `name` exists
@@ -286,7 +286,7 @@ impl AST {
 
     /// Find a function by exact match on the name and return its id, which can then be used to get a reference to the
     /// actual [`Function`]
-    /// 
+    ///
     /// # Returns
     /// * [`FunctionId`] if a [`Function`] with name `name` exists
     /// * [`Error::FunctionNotFound`] if no [`Function`] with name `name` exists
@@ -365,8 +365,8 @@ impl AST {
     }
 
     /// Sets the external name of the namespace.
-    /// 
-    /// When classes and methods are converted to their C representations, their names are prepended with the full 
+    ///
+    /// When classes and methods are converted to their C representations, their names are prepended with the full
     /// namespace scope. For instance:
     /// ```c++
     /// Imath_3_1::V3f::cross()
@@ -375,7 +375,7 @@ impl AST {
     /// ```c
     /// Imath_3_1_V3f_cross()
     /// ```
-    /// Renaming the namespace allows an external name that matches the external namespace from C++, rather than the 
+    /// Renaming the namespace allows an external name that matches the external namespace from C++, rather than the
     /// extracted one, which may be versioned:
     /// ```c
     /// Imath_V3f_cross()
@@ -384,9 +384,9 @@ impl AST {
         self.namespaces.index_mut(namespace_id).rename(new_name);
     }
 
-    /// Find a method on the class with id `class_id` by exact match on the name and return its id, which can then be 
+    /// Find a method on the class with id `class_id` by exact match on the name and return its id, which can then be
     /// used to get a reference to the actual [`Method`]
-    /// 
+    ///
     /// # Returns
     /// * [`MethodId`] if a [`Method`] with name `name` exists
     /// * [`Error::MethodNotFound`] if no [`Method`] with name `name` exists
@@ -396,7 +396,7 @@ impl AST {
     }
 
     /// Add a specialization for the template [`Method`] with id `method_id` on the [`ClassDecl`] with id `class_id`.
-    /// 
+    ///
     /// The arguments in `args` are applied to the method template in the order in which they are given, which is assumed
     /// to match the order in which they are declared.
     pub fn specialize_method(
@@ -412,7 +412,7 @@ impl AST {
     }
 
     /// Rename a method when it is translated
-    /// 
+    ///
     /// This can be used to disambiguate overrides
     pub fn rename_method(&mut self, class_id: ClassId, method_id: MethodId, new_name: &str) {
         self.classes
@@ -548,10 +548,10 @@ pub fn extract_ast(
                 // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
                 // (for opaque types in the API)
                 if c.is_definition() {
+                    already_visited.push(c.usr());
                     let cd =
                         extract_class_decl(c, depth + 1, tu, &namespaces, ast, already_visited)?;
                     ast.insert_class(cd);
-                    already_visited.push(c.usr());
                 }
             }
 
@@ -663,6 +663,11 @@ pub fn extract_ast(
     }
 
     Ok(())
+}
+
+pub fn dump_cursor(c: Cursor, tu: &TranslationUnit) {
+    let mut av = Vec::new();
+    dump(c, 0, 20, &mut av, tu, &[], None);
 }
 
 use colored::*;

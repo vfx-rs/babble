@@ -365,6 +365,7 @@ pub fn extract_type(
                         ast,
                         already_visited,
                     )?;
+                    ast.insert_class(cd);
                 }
             }
             CursorKind::TypeRef => warn!("Should extract class here"),

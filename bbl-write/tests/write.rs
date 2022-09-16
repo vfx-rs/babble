@@ -371,7 +371,6 @@ fn write_take_std_string() -> Result<(), Error> {
     })
 }
 
-
 #[test]
 fn write_take_std_string_fun() -> Result<(), Error> {
     run_test(|| {

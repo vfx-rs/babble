@@ -1,7 +1,7 @@
 use crate::{
     access_specifier::AccessSpecifier, exception::ExceptionSpecificationKind,
     printing_policy::PrintingPolicy, template_argument::TemplateArgumentKind,
-    token::SourceLocation,
+    token::SourceLocation, translation_unit::TranslationUnit,
 };
 
 use super::cursor_kind::CursorKind;
@@ -190,6 +190,20 @@ impl Cursor {
 
             if recursive {
                 ChildVisitResult::Recurse
+            } else {
+                ChildVisitResult::Continue
+            }
+        });
+
+        result
+    }
+
+    pub fn first_child_of_kind(&self, kind: CursorKind) -> Option<Cursor> {
+        let mut result = None;
+        self.visit_children(|c, _| {
+            if c.kind() == kind {
+                result = Some(c);
+                ChildVisitResult::Break
             } else {
                 ChildVisitResult::Continue
             }
@@ -395,6 +409,12 @@ impl TryFrom<Cursor> for CurTypedef {
         } else {
             Err(Error::InvalidCursor)
         }
+    }
+}
+
+impl From<CurTypedef> for Cursor {
+    fn from(ct: CurTypedef) -> Self {
+        ct.0
     }
 }
 

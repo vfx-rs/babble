@@ -6,7 +6,7 @@ use bbl_clang::cli_args;
 use bbl_clang::cursor::{Cursor, USR};
 use bbl_clang::translation_unit::TranslationUnit;
 use log::*;
-use std::fmt::{Display, Debug};
+use std::fmt::{Debug, Display};
 use tracing::instrument;
 use ustr::Ustr;
 
@@ -88,7 +88,11 @@ pub struct RuleOfFive {
     pub(crate) dtor: MethodState,
 }
 
-fn write_method_state(f: &mut std::fmt::Formatter<'_>, name: &str, ms: MethodState) -> std::fmt::Result {
+fn write_method_state(
+    f: &mut std::fmt::Formatter<'_>,
+    name: &str,
+    ms: MethodState,
+) -> std::fmt::Result {
     use MethodState::*;
 
     match ms {
@@ -575,9 +579,7 @@ pub fn extract_class_decl(
                 continue;
             }
         } else {
-            return Err(Error::FailedToGetAccessSpecifierFor(
-                member.display_name(),
-            ));
+            return Err(Error::FailedToGetAccessSpecifierFor(member.display_name()));
         }
         match member.kind() {
             CursorKind::TemplateTypeParameter => {
@@ -872,74 +874,89 @@ mod tests {
     use bbl_clang::cli_args;
     use indoc::indoc;
 
-    use crate::{error::Error, parse_string_and_extract_ast, class::ClassBindKind};
+    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast};
 
-#[test]
-fn extract_pod() -> Result<(), Error> {
-    // test that a POD extracts as a valuetype
-    let ast = parse_string_and_extract_ast(
-        indoc!(r#"
+    #[test]
+    fn extract_pod() -> Result<(), Error> {
+        // test that a POD extracts as a valuetype
+        let ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
             class Class {
             public:
                 int a;
                 float b;
             };
-        "#),
-        &cli_args()?,
-        true,
-        None,
-    )?;
+        "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+        )?;
 
-    println!("{ast:?}");
-    assert_eq!(format!("{ast:?}"), indoc!(r#"
+        println!("{ast:?}");
+        assert_eq!(
+            format!("{ast:?}"),
+            indoc!(
+                r#"
         ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
         Field a: int
         Field b: float
 
-    "#));
+    "#
+            )
+        );
 
-    let class_id = ast.find_class("Class")?;
-    let class = &ast.classes()[class_id];
-    assert!(matches!(class.bind_kind(), ClassBindKind::ValueType));
+        let class_id = ast.find_class("Class")?;
+        let class = &ast.classes()[class_id];
+        assert!(matches!(class.bind_kind(), ClassBindKind::ValueType));
 
-    Ok(())
-}
+        Ok(())
+    }
 
-#[test]
-fn extract_non_pod() -> Result<(), Error> {
-    // test that adding a private field to a POD forces opaqueptr
-    let ast = parse_string_and_extract_ast(
-        indoc!(r#"
+    #[test]
+    fn extract_non_pod() -> Result<(), Error> {
+        // test that adding a private field to a POD forces opaqueptr
+        let ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
             class Class {
                 int a;
             public:
                 float b;
             };
-        "#),
-        &cli_args()?,
-        true,
-        None,
-    )?;
+        "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+        )?;
 
-    println!("{ast:?}");
-    assert_eq!(format!("{ast:?}"), indoc!(r#"
+        println!("{ast:?}");
+        assert_eq!(
+            format!("{ast:?}"),
+            indoc!(
+                r#"
         ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
         Field b: float
  
-    "#));
+    "#
+            )
+        );
 
-    let class_id = ast.find_class("Class")?;
-    let class = &ast.classes()[class_id];
-    assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
+        let class_id = ast.find_class("Class")?;
+        let class = &ast.classes()[class_id];
+        assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
 
-    Ok(())
-}
+        Ok(())
+    }
 
-#[test]
-fn extract_non_pod2() -> Result<(), Error> {
-    // test that adding a constructor forces non-pod
-    let ast = parse_string_and_extract_ast(
-        indoc!(r#"
+    #[test]
+    fn extract_non_pod2() -> Result<(), Error> {
+        // test that adding a constructor forces non-pod
+        let ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
             class Class {
             public:
                 Class();
@@ -947,33 +964,40 @@ fn extract_non_pod2() -> Result<(), Error> {
             };
             }
     
-        "#),
-        &cli_args()?,
-        true,
-        None,
-    )?;
+        "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+        )?;
 
-    println!("{ast:?}");
-    assert_eq!(format!("{ast:?}"), indoc!(r#"
+        println!("{ast:?}");
+        assert_eq!(
+            format!("{ast:?}"),
+            indoc!(
+                r#"
         Namespace c:@S@Class Class None
         ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[ctor ] template_parameters=[] specializations=[] namespaces=[]
         Field b: float
         Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@Class# Class rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
 
-    "#));
+    "#
+            )
+        );
 
-    let class_id = ast.find_class("Class")?;
-    let class = &ast.classes()[class_id];
-    assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
+        let class_id = ast.find_class("Class")?;
+        let class = &ast.classes()[class_id];
+        assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
 
-    Ok(())
-}
+        Ok(())
+    }
 
-#[test]
-fn extract_rof() -> Result<(), Error> {
-    // test that adding a constructor forces non-pod
-    let ast = parse_string_and_extract_ast(
-        indoc!(r#"
+    #[test]
+    fn extract_rof() -> Result<(), Error> {
+        // test that adding a constructor forces non-pod
+        let ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
             class NeedsImplicitAll {
             public:
             };
@@ -990,14 +1014,18 @@ fn extract_rof() -> Result<(), Error> {
                 ~NeedsImplicitNone();
             };
 
-        "#),
-        &cli_args()?,
-        true,
-        None,
-    )?;
+        "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+        )?;
 
-    println!("{ast:?}");
-    assert_eq!(format!("{ast:?}"), indoc!(r#"
+        println!("{ast:?}");
+        assert_eq!(
+            format!("{ast:?}"),
+            indoc!(
+                r#"
         Namespace c:@S@NeedsImplicitCopyCtor NeedsImplicitCopyCtor None
         Namespace c:@S@NeedsImplicitNone NeedsImplicitNone None
         ClassDecl c:@S@NeedsImplicitAll NeedsImplicitAll rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
@@ -1010,30 +1038,32 @@ fn extract_rof() -> Result<(), Error> {
         Method CopyConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@NeedsImplicitNone#&1$@S@NeedsImplicitNone# NeedsImplicitNone rename=Some("copy_ctor") ignore=false return=void args=[Argument { name: "", qual_type: const NeedsImplicitNone & }] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
         Method Destructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@~NeedsImplicitNone# ~NeedsImplicitNone rename=Some("dtor") ignore=false return=void args=[] noexcept=Unevaluated template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
 
-    "#));
+    "#
+            )
+        );
 
-    let class_id = ast.find_class("NeedsImplicitAll")?;
-    let class = &ast.classes()[class_id];
-    assert!(class.rule_of_five().needs_implicit_ctor());
-    assert!(class.rule_of_five().needs_implicit_copy_ctor());
-    assert!(class.rule_of_five().needs_implicit_move_ctor());
-    assert!(class.rule_of_five().needs_implicit_dtor());
+        let class_id = ast.find_class("NeedsImplicitAll")?;
+        let class = &ast.classes()[class_id];
+        assert!(class.rule_of_five().needs_implicit_ctor());
+        assert!(class.rule_of_five().needs_implicit_copy_ctor());
+        assert!(class.rule_of_five().needs_implicit_move_ctor());
+        assert!(class.rule_of_five().needs_implicit_dtor());
 
-    let class_id = ast.find_class("NeedsImplicitCopyCtor")?;
-    let class = &ast.classes()[class_id];
-    assert!(class.rule_of_five().needs_implicit_ctor());
-    assert!(class.rule_of_five().needs_implicit_copy_ctor());
-    assert!(!class.rule_of_five().needs_implicit_move_ctor());
-    assert!(!class.rule_of_five().needs_implicit_dtor());
+        let class_id = ast.find_class("NeedsImplicitCopyCtor")?;
+        let class = &ast.classes()[class_id];
+        assert!(class.rule_of_five().needs_implicit_ctor());
+        assert!(class.rule_of_five().needs_implicit_copy_ctor());
+        assert!(!class.rule_of_five().needs_implicit_move_ctor());
+        assert!(!class.rule_of_five().needs_implicit_dtor());
 
-    let class_id = ast.find_class("NeedsImplicitNone")?;
-    let class = &ast.classes()[class_id];
-    println!("{:?}", class.rule_of_five());
-    assert!(!class.rule_of_five().needs_implicit_ctor());
-    assert!(!class.rule_of_five().needs_implicit_copy_ctor());
-    assert!(!class.rule_of_five().needs_implicit_move_ctor());
-    assert!(!class.rule_of_five().needs_implicit_dtor());
+        let class_id = ast.find_class("NeedsImplicitNone")?;
+        let class = &ast.classes()[class_id];
+        println!("{:?}", class.rule_of_five());
+        assert!(!class.rule_of_five().needs_implicit_ctor());
+        assert!(!class.rule_of_five().needs_implicit_copy_ctor());
+        assert!(!class.rule_of_five().needs_implicit_move_ctor());
+        assert!(!class.rule_of_five().needs_implicit_dtor());
 
-    Ok(())
-}
+        Ok(())
+    }
 }

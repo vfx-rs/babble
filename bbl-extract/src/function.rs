@@ -267,7 +267,16 @@ pub struct Method {
 
 impl Debug for Method {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Method {:?} const={} virtual={} pure_virtual={} specializations={:?} {:?}", self.kind, self.is_const, self.is_virtual, self.is_pure_virtual, self.specializations, self.function)
+        write!(
+            f,
+            "Method {:?} const={} virtual={} pure_virtual={} specializations={:?} {:?}",
+            self.kind,
+            self.is_const,
+            self.is_virtual,
+            self.is_pure_virtual,
+            self.specializations,
+            self.function
+        )
     }
 }
 
@@ -926,7 +935,8 @@ mod tests {
     fn extract_static_method() -> Result<(), Error> {
         // test that a POD extracts as a valuetype
         let ast = parse_string_and_extract_ast(
-            indoc!(r#"
+            indoc!(
+                r#"
             class Class {
             public:
                 int a;
@@ -934,21 +944,27 @@ mod tests {
 
                 static float static_method(float b);
             };
-        "#),
+        "#
+            ),
             &cli_args()?,
             true,
             None,
         )?;
 
         println!("{ast:?}");
-        assert_eq!(format!("{ast:?}"), indoc!(r#"
+        assert_eq!(
+            format!("{ast:?}"),
+            indoc!(
+                r#"
             Namespace c:@S@Class Class None
             ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
             Field a: int
             Field b: float
             Method StaticMethod const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#f#S static_method rename=None ignore=false return=float args=[Argument { name: "b", qual_type: float }] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
 
-        "#));
+        "#
+            )
+        );
 
         let class_id = ast.find_class("Class")?;
         let class = &ast.classes()[class_id];
@@ -961,7 +977,8 @@ mod tests {
     fn extract_static_method_taking_class() -> Result<(), Error> {
         // test that a POD extracts as a valuetype
         let ast = parse_string_and_extract_ast(
-            indoc!(r#"
+            indoc!(
+                r#"
             class Class {
             public:
                 int a;
@@ -969,21 +986,27 @@ mod tests {
 
                 static float static_method(Class c);
             };
-        "#),
+        "#
+            ),
             &cli_args()?,
             true,
             None,
         )?;
 
         println!("{ast:?}");
-        assert_eq!(format!("{ast:?}"), indoc!(r#"
+        assert_eq!(
+            format!("{ast:?}"),
+            indoc!(
+                r#"
             Namespace c:@S@Class Class None
             ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
             Field a: int
             Field b: float
             Method StaticMethod const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#$@S@Class#S static_method rename=None ignore=false return=float args=[Argument { name: "c", qual_type: Class }] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
 
-        "#));
+        "#
+            )
+        );
 
         let class_id = ast.find_class("Class")?;
         let class = &ast.classes()[class_id];
