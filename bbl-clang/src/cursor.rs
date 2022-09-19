@@ -363,6 +363,7 @@ impl Cursor {
         unsafe { clang_getCursorPrettyPrinted(self.inner, policy.inner).to_string() }
     }
 }
+
 #[derive(Debug, Copy, Clone)]
 pub struct CurTemplateRef(Cursor);
 
@@ -382,6 +383,96 @@ impl TryFrom<Cursor> for CurTemplateRef {
         } else {
             Err(Error::InvalidCursor)
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct CurClassDecl(Cursor);
+
+impl Deref for CurClassDecl {
+    type Target = Cursor;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryFrom<Cursor> for CurClassDecl {
+    type Error = Error;
+    fn try_from(c: Cursor) -> Result<Self, Self::Error> {
+        if c.kind() == CursorKind::ClassDecl {
+            Ok(CurClassDecl(c))
+        } else {
+            Err(Error::FailedToConvertCursorKind { from: c.kind(), to: CursorKind::ClassDecl, backtrace: backtrace::Backtrace::new() })
+        }
+    }
+}
+
+impl From<CurClassDecl> for Cursor {
+    fn from(c: CurClassDecl) -> Self {
+        c.0
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct CurStructDecl(Cursor);
+
+impl CurStructDecl {
+    pub fn as_class_decl(&self) -> CurClassDecl {
+        CurClassDecl(self.0)
+    }
+}
+
+impl Deref for CurStructDecl {
+    type Target = Cursor;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryFrom<Cursor> for CurStructDecl {
+    type Error = Error;
+    fn try_from(c: Cursor) -> Result<Self, Self::Error> {
+        if c.kind() == CursorKind::StructDecl {
+            Ok(CurStructDecl(c))
+        } else {
+            Err(Error::FailedToConvertCursorKind { from: c.kind(), to: CursorKind::StructDecl, backtrace: backtrace::Backtrace::new() })
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct CurClassTemplate(Cursor);
+
+impl CurClassTemplate {
+    pub fn as_class_decl(&self) -> CurClassDecl {
+        CurClassDecl(self.0)
+    }
+}
+
+impl Deref for CurClassTemplate {
+    type Target = Cursor;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryFrom<Cursor> for CurClassTemplate {
+    type Error = Error;
+    fn try_from(c: Cursor) -> Result<Self, Self::Error> {
+        if c.kind() == CursorKind::ClassTemplate {
+            Ok(CurClassTemplate(c))
+        } else {
+            Err(Error::FailedToConvertCursorKind { from: c.kind(), to: CursorKind::ClassTemplate, backtrace: backtrace::Backtrace::new() })
+        }
+    }
+}
+
+impl From<CurClassTemplate> for Cursor {
+    fn from(c: CurClassTemplate) -> Self {
+        c.0
     }
 }
 
@@ -407,7 +498,7 @@ impl TryFrom<Cursor> for CurTypedef {
         ) {
             Ok(CurTypedef(c))
         } else {
-            Err(Error::InvalidCursor)
+            Err(Error::FailedToConvertCursorKind { from: c.kind(), to: CursorKind::TypedefDecl, backtrace: backtrace::Backtrace::new() })
         }
     }
 }

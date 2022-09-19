@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
-use bbl_clang::cursor::Cursor;
+use bbl_clang::cursor::{Cursor, CurClassTemplate, CurStructDecl};
 use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::TranslationUnit};
 use tracing::{debug, error, info, instrument, trace, warn};
 use ustr::{Ustr, UstrMap};
@@ -541,18 +541,37 @@ pub fn extract_ast(
     let indent = format!("{:width$}", "", width = depth * 2);
 
     match c.kind() {
-        CursorKind::ClassTemplate | CursorKind::ClassDecl | CursorKind::StructDecl => {
+        CursorKind::ClassDecl => {
             // We might extract a class template when visiting a type alias so check that we haven't already done so
-            if !already_visited.contains(&c.usr()) {
-                // Also make sure that we're dealing with a definition rather than a forward declaration
-                // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
-                // (for opaque types in the API)
-                if c.is_definition() {
-                    already_visited.push(c.usr());
-                    let cd =
-                        extract_class_decl(c, depth + 1, tu, &namespaces, ast, already_visited)?;
-                    ast.insert_class(cd);
-                }
+            // Also make sure that we're dealing with a definition rather than a forward declaration
+            // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
+            // (for opaque types in the API)
+            if c.is_definition() {
+                extract_class_decl(c.try_into()?, depth + 1, tu, &namespaces, ast, already_visited)?;
+            }
+
+            return Ok(());
+        }
+        CursorKind::ClassTemplate => {
+            // We might extract a class template when visiting a type alias so check that we haven't already done so
+            // Also make sure that we're dealing with a definition rather than a forward declaration
+            // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
+            // (for opaque types in the API)
+            if c.is_definition() {
+                let c_class_template: CurClassTemplate = c.try_into()?;
+                extract_class_decl(c_class_template.as_class_decl(), depth + 1, tu, &namespaces, ast, already_visited)?;
+            }
+
+            return Ok(());
+        }
+        CursorKind::StructDecl => {
+            // We might extract a class template when visiting a type alias so check that we haven't already done so
+            // Also make sure that we're dealing with a definition rather than a forward declaration
+            // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
+            // (for opaque types in the API)
+            if c.is_definition() {
+                let c_struct: CurStructDecl = c.try_into()?;
+                extract_class_decl(c_struct.as_class_decl(), depth + 1, tu, &namespaces, ast, already_visited)?;
             }
 
             return Ok(());

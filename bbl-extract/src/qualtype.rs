@@ -355,18 +355,14 @@ pub fn extract_type(
                 extract_typedef_decl(c_ref.try_into()?, depth + 1, already_visited, ast, tu)?;
             }
             CursorKind::ClassDecl => {
-                if !already_visited.contains(&c_ref.usr()) {
-                    already_visited.push(c_ref.usr());
-                    let cd = extract_class_decl(
-                        c_ref,
-                        depth + 1,
-                        tu,
-                        &Vec::new(),
-                        ast,
-                        already_visited,
-                    )?;
-                    ast.insert_class(cd);
-                }
+                extract_class_decl(
+                    c_ref.try_into()?,
+                    depth + 1,
+                    tu,
+                    &Vec::new(),
+                    ast,
+                    already_visited,
+                )?;
             }
             CursorKind::TypeRef => warn!("Should extract class here"),
             _ => warn!("Unhandled type decl {:?}", c_ref),

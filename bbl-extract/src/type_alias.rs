@@ -10,7 +10,7 @@ use crate::namespace::extract_namespace;
 use crate::qualtype::extract_type;
 use crate::stdlib::create_std_string;
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
-use bbl_clang::cursor::{CurTemplateRef, CurTypedef, Cursor, USR};
+use bbl_clang::cursor::{CurTemplateRef, CurTypedef, Cursor, USR, CurClassTemplate};
 use bbl_clang::ty::Type;
 use std::fmt::Debug;
 
@@ -137,18 +137,14 @@ pub fn extract_typedef_decl<'a>(
             CursorKind::ClassDecl => {
                 println!("Got ClassDecl {:?}", c_ref);
                 already_visited.push(c_typedef.usr());
-                if !already_visited.contains(&c_ref.usr()) {
-                    already_visited.push(c_ref.usr());
-                    let cd = extract_class_decl(
-                        c_ref,
+                    extract_class_decl(
+                        c_ref.try_into()?,
                         depth + 1,
                         tu,
                         &Vec::new(),
                         ast,
                         already_visited,
                     )?;
-                    ast.insert_class(cd);
-                }
 
                 let id = ast.insert_type_alias(TypeAlias::TypeAliasType {
                     name: c_typedef.display_name(),
@@ -220,6 +216,7 @@ pub fn extract_class_template_specialization(
             } else if child.kind() == CursorKind::TemplateRef {
                 if let Ok(cref) = child.referenced() {
                     if cref.kind() == CursorKind::ClassTemplate {
+                        let c_class_template: CurClassTemplate = cref.try_into()?;
                         if !already_visited.contains(&cref.usr()) {
                             // If we haven't already extracted the class which this alias refers to, do it now
                             // if we've got namespaces defined on this ref then we /probably/ want to use them,
@@ -242,16 +239,14 @@ pub fn extract_class_template_specialization(
                                 break;
                             } else {
                                 debug!("extracting class template {cref:?}");
-                                let cd = extract_class_decl(
-                                    cref,
+                                extract_class_decl(
+                                    c_class_template.as_class_decl(),
                                     depth + 1,
                                     tu,
                                     ct_namespaces,
                                     ast,
                                     already_visited,
                                 )?;
-                                ast.insert_class(cd);
-                                already_visited.push(cref.usr());
                             }
                         }
                         specialized_decl = Some(cref.usr());

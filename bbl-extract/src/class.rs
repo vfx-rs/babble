@@ -3,7 +3,7 @@
 
 use bbl_clang::access_specifier::AccessSpecifier;
 use bbl_clang::cli_args;
-use bbl_clang::cursor::{Cursor, USR};
+use bbl_clang::cursor::{Cursor, USR, CurClassDecl};
 use bbl_clang::translation_unit::TranslationUnit;
 use log::*;
 use std::fmt::{Debug, Display};
@@ -542,14 +542,19 @@ impl Display for ClassDecl {
 
 #[instrument(skip(depth, tu, namespaces, ast, already_visited), level = "trace")]
 pub fn extract_class_decl(
-    class_template: Cursor,
+    class_template: CurClassDecl,
     depth: usize,
     tu: &TranslationUnit,
     namespaces: &[USR],
     ast: &mut AST,
     already_visited: &mut Vec<USR>,
-) -> Result<ClassDecl> {
+) -> Result<USR> {
     let indent = format!("{:width$}", "", width = depth * 2);
+    if already_visited.contains(&class_template.usr()) {
+        return Ok(class_template.usr());
+    } else {
+        already_visited.push(class_template.usr());
+    }
 
     trace!(
         "{indent}extract_class_decl({}) {}",
@@ -557,11 +562,15 @@ pub fn extract_class_decl(
         class_template.display_name()
     );
 
-    let namespaces = get_namespaces_for_decl(class_template, tu, ast);
+    let namespaces = get_namespaces_for_decl(class_template.into(), tu, ast);
 
+    // Check for std:: types we're going to extract manually here
     if class_template.display_name().starts_with("basic_string<") {
         debug!("Extracting basic_string {}", class_template.usr());
-        return Ok(create_std_string(class_template, namespaces));
+        let cd = create_std_string(class_template.into(), namespaces);
+        let usr = cd.usr();
+        ast.insert_class(cd);
+        return Ok(usr);
     }
 
     let mut methods = Vec::new();
@@ -739,8 +748,7 @@ pub fn extract_class_decl(
     };
 
     debug!("Got new ClassDecl {name}");
-
-    Ok(ClassDecl::new(
+    let cd = ClassDecl::new(
         class_template.usr(),
         class_template.spelling(),
         fields,
@@ -749,7 +757,10 @@ pub fn extract_class_decl(
         template_parameters,
         is_pod,
         rule_of_five,
-    ))
+    );
+    ast.insert_class(cd);
+
+    Ok(class_template.usr())
 }
 
 fn get_method_state(method: Cursor) -> MethodState {

@@ -3,11 +3,12 @@
 
 use clang_sys::{CXErrorCode, CXError_Success};
 
-use crate::compilation_database::CompilationDatabaseError;
+use crate::{compilation_database::CompilationDatabaseError, cursor_kind::CursorKind};
 
 #[derive(Debug)]
 pub enum Error {
     InvalidCursor,
+    FailedToConvertCursorKind{from: CursorKind, to: CursorKind, backtrace: backtrace::Backtrace},
     InvalidType(backtrace::Backtrace),
     InvalidTemplateArgumentKind,
     InvalidAccessSpecifier,
