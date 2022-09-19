@@ -770,7 +770,7 @@ pub fn extract_function(
     }
 
     let replacement_name = get_default_replacement_name(c_function);
-    let namespaces = get_namespaces_for_decl(c_function, tu, ast);
+    let namespaces = get_namespaces_for_decl(c_function, tu, ast, already_visited)?;
     let name = c_function.spelling();
     let exception_specification_kind = c_function.exception_specification_kind()?;
 

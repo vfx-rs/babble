@@ -1,7 +1,7 @@
 use crate::{
     access_specifier::AccessSpecifier, exception::ExceptionSpecificationKind,
     printing_policy::PrintingPolicy, template_argument::TemplateArgumentKind,
-    token::SourceLocation, translation_unit::TranslationUnit,
+    token::SourceLocation,
 };
 
 use super::cursor_kind::CursorKind;
@@ -506,6 +506,34 @@ impl TryFrom<Cursor> for CurTypedef {
 impl From<CurTypedef> for Cursor {
     fn from(ct: CurTypedef) -> Self {
         ct.0
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct CurNamespace(Cursor);
+
+impl Deref for CurNamespace {
+    type Target = Cursor;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryFrom<Cursor> for CurNamespace {
+    type Error = Error;
+    fn try_from(c: Cursor) -> Result<Self, Self::Error> {
+        if c.kind() == CursorKind::Namespace {
+            Ok(CurNamespace(c))
+        } else {
+            Err(Error::FailedToConvertCursorKind { from: c.kind(), to: CursorKind::Namespace, backtrace: backtrace::Backtrace::new() })
+        }
+    }
+}
+
+impl From<CurNamespace> for Cursor {
+    fn from(c: CurNamespace) -> Self {
+        c.0
     }
 }
 

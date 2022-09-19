@@ -562,7 +562,7 @@ pub fn extract_class_decl(
         class_template.display_name()
     );
 
-    let namespaces = get_namespaces_for_decl(class_template.into(), tu, ast);
+    let namespaces = get_namespaces_for_decl(class_template.into(), tu, ast, already_visited)?;
 
     // Check for std:: types we're going to extract manually here
     if class_template.display_name().starts_with("basic_string<") {

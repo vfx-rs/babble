@@ -604,11 +604,8 @@ pub fn extract_ast(
             return Ok(());
         }
         CursorKind::Namespace => {
-            let ns = extract_namespace(c, depth, tu);
-            let name = ns.name().to_string();
-            let usr = ns.usr;
-            ast.insert_namespace(ns);
-            already_visited.push(usr);
+            let usr = extract_namespace(c, depth, tu, ast);
+            let name = ast.get_namespace(usr).ok_or_else(|| Error::NamespaceNotFound(usr.to_string()))?.name();
 
             // We bail out on std and will insert manual AST for the types we support because fuck dealing with that
             // horror show
@@ -616,10 +613,7 @@ pub fn extract_ast(
                 let children = c.children_of_kind(CursorKind::Namespace, true);
 
                 for child in children {
-                    let ns = extract_namespace(c, depth, tu);
-                    let usr = ns.usr;
-                    ast.insert_namespace(ns);
-                    already_visited.push(usr);
+                    extract_namespace(child, depth, tu, ast);
                 }
 
                 debug!("Found std namespace, bailing early");
@@ -907,27 +901,27 @@ pub fn walk_namespaces(
     namespaces: &mut Vec<USR>,
     tu: &TranslationUnit,
     ast: &mut AST,
-) {
+    already_visited: &mut Vec<USR>,
+) -> Result<()> {
     if let Ok(c) = c {
         if c.kind() != CursorKind::TranslationUnit {
             if ast.get_namespace(c.usr()).is_none() {
-                let ns = extract_namespace(c, 0, tu);
-                let name = ns.name().to_string();
-                let usr = ns.usr;
-                ast.insert_namespace(ns);
+                extract_namespace(c, 0, tu, ast);
             }
 
             namespaces.push(c.usr());
-            walk_namespaces(c.semantic_parent(), namespaces, tu, ast);
+            walk_namespaces(c.semantic_parent(), namespaces, tu, ast, already_visited);
         }
     }
+
+    Ok(())
 }
 
-pub fn get_namespaces_for_decl(c: Cursor, tu: &TranslationUnit, ast: &mut AST) -> Vec<USR> {
+pub fn get_namespaces_for_decl(c: Cursor, tu: &TranslationUnit, ast: &mut AST, already_visited: &mut Vec<USR>) -> Result<Vec<USR>> {
     let mut namespaces = Vec::new();
-    walk_namespaces(c.semantic_parent(), &mut namespaces, tu, ast);
+    walk_namespaces(c.semantic_parent(), &mut namespaces, tu, ast, already_visited);
     namespaces.reverse();
-    namespaces
+    Ok(namespaces)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]

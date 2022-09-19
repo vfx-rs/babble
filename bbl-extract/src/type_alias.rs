@@ -205,13 +205,8 @@ pub fn extract_class_template_specialization(
                 let c_namespace = child
                     .referenced()
                     .map_err(|_| Error::FailedToGetNamespaceRefFrom(child.display_name()))?;
-                if !already_visited.contains(&c_namespace.usr()) {
-                    // extract the namespace here
-                    let ns = extract_namespace(c_namespace, depth + 1, tu);
-                    let usr = ns.usr;
-                    ast.insert_namespace(ns);
-                    already_visited.push(usr);
-                }
+                // extract the namespace here
+                extract_namespace(c_namespace, depth + 1, tu, ast);
                 local_namespaces.push(c_namespace.usr());
             } else if child.kind() == CursorKind::TemplateRef {
                 if let Ok(cref) = child.referenced() {
@@ -260,7 +255,7 @@ pub fn extract_class_template_specialization(
             }
         }
 
-        let namespaces = get_namespaces_for_decl(*c_typedef, tu, ast);
+        let namespaces = get_namespaces_for_decl(*c_typedef, tu, ast, already_visited)?;
 
         let specialized_decl = specialized_decl
             .ok_or_else(|| Error::FailedToGetTemplateRefFrom(c_typedef.display_name()))?;

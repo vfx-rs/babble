@@ -1,5 +1,5 @@
-use crate::ast::AST;
-use bbl_clang::{cursor::Cursor, cursor::USR, translation_unit::TranslationUnit};
+use crate::{ast::AST, index_map::UstrIndexMap};
+use bbl_clang::{cursor::Cursor, cursor::{USR, CurNamespace}, translation_unit::TranslationUnit};
 use std::fmt::Debug;
 use tracing::instrument;
 
@@ -36,11 +36,20 @@ impl Namespace {
 }
 
 #[instrument(skip(depth, tu), level = "trace")]
-pub fn extract_namespace(c_namespace: Cursor, depth: usize, tu: &TranslationUnit) -> Namespace {
-    let indent = format!("{:width$}", "", width = depth * 2);
-    Namespace {
-        usr: c_namespace.usr(),
+pub fn extract_namespace(c_namespace: Cursor, depth: usize, tu: &TranslationUnit, ast: &mut AST) -> USR {
+    let usr = c_namespace.usr();
+    // we don't use alread_visited for namespaces because we're considering classes etc as namespaces too for the 
+    // purpose of building fully qualified names
+    // TODO(AL): do we want to separate this into scopes?
+    if ast.get_namespace(usr).is_some() {
+        return usr;
+    }
+
+    ast.insert_namespace(Namespace {
+        usr,
         name: c_namespace.display_name(),
         rename: None,
-    }
+    });
+
+    usr
 }
