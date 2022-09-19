@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
-use bbl_clang::cursor::{Cursor, CurClassTemplate, CurStructDecl};
+use bbl_clang::cursor::{CurClassTemplate, CurStructDecl, Cursor};
 use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::TranslationUnit};
 use tracing::{debug, error, info, instrument, trace, warn};
 use ustr::{Ustr, UstrMap};
@@ -547,7 +547,14 @@ pub fn extract_ast(
             // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
             // (for opaque types in the API)
             if c.is_definition() {
-                extract_class_decl(c.try_into()?, depth + 1, tu, &namespaces, ast, already_visited)?;
+                extract_class_decl(
+                    c.try_into()?,
+                    depth + 1,
+                    tu,
+                    &namespaces,
+                    ast,
+                    already_visited,
+                )?;
             }
 
             return Ok(());
@@ -559,7 +566,14 @@ pub fn extract_ast(
             // (for opaque types in the API)
             if c.is_definition() {
                 let c_class_template: CurClassTemplate = c.try_into()?;
-                extract_class_decl(c_class_template.as_class_decl(), depth + 1, tu, &namespaces, ast, already_visited)?;
+                extract_class_decl(
+                    c_class_template.as_class_decl(),
+                    depth + 1,
+                    tu,
+                    &namespaces,
+                    ast,
+                    already_visited,
+                )?;
             }
 
             return Ok(());
@@ -571,7 +585,14 @@ pub fn extract_ast(
             // (for opaque types in the API)
             if c.is_definition() {
                 let c_struct: CurStructDecl = c.try_into()?;
-                extract_class_decl(c_struct.as_class_decl(), depth + 1, tu, &namespaces, ast, already_visited)?;
+                extract_class_decl(
+                    c_struct.as_class_decl(),
+                    depth + 1,
+                    tu,
+                    &namespaces,
+                    ast,
+                    already_visited,
+                )?;
             }
 
             return Ok(());
@@ -605,7 +626,10 @@ pub fn extract_ast(
         }
         CursorKind::Namespace => {
             let usr = extract_namespace(c, depth, tu, ast);
-            let name = ast.get_namespace(usr).ok_or_else(|| Error::NamespaceNotFound(usr.to_string()))?.name();
+            let name = ast
+                .get_namespace(usr)
+                .ok_or_else(|| Error::NamespaceNotFound(usr.to_string()))?
+                .name();
 
             // We bail out on std and will insert manual AST for the types we support because fuck dealing with that
             // horror show
@@ -917,9 +941,20 @@ pub fn walk_namespaces(
     Ok(())
 }
 
-pub fn get_namespaces_for_decl(c: Cursor, tu: &TranslationUnit, ast: &mut AST, already_visited: &mut Vec<USR>) -> Result<Vec<USR>> {
+pub fn get_namespaces_for_decl(
+    c: Cursor,
+    tu: &TranslationUnit,
+    ast: &mut AST,
+    already_visited: &mut Vec<USR>,
+) -> Result<Vec<USR>> {
     let mut namespaces = Vec::new();
-    walk_namespaces(c.semantic_parent(), &mut namespaces, tu, ast, already_visited);
+    walk_namespaces(
+        c.semantic_parent(),
+        &mut namespaces,
+        tu,
+        ast,
+        already_visited,
+    );
     namespaces.reverse();
     Ok(namespaces)
 }

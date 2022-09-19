@@ -10,7 +10,7 @@ use crate::namespace::extract_namespace;
 use crate::qualtype::extract_type;
 use crate::stdlib::create_std_string;
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
-use bbl_clang::cursor::{CurTemplateRef, CurTypedef, Cursor, USR, CurClassTemplate};
+use bbl_clang::cursor::{CurClassTemplate, CurTemplateRef, CurTypedef, Cursor, USR};
 use bbl_clang::ty::Type;
 use std::fmt::Debug;
 
@@ -137,14 +137,14 @@ pub fn extract_typedef_decl<'a>(
             CursorKind::ClassDecl => {
                 println!("Got ClassDecl {:?}", c_ref);
                 already_visited.push(c_typedef.usr());
-                    extract_class_decl(
-                        c_ref.try_into()?,
-                        depth + 1,
-                        tu,
-                        &Vec::new(),
-                        ast,
-                        already_visited,
-                    )?;
+                extract_class_decl(
+                    c_ref.try_into()?,
+                    depth + 1,
+                    tu,
+                    &Vec::new(),
+                    ast,
+                    already_visited,
+                )?;
 
                 let id = ast.insert_type_alias(TypeAlias::TypeAliasType {
                     name: c_typedef.display_name(),
@@ -612,12 +612,17 @@ mod tests {
             )?;
 
             println!("{ast:?}");
-            assert_eq!(format!("{ast:?}"), indoc!(r#"
+            assert_eq!(
+                format!("{ast:?}"),
+                indoc!(
+                    r#"
                 ClassDecl c:@S@Class_ Class_ rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
 
                 Function c:@F@take_class#&1$@S@Class_# take_class rename=None ignore=false return=void args=[Argument { name: "c", qual_type: const Class & }] noexcept=None template_parameters=[] specializations=[] namespaces=[]
                 TypeAlias c:@S@Class_ Class
-            "#));
+            "#
+                )
+            );
 
             Ok(())
         })

@@ -403,7 +403,11 @@ impl TryFrom<Cursor> for CurClassDecl {
         if c.kind() == CursorKind::ClassDecl {
             Ok(CurClassDecl(c))
         } else {
-            Err(Error::FailedToConvertCursorKind { from: c.kind(), to: CursorKind::ClassDecl, backtrace: backtrace::Backtrace::new() })
+            Err(Error::FailedToConvertCursorKind {
+                from: c.kind(),
+                to: CursorKind::ClassDecl,
+                backtrace: backtrace::Backtrace::new(),
+            })
         }
     }
 }
@@ -437,7 +441,11 @@ impl TryFrom<Cursor> for CurStructDecl {
         if c.kind() == CursorKind::StructDecl {
             Ok(CurStructDecl(c))
         } else {
-            Err(Error::FailedToConvertCursorKind { from: c.kind(), to: CursorKind::StructDecl, backtrace: backtrace::Backtrace::new() })
+            Err(Error::FailedToConvertCursorKind {
+                from: c.kind(),
+                to: CursorKind::StructDecl,
+                backtrace: backtrace::Backtrace::new(),
+            })
         }
     }
 }
@@ -465,7 +473,11 @@ impl TryFrom<Cursor> for CurClassTemplate {
         if c.kind() == CursorKind::ClassTemplate {
             Ok(CurClassTemplate(c))
         } else {
-            Err(Error::FailedToConvertCursorKind { from: c.kind(), to: CursorKind::ClassTemplate, backtrace: backtrace::Backtrace::new() })
+            Err(Error::FailedToConvertCursorKind {
+                from: c.kind(),
+                to: CursorKind::ClassTemplate,
+                backtrace: backtrace::Backtrace::new(),
+            })
         }
     }
 }
@@ -498,7 +510,11 @@ impl TryFrom<Cursor> for CurTypedef {
         ) {
             Ok(CurTypedef(c))
         } else {
-            Err(Error::FailedToConvertCursorKind { from: c.kind(), to: CursorKind::TypedefDecl, backtrace: backtrace::Backtrace::new() })
+            Err(Error::FailedToConvertCursorKind {
+                from: c.kind(),
+                to: CursorKind::TypedefDecl,
+                backtrace: backtrace::Backtrace::new(),
+            })
         }
     }
 }
@@ -526,7 +542,11 @@ impl TryFrom<Cursor> for CurNamespace {
         if c.kind() == CursorKind::Namespace {
             Ok(CurNamespace(c))
         } else {
-            Err(Error::FailedToConvertCursorKind { from: c.kind(), to: CursorKind::Namespace, backtrace: backtrace::Backtrace::new() })
+            Err(Error::FailedToConvertCursorKind {
+                from: c.kind(),
+                to: CursorKind::Namespace,
+                backtrace: backtrace::Backtrace::new(),
+            })
         }
     }
 }

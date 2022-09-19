@@ -8,7 +8,11 @@ use crate::{compilation_database::CompilationDatabaseError, cursor_kind::CursorK
 #[derive(Debug)]
 pub enum Error {
     InvalidCursor,
-    FailedToConvertCursorKind{from: CursorKind, to: CursorKind, backtrace: backtrace::Backtrace},
+    FailedToConvertCursorKind {
+        from: CursorKind,
+        to: CursorKind,
+        backtrace: backtrace::Backtrace,
+    },
     InvalidType(backtrace::Backtrace),
     InvalidTemplateArgumentKind,
     InvalidAccessSpecifier,
@@ -27,7 +31,10 @@ pub enum Error {
     FailedToRunCMake(std::io::Error),
     NonUTF8Output(std::string::FromUtf8Error),
     FailedToParseOutput(String),
-    CMakeError { stdout: String, stderr: String },
+    CMakeError {
+        stdout: String,
+        stderr: String,
+    },
     CompilationDatabaseError(CompilationDatabaseError),
 }
 

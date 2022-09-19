@@ -3,7 +3,7 @@
 
 use bbl_clang::access_specifier::AccessSpecifier;
 use bbl_clang::cli_args;
-use bbl_clang::cursor::{Cursor, USR, CurClassDecl};
+use bbl_clang::cursor::{CurClassDecl, Cursor, USR};
 use bbl_clang::translation_unit::TranslationUnit;
 use log::*;
 use std::fmt::{Debug, Display};
