@@ -8,7 +8,6 @@ use bbl_translate::translate_cpp_ast_to_c;
 use common::run_test;
 
 use bbl_write::{cmake::build_project, error::Error, gen_c::gen_c};
-use tracing::debug;
 
 use crate::common::init_log;
 

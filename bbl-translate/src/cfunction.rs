@@ -273,12 +273,12 @@ pub fn translate_function(
     // get the return type
     let result = translate_qual_type(
         function.result(),
-        &function.template_parameters(),
+        function.template_parameters(),
         template_args,
         type_replacements,
     )
     .map_err(|e| Error::TranslateFunction {
-        name: format!("{}", function.name()),
+        name: function.name().to_string(),
         source: Box::new(Error::FailedToTranslateType {
             name: "[return]".into(),
             source: Box::new(e),
@@ -295,7 +295,7 @@ pub fn translate_function(
         type_replacements,
     )
     .map_err(|e| Error::TranslateFunction {
-        name: format!("{}", function.name()),
+        name: function.name().to_string(),
         source: Box::new(e),
     })?;
 

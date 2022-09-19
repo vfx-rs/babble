@@ -2,7 +2,6 @@ use std::path::Path;
 use std::process::Command;
 
 use bbl_translate::CAST;
-use tracing::debug;
 
 use crate::error::Error;
 use crate::gen_c::gen_c;
