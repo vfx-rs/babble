@@ -20,9 +20,10 @@ use clang_sys::{
     clang_getCursorExceptionSpecificationType, clang_getCursorKind, clang_getCursorLocation,
     clang_getCursorPrettyPrinted, clang_getCursorPrintingPolicy, clang_getCursorReferenced,
     clang_getCursorResultType, clang_getCursorSemanticParent, clang_getCursorSpelling,
-    clang_getCursorType, clang_getCursorUSR, clang_getNullCursor, clang_isCursorDefinition,
-    clang_isInvalid, clang_visitChildren, CXChildVisitResult, CXChildVisit_Break,
-    CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor,
+    clang_getCursorType, clang_getCursorUSR, clang_getNullCursor,
+    clang_getTypedefDeclUnderlyingType, clang_isCursorDefinition, clang_isInvalid,
+    clang_visitChildren, CXChildVisitResult, CXChildVisit_Break, CXChildVisit_Continue,
+    CXChildVisit_Recurse, CXClientData, CXCursor, clang_getSpecializedCursorTemplate,
 };
 use std::{
     convert::TryFrom,
@@ -179,6 +180,10 @@ impl Cursor {
 
     pub fn referenced(&self) -> Result<Cursor> {
         unsafe { cursor(clang_getCursorReferenced(self.inner)) }
+    }
+
+    pub fn specialized_template(&self) -> Result<Cursor> {
+        unsafe { cursor(clang_getSpecializedCursorTemplate(self.inner)) }
     }
 
     pub fn children_of_kind(&self, kind: CursorKind, recursive: bool) -> Vec<Cursor> {
@@ -492,6 +497,12 @@ impl From<CurClassTemplate> for Cursor {
 /// the same in the AST
 #[derive(Debug, Copy, Clone)]
 pub struct CurTypedef(Cursor);
+
+impl CurTypedef {
+    pub fn underlying_type(&self) -> Result<Type> {
+        unsafe { to_type(clang_getTypedefDeclUnderlyingType(self.inner)) }
+    }
+}
 
 impl Deref for CurTypedef {
     type Target = Cursor;

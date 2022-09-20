@@ -341,22 +341,22 @@ pub fn extract_type(
             is_const,
             type_ref: TypeRef::Builtin(ty.kind()),
         })
-    } else if let Ok(c_ref) = ty.type_declaration() {
+    } else if let Ok(c_decl) = ty.type_declaration() {
         trace!(
             "{:width$}type {name} has decl {spelling} {usr}",
             "",
             width = 2 * depth,
-            spelling = c_ref.spelling(),
-            usr = c_ref.usr()
+            spelling = c_decl.spelling(),
+            usr = c_decl.usr()
         );
         // extract here if we need to
-        match c_ref.kind() {
+        match c_decl.kind() {
             CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
-                extract_typedef_decl(c_ref.try_into()?, depth + 1, already_visited, ast, tu)?;
+                extract_typedef_decl(c_decl.try_into()?, depth + 1, already_visited, ast, tu)?;
             }
             CursorKind::ClassDecl => {
                 extract_class_decl(
-                    c_ref.try_into()?,
+                    c_decl.try_into()?,
                     depth + 1,
                     tu,
                     &Vec::new(),
@@ -365,13 +365,13 @@ pub fn extract_type(
                 )?;
             }
             CursorKind::TypeRef => warn!("Should extract class here"),
-            _ => warn!("Unhandled type decl {:?}", c_ref),
+            _ => warn!("Unhandled type decl {:?}", c_decl),
         }
 
         Ok(QualType {
             name,
             is_const,
-            type_ref: TypeRef::Ref(c_ref.usr()),
+            type_ref: TypeRef::Ref(c_decl.usr()),
         })
     } else {
         match ty.kind() {

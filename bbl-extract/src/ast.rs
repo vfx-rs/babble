@@ -3,7 +3,8 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
-use bbl_clang::cursor::{CurClassTemplate, CurStructDecl, Cursor};
+use bbl_clang::cursor::{CurClassTemplate, CurStructDecl, Cursor, CurTypedef};
+use bbl_clang::ty::Type;
 use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::TranslationUnit};
 use tracing::{debug, error, info, instrument, trace, warn};
 use ustr::{Ustr, UstrMap};
@@ -743,52 +744,63 @@ pub fn dump(
         _ => println!(
             "{}",
             format!(
-                "{}: {} {} {}",
+                "{}: {} {} {} {}",
                 c.kind(),
                 c.display_name(),
                 c.usr(),
-                template_args
+                template_args,
+                if c.is_definition() { "[def]" } else { "" },
             )
             .color(color_s)
         ),
     }
 
     if let Ok(ty) = c.ty() {
-        let args = ty.template_argument_types().map(|v| {
-            v.iter()
-                .map(|t| {
-                    if let Some(t) = t {
-                        format!("{}", t)
-                    } else {
-                        "NonType".to_string()
-                    }
-                })
-                .collect::<Vec<String>>()
-        });
+        print!("{}", format!("{indent}  ").color(color_s));
+        dump_type(ty, depth, max_depth, already_visited, tu, skip_kinds, Some(color_s));
+    }
+     
+    if let Ok(cr) = c.referenced() {
+        if cr != c {
+            if already_visited.contains(&cr.usr()) {
+                let template_args = if c.num_template_arguments() != -1 {
+                    format!("[{}]", c.num_template_arguments())
+                } else {
+                    "".to_string()
+                };
 
-        let template_args = if let Some(args) = args {
-            format!("<{}>", args.join(", "))
-        } else {
-            "".to_string()
-        };
-        let indent = format!("{:width$}", "", width = depth.saturating_sub(1) * 4 + 2);
-
-        let pod = if ty.is_pod() { "[POD]" } else { "" };
-
-        println!(
-            "{}",
-            format!(
-                "{indent}𝜏 {}: {} {} {pod}",
-                ty.spelling(),
-                ty.kind(),
-                template_args
-            )
-            .italic()
-            .color(color_s)
-        );
+                println!(
+                    "{}",
+                    format!(
+                        "{indent}↪ {}: {} {} {} 🗸",
+                        cr.kind(),
+                        cr.display_name(),
+                        cr.usr(),
+                        template_args
+                    )
+                    .color(Color::BrightBlack)
+                );
+            } else {
+                if !cr.usr().is_empty() {
+                    already_visited.push(cr.usr());
+                }
+                if !skip_kinds.contains(&cr.kind()) {
+                    print!("{indent}↪ ");
+                    dump(
+                        cr,
+                        depth + 1,
+                        max_depth,
+                        already_visited,
+                        tu,
+                        skip_kinds,
+                        Some(Color::Cyan),
+                    );
+                }
+            }
+        }
     }
 
-    if let Ok(cr) = c.referenced() {
+    if let Ok(cr) = c.specialized_template() {
         if cr != c {
             if already_visited.contains(&cr.usr()) {
                 let template_args = if c.num_template_arguments() != -1 {
@@ -866,6 +878,95 @@ pub fn dump(
             Some(color_s),
         );
     }
+}
+
+pub fn dump_type(
+    ty: Type,
+    depth: usize,
+    max_depth: usize,
+    already_visited: &mut Vec<USR>,
+    tu: &TranslationUnit,
+    skip_kinds: &[CursorKind],
+    color_s: Option<Color>,
+) {
+    let color_s = if let Some(color_s) = color_s {
+        color_s
+    } else {
+        Color::White
+    };
+
+    let args = ty.template_argument_types().map(|v| {
+        v.iter()
+            .map(|t| {
+                if let Some(t) = t {
+                    format!("{}", t)
+                } else {
+                    "NonType".to_string()
+                }
+            })
+            .collect::<Vec<String>>()
+    });
+
+    let template_args = if let Some(args) = args {
+        format!("<{}>", args.join(", "))
+    } else {
+        "".to_string()
+    };
+
+    let pod = if ty.is_pod() { "[pod]" } else { "" };
+    let builtin = if ty.is_builtin() { "[builtin]" } else { "" };
+
+    let decl = if let Ok(c) = ty.type_declaration() {
+        format!("({c:?})")
+    } else {
+        "()".to_string()
+    };
+
+    println!(
+        "{}",
+        format!(
+            "𝜏 {}: {} {} {builtin} {pod} {decl}",
+            ty.spelling(),
+            ty.kind(),
+            template_args
+        )
+        .italic()
+        .color(color_s)
+    );
+
+    let indent = format!("{:width$}", "", width = depth * 4);
+    if let Ok(c_decl) = ty.type_declaration() {
+        if !already_visited.contains(&c_decl.usr()) {
+            already_visited.push(c_decl.usr());
+            print!("{}", format!("{indent}  = ").color(Color::BrightBlack));
+            dump(c_decl, depth+1, max_depth, already_visited, tu, skip_kinds, Some(Color::BrightBlack));
+        } else {
+            println!(
+                "{}",
+                format!(
+                    "{indent}  = {}: {} {} {} 🗸",
+                    c_decl.kind(),
+                    c_decl.display_name(),
+                    c_decl.usr(),
+                    template_args
+                )
+                .color(Color::BrightBlack)
+            );
+        }
+        if matches!(c_decl.kind(), CursorKind::TypedefDecl | CursorKind::TypeAliasDecl) {
+            let c_td: CurTypedef = c_decl.try_into().unwrap();
+            let ty = c_td.underlying_type().unwrap();
+            print!("{}", format!("{indent}  ↪u→ ").color(color_s));
+            dump_type(ty, depth+1, max_depth, already_visited, tu, skip_kinds, Some(color_s));
+        }
+    }
+
+    // if let Ok(ty) = ty.named_type() {
+    //     print!("{}", format!("{indent}  ↪n→ ").color(color_s));
+    //     dump_type(ty, depth+1, max_depth, already_visited, tu, skip_kinds, Some(color_s));
+    // }
+
+
 }
 
 #[instrument(level = "trace", skip(tu))]
