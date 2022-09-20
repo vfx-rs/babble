@@ -332,7 +332,15 @@ pub fn extract_type(
     tu: &TranslationUnit,
 ) -> Result<QualType> {
     let is_const = ty.is_const_qualified();
-    let name = ty.spelling();
+    let name = if is_const {
+        if let Some(s) = ty.spelling().strip_prefix("const ") {
+            s.to_string()
+        } else {
+            ty.spelling()
+        }
+    } else {
+        ty.spelling()
+    };
 
     if ty.is_builtin() {
         trace!("got builtin {:?}", ty);
@@ -424,11 +432,6 @@ pub fn extract_type(
                 })
             }
             TypeKind::Unexposed => {
-                let name = if is_const {
-                    name.strip_prefix("const ").unwrap().to_string()
-                } else {
-                    name
-                };
                 if template_parameters.contains(&name) {
                     Ok(QualType {
                         name: name.clone(),

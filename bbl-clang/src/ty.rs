@@ -75,6 +75,14 @@ impl Type {
         unsafe { to_type(clang_Type_getNamedType(self.inner)) }
     }
 
+    #[cfg(feature="clang_16")]
+    /// Retrieve the unqualified variant of the given type, removing as little sugar as possible.
+    /// 
+    /// e.g. given `const int`, return `int`
+    pub fn unqualified_type(&self) -> Result<Type> {
+        unsafe { to_type(clang_getUnqualifiedType(self.inner)) }
+    }
+
     pub fn is_pod(&self) -> bool {
         unsafe { clang_isPODType(self.inner) != 0 }
     }

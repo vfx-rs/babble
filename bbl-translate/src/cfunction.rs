@@ -1178,6 +1178,13 @@ fn get_cpp_cast_expr(qt: &CQualType, ast: &AST) -> Result<String> {
                         source: Box::new(source),
                     }
                 })?)
+            } else if let Some(cts) = ast.get_class_template_specialization(*usr) {
+                Ok(cts.get_qualified_name(ast).map_err(|source| {
+                    Error::FailedToGetQualifiedName {
+                        usr: cts.usr(),
+                        source: Box::new(source),
+                    }
+                })?)
             } else if let Some(cts) = ast.get_type_alias(*usr) {
                 Ok(cts.get_qualified_name(ast).map_err(|source| {
                     Error::FailedToGetQualifiedName {
@@ -1202,10 +1209,10 @@ fn get_cpp_cast_expr(qt: &CQualType, ast: &AST) -> Result<String> {
 fn get_bind_kind(usr: USR, ast: &AST) -> Result<ClassBindKind> {
     if let Some(class) = ast.get_class(usr) {
         Ok(*class.bind_kind())
-    } else if let Some(TypeAlias::ClassTemplateSpecialization(cts)) = ast.get_type_alias(usr) {
+    } else if let Some(cts) = ast.get_class_template_specialization(usr) {
         get_bind_kind(cts.specialized_decl(), ast)
-    } else if let Some(TypeAlias::TypeAliasType { usr, .. }) = ast.get_type_alias(usr) {
-        get_bind_kind(*usr, ast)
+    } else if let Some(ta) = ast.get_type_alias(usr) {
+        get_bind_kind(ta.usr(), ast)
     } else {
         Err(Error::RefNotFound(usr))
     }

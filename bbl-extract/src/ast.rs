@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
-use bbl_clang::cursor::{CurClassTemplate, CurStructDecl, Cursor, CurTypedef};
+use bbl_clang::cursor::{CurClassTemplate, CurStructDecl, CurTypedef, Cursor};
 use bbl_clang::ty::Type;
 use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::TranslationUnit};
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -26,7 +26,11 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 /// The flat structure makes it easier to translate to C by storing only the information that we care about.
 pub struct AST {
     pub(crate) classes: UstrIndexMap<ClassDecl, ClassId>,
+    pub(crate) class_template_specializations:
+        UstrIndexMap<ClassTemplateSpecialization, ClassTemplateSpecializationId>,
     pub(crate) functions: UstrIndexMap<Function, FunctionId>,
+    pub(crate) function_template_specializations:
+        UstrIndexMap<FunctionTemplateSpecialization, FunctionTemplateSpecializationId>,
     pub(crate) namespaces: UstrIndexMap<Namespace, NamespaceId>,
     pub(crate) type_aliases: UstrIndexMap<TypeAlias, TypeAliasId>,
     pub(crate) includes: Vec<Include>,
@@ -114,7 +118,9 @@ impl AST {
     pub fn new() -> Self {
         AST {
             classes: UstrIndexMap::new(),
+            class_template_specializations: UstrIndexMap::new(),
             functions: UstrIndexMap::new(),
+            function_template_specializations: UstrIndexMap::new(),
             namespaces: UstrIndexMap::new(),
             type_aliases: UstrIndexMap::new(),
             includes: Vec::new(),
@@ -131,9 +137,21 @@ impl AST {
         &self.classes
     }
 
+    pub fn classe_template_specializations(
+        &self,
+    ) -> &UstrIndexMap<ClassTemplateSpecialization, ClassTemplateSpecializationId> {
+        &self.class_template_specializations
+    }
+
     /// Get a reference to the map holding all the [`Function`]s extracted from the translation unit
     pub fn functions(&self) -> &UstrIndexMap<Function, FunctionId> {
         &self.functions
+    }
+
+    pub fn function_template_specializations(
+        &self,
+    ) -> &UstrIndexMap<FunctionTemplateSpecialization, FunctionTemplateSpecializationId> {
+        &self.function_template_specializations
     }
 
     /// Get a reference to the map holding all the [`TypeAlias`]es extracted from the translation unit
@@ -232,7 +250,7 @@ impl AST {
         class_id: ClassId,
         name: &str,
         args: Vec<Option<TemplateType>>,
-    ) -> Result<TypeAliasId> {
+    ) -> Result<ClassTemplateSpecializationId> {
         let class_decl = self.classes.index_mut(class_id);
 
         let usr = USR::new(&format!("{}_{name}", class_decl.usr().as_str()));
@@ -246,10 +264,10 @@ impl AST {
         };
 
         let id = self
-            .type_aliases
-            .insert(usr.into(), TypeAlias::ClassTemplateSpecialization(cts));
+            .class_template_specializations
+            .insert(usr.into(), cts);
 
-        let id = TypeAliasId(id);
+        let id = ClassTemplateSpecializationId(id);
 
         class_decl.specializations.push(id);
 
@@ -341,7 +359,7 @@ impl AST {
         function_id: FunctionId,
         name: &str,
         template_arguments: Vec<Option<TemplateType>>,
-    ) -> Result<TypeAliasId> {
+    ) -> Result<FunctionTemplateSpecializationId> {
         let function_decl = self.functions.index_mut(function_id);
 
         let usr = USR::new(&format!("{}_{name}", function_decl.usr().as_str()));
@@ -355,10 +373,10 @@ impl AST {
         };
 
         let id = self
-            .type_aliases
-            .insert(usr.into(), TypeAlias::FunctionTemplateSpecialization(fts));
+            .function_template_specializations
+            .insert(usr.into(), fts);
 
-        let id = TypeAliasId(id);
+        let id = FunctionTemplateSpecializationId(id);
 
         function_decl.specializations.push(id);
 
@@ -430,6 +448,10 @@ impl AST {
         self.classes.insert(class.usr().into(), class);
     }
 
+    pub fn insert_class_template_specialization(&mut self, class: ClassTemplateSpecialization) {
+        self.class_template_specializations.insert(class.usr().into(), class);
+    }
+
     pub fn get_type_alias(&self, usr: USR) -> Option<&TypeAlias> {
         self.type_aliases.get(&usr.into())
     }
@@ -438,8 +460,16 @@ impl AST {
         self.classes.get(&usr.into())
     }
 
+    pub fn get_class_template_specialization(&self, usr: USR) -> Option<&ClassTemplateSpecialization> {
+        self.class_template_specializations.get(&usr.into())
+    }
+
     pub fn insert_function(&mut self, function: Function) {
         self.functions.insert(function.usr().into(), function);
+    }
+
+    pub fn insert_function_template_specialization(&mut self, function: FunctionTemplateSpecialization) {
+        self.function_template_specializations.insert(function.usr().into(), function);
     }
 
     pub fn insert_type_alias(&mut self, type_alias: TypeAlias) -> usize {
@@ -615,7 +645,7 @@ pub fn extract_ast(
                         source: Box::new(e),
                     }
                 })?;
-                ast.insert_type_alias(TypeAlias::ClassTemplateSpecialization(cts));
+                ast.insert_class_template_specialization(cts);
             } else {
                 debug!(
                     "TypeAliasDecl {} not handled as it is not a CTS",
@@ -757,9 +787,17 @@ pub fn dump(
 
     if let Ok(ty) = c.ty() {
         print!("{}", format!("{indent}  ").color(color_s));
-        dump_type(ty, depth, max_depth, already_visited, tu, skip_kinds, Some(color_s));
+        dump_type(
+            ty,
+            depth,
+            max_depth,
+            already_visited,
+            tu,
+            skip_kinds,
+            Some(color_s),
+        );
     }
-     
+
     if let Ok(cr) = c.referenced() {
         if cr != c {
             if already_visited.contains(&cr.usr()) {
@@ -939,7 +977,15 @@ pub fn dump_type(
         if !already_visited.contains(&c_decl.usr()) {
             already_visited.push(c_decl.usr());
             print!("{}", format!("{indent}  = ").color(Color::BrightBlack));
-            dump(c_decl, depth+1, max_depth, already_visited, tu, skip_kinds, Some(Color::BrightBlack));
+            dump(
+                c_decl,
+                depth + 1,
+                max_depth,
+                already_visited,
+                tu,
+                skip_kinds,
+                Some(Color::BrightBlack),
+            );
         } else {
             println!(
                 "{}",
@@ -953,11 +999,22 @@ pub fn dump_type(
                 .color(Color::BrightBlack)
             );
         }
-        if matches!(c_decl.kind(), CursorKind::TypedefDecl | CursorKind::TypeAliasDecl) {
+        if matches!(
+            c_decl.kind(),
+            CursorKind::TypedefDecl | CursorKind::TypeAliasDecl
+        ) {
             let c_td: CurTypedef = c_decl.try_into().unwrap();
             let ty = c_td.underlying_type().unwrap();
             print!("{}", format!("{indent}  ↪u→ ").color(color_s));
-            dump_type(ty, depth+1, max_depth, already_visited, tu, skip_kinds, Some(color_s));
+            dump_type(
+                ty,
+                depth + 1,
+                max_depth,
+                already_visited,
+                tu,
+                skip_kinds,
+                Some(color_s),
+            );
         }
     }
 
@@ -965,8 +1022,6 @@ pub fn dump_type(
     //     print!("{}", format!("{indent}  ↪n→ ").color(color_s));
     //     dump_type(ty, depth+1, max_depth, already_visited, tu, skip_kinds, Some(color_s));
     // }
-
-
 }
 
 #[instrument(level = "trace", skip(tu))]
@@ -1076,6 +1131,21 @@ impl IndexMapKey for ClassId {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct ClassTemplateSpecializationId(usize);
+
+impl ClassTemplateSpecializationId {
+    pub fn new(id: usize) -> ClassTemplateSpecializationId {
+        ClassTemplateSpecializationId(id)
+    }
+}
+
+impl IndexMapKey for ClassTemplateSpecializationId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct MethodId(usize);
 
 impl IndexMapKey for MethodId {
@@ -1134,6 +1204,27 @@ impl FunctionId {
 
 impl From<FunctionId> for usize {
     fn from(id: FunctionId) -> Self {
+        id.0
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct FunctionTemplateSpecializationId(usize);
+
+impl IndexMapKey for FunctionTemplateSpecializationId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
+
+impl FunctionTemplateSpecializationId {
+    pub fn new(id: usize) -> FunctionTemplateSpecializationId {
+        FunctionTemplateSpecializationId(id)
+    }
+}
+
+impl From<FunctionTemplateSpecializationId> for usize {
+    fn from(id: FunctionTemplateSpecializationId) -> Self {
         id.0
     }
 }

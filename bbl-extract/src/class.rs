@@ -10,7 +10,7 @@ use std::fmt::{Debug, Display};
 use tracing::instrument;
 use ustr::Ustr;
 
-use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST};
+use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST, ClassTemplateSpecializationId};
 use crate::error::{self, ExtractClassError};
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::index_map::IndexMapKey;
@@ -152,7 +152,7 @@ pub struct ClassDecl {
     pub(crate) namespaces: Vec<USR>,
     pub(crate) template_parameters: Vec<TemplateParameterDecl>,
     /// List of the specializations made from this class if it is templated
-    pub(crate) specializations: Vec<TypeAliasId>,
+    pub(crate) specializations: Vec<ClassTemplateSpecializationId>,
 
     pub(crate) ignore: bool,
     pub(crate) rename: Option<String>,
@@ -1037,19 +1037,19 @@ mod tests {
             format!("{ast:?}"),
             indoc!(
                 r#"
-        Namespace c:@S@NeedsImplicitCopyCtor NeedsImplicitCopyCtor None
-        Namespace c:@S@NeedsImplicitNone NeedsImplicitNone None
-        ClassDecl c:@S@NeedsImplicitAll NeedsImplicitAll rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+                Namespace c:@S@NeedsImplicitCopyCtor NeedsImplicitCopyCtor None
+                Namespace c:@S@NeedsImplicitNone NeedsImplicitNone None
+                ClassDecl c:@S@NeedsImplicitAll NeedsImplicitAll rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
 
-        ClassDecl c:@S@NeedsImplicitCopyCtor NeedsImplicitCopyCtor rename=None OpaquePtr is_pod=false ignore=false rof=[dtor ] template_parameters=[] specializations=[] namespaces=[]
-        Method Destructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitCopyCtor@F@~NeedsImplicitCopyCtor# ~NeedsImplicitCopyCtor rename=Some("dtor") ignore=false return=void args=[] noexcept=Unevaluated template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitCopyCtor]
+                ClassDecl c:@S@NeedsImplicitCopyCtor NeedsImplicitCopyCtor rename=None OpaquePtr is_pod=false ignore=false rof=[dtor ] template_parameters=[] specializations=[] namespaces=[]
+                Method Destructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitCopyCtor@F@~NeedsImplicitCopyCtor# ~NeedsImplicitCopyCtor rename=Some("dtor") ignore=false return=void args=[] noexcept=Unevaluated template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitCopyCtor]
 
-        ClassDecl c:@S@NeedsImplicitNone NeedsImplicitNone rename=None OpaquePtr is_pod=false ignore=false rof=[ctor copy_ctor dtor ] template_parameters=[] specializations=[] namespaces=[]
-        Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@NeedsImplicitNone# NeedsImplicitNone rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
-        Method CopyConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@NeedsImplicitNone#&1$@S@NeedsImplicitNone# NeedsImplicitNone rename=Some("copy_ctor") ignore=false return=void args=[Argument { name: "", qual_type: const NeedsImplicitNone & }] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
-        Method Destructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@~NeedsImplicitNone# ~NeedsImplicitNone rename=Some("dtor") ignore=false return=void args=[] noexcept=Unevaluated template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
+                ClassDecl c:@S@NeedsImplicitNone NeedsImplicitNone rename=None OpaquePtr is_pod=false ignore=false rof=[ctor copy_ctor dtor ] template_parameters=[] specializations=[] namespaces=[]
+                Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@NeedsImplicitNone# NeedsImplicitNone rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
+                Method CopyConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@NeedsImplicitNone#&1$@S@NeedsImplicitNone# NeedsImplicitNone rename=Some("copy_ctor") ignore=false return=void args=[: const NeedsImplicitNone &] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
+                Method Destructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@~NeedsImplicitNone# ~NeedsImplicitNone rename=Some("dtor") ignore=false return=void args=[] noexcept=Unevaluated template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
 
-    "#
+                "#
             )
         );
 

@@ -7,7 +7,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use crate::ast::{dump_cursor, get_namespaces_for_decl, get_qualified_name, TypeAliasId, AST};
 use crate::class::extract_class_decl;
 use crate::namespace::extract_namespace;
-use crate::qualtype::extract_type;
+use crate::qualtype::{extract_type, QualType};
 use crate::stdlib::create_std_string;
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
 use bbl_clang::cursor::{CurClassTemplate, CurTemplateRef, CurTypedef, Cursor, USR};
@@ -17,6 +17,51 @@ use std::fmt::Debug;
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+pub struct TypeAlias {
+    name: String,
+    usr: USR,
+    namespaces: Vec<USR>,
+    underlying_type: QualType,
+}
+
+impl Debug for TypeAlias {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "TypeAlias {} = {:?}", self.name, self.underlying_type)
+    }
+}
+
+impl TypeAlias {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn usr(&self) -> USR {
+        self.usr
+    }
+
+    pub fn namespaces(&self) -> &[USR] {
+        &self.namespaces
+    }
+
+    pub fn underlying_type(&self) -> &QualType {
+        &self.underlying_type
+    }
+
+    pub fn pretty_print(
+        &self,
+        depth: usize,
+        ast: &AST,
+        outer_template_parameters: &[TemplateParameterDecl],
+    ) {
+        println!("TypeAlias {} = {}", self.name, self.underlying_type.format(ast, &[], None))
+    }
+
+    pub fn get_qualified_name(&self, ast: &AST) -> Result<String> {
+        get_qualified_name(self.name(), &self.namespaces, ast)
+    }
+}
+
+/*
 pub enum TypeAlias {
     TypeAliasType { name: String, usr: USR },
     ClassTemplateSpecialization(ClassTemplateSpecialization),
@@ -93,6 +138,7 @@ impl TypeAlias {
         get_qualified_name(self.name(), self.namespaces(), ast)
     }
 }
+*/
 
 #[instrument(skip(depth, already_visited, ast, tu), level = "trace")]
 pub fn extract_typedef_decl<'a>(
@@ -102,13 +148,41 @@ pub fn extract_typedef_decl<'a>(
     ast: &'a mut AST,
     tu: &TranslationUnit,
 ) -> Result<&'a TypeAlias> {
-    if already_visited.contains(&c_typedef.usr()) {
+    let usr = c_typedef.usr();
+    if already_visited.contains(&usr) {
         trace!("already visiting. skipping.");
         return ast
             .get_type_alias(c_typedef.usr())
             .ok_or_else(|| Error::TypeAliasNotFound(c_typedef.usr()));
+    } else {
+        already_visited.push(usr);
     }
 
+    let name = c_typedef.display_name();
+    let namespaces = get_namespaces_for_decl(c_typedef.into(), tu, ast, already_visited)?;
+
+    let underlying_type = extract_type(
+        c_typedef.underlying_type()?,
+        depth + 1,
+        &[],
+        already_visited,
+        ast,
+        tu,
+    )?;
+
+    let id = ast.insert_type_alias(TypeAlias {
+        name,
+        usr,
+        namespaces,
+        underlying_type,        
+    });
+
+    // literally just inserted it
+    let ta = ast.get_type_alias(usr).unwrap();
+
+    Ok(ta)
+
+    /*
     // if it has a TemplateRef child it's a class template specialization
     if c_typedef.has_child_of_kind(CursorKind::TemplateRef) {
         trace!("Got ClassTemplateSpecialization {:?}", c_typedef);
@@ -161,6 +235,7 @@ pub fn extract_typedef_decl<'a>(
         dump_cursor(c_typedef.into(), tu);
         unimplemented!();
     }
+    */
 }
 
 #[instrument(skip(depth, tu, namespaces, ast, already_visited), level = "trace")]
@@ -601,9 +676,9 @@ mod tests {
                     int a;
                 };
 
-                typedef Class_ Class;
+                typedef const Class_ Class;
 
-                void take_class(const Class& c);
+                void take_class(Class& c);
             "#
                 ),
                 &cli_args()?,
@@ -616,11 +691,11 @@ mod tests {
                 format!("{ast:?}"),
                 indoc!(
                     r#"
-                ClassDecl c:@S@Class_ Class_ rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@Class_ Class_ rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
 
-                Function c:@F@take_class#&1$@S@Class_# take_class rename=None ignore=false return=void args=[Argument { name: "c", qual_type: const Class & }] noexcept=None template_parameters=[] specializations=[] namespaces=[]
-                TypeAlias c:@S@Class_ Class
-            "#
+                    Function c:@F@take_class#&1$@S@Class_# take_class rename=None ignore=false return=void args=[c: Class &] noexcept=None template_parameters=[] specializations=[] namespaces=[]
+                    TypeAlias Class = Class_ const
+                    "#
                 )
             );
 

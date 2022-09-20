@@ -6,7 +6,7 @@ use log::*;
 use std::fmt::{Debug, Display};
 use tracing::instrument;
 
-use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId};
+use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, FunctionTemplateSpecializationId};
 use crate::class::MethodSpecializationId;
 use crate::qualtype::{extract_type, extract_type_from_typeref};
 use crate::template_argument::{TemplateParameterDecl, TemplateType};
@@ -16,7 +16,6 @@ use bbl_clang::cursor_kind::CursorKind;
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Debug)]
 pub struct Argument {
     pub(crate) name: String,
     pub(crate) qual_type: QualType,
@@ -25,6 +24,12 @@ pub struct Argument {
 impl Display for Argument {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: {}", self.name, self.qual_type)
+    }
+}
+
+impl Debug for Argument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {:?}", self.name, self.qual_type)
     }
 }
 
@@ -68,7 +73,7 @@ pub struct Function {
     pub(crate) ignored: bool,
     pub(crate) namespaces: Vec<USR>,
     pub(crate) template_parameters: Vec<TemplateParameterDecl>,
-    pub(crate) specializations: Vec<TypeAliasId>,
+    pub(crate) specializations: Vec<FunctionTemplateSpecializationId>,
     pub(crate) exception_specification_kind: ExceptionSpecificationKind,
 }
 
@@ -956,13 +961,13 @@ mod tests {
             format!("{ast:?}"),
             indoc!(
                 r#"
-            Namespace c:@S@Class Class None
-            ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
-            Field a: int
-            Field b: float
-            Method StaticMethod const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#f#S static_method rename=None ignore=false return=float args=[Argument { name: "b", qual_type: float }] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+                Namespace c:@S@Class Class None
+                ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+                Field a: int
+                Field b: float
+                Method StaticMethod const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#f#S static_method rename=None ignore=false return=float args=[b: float] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
 
-        "#
+                "#
             )
         );
 
@@ -998,13 +1003,13 @@ mod tests {
             format!("{ast:?}"),
             indoc!(
                 r#"
-            Namespace c:@S@Class Class None
-            ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
-            Field a: int
-            Field b: float
-            Method StaticMethod const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#$@S@Class#S static_method rename=None ignore=false return=float args=[Argument { name: "c", qual_type: Class }] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+                Namespace c:@S@Class Class None
+                ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+                Field a: int
+                Field b: float
+                Method StaticMethod const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#$@S@Class#S static_method rename=None ignore=false return=float args=[c: Class] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
 
-        "#
+                "#
             )
         );
 

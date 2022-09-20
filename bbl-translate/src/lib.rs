@@ -154,6 +154,22 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
         )?;
     }
 
+    for cts in ast.classe_template_specializations().iter() {
+        translate_class_template_specialization(
+            ast,
+            cts,
+            &mut structs,
+            &mut typedefs,
+            &mut functions,
+            &mut used_names,
+        )?;
+    }
+
+    for fts in ast.function_template_specializations().iter() {
+        translate_function_template_specialization(ast, fts, &mut functions, &mut used_names)?;
+    }
+
+    /*
     for (_type_alias_id, type_alias) in ast.type_aliases().iter().enumerate() {
         match type_alias {
             TypeAlias::ClassTemplateSpecialization(cts) => translate_class_template_specialization(
@@ -175,6 +191,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
             _ => todo!(),
         }
     }
+    */
 
     for (function_id, function) in ast.functions().iter().enumerate() {
         if function.is_templated() {
