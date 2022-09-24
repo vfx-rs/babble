@@ -1,6 +1,6 @@
 namespace ns1 {
 
-template<typename T>
+template<typename T, int N=4>
 class shared_ptr {
     T* ptr;
 };
@@ -10,13 +10,13 @@ class shared_ptr {
 namespace ns2 {
 class A {};
 
-void take_sptr(ns1::shared_ptr<A>);
+void take_sptr(ns1::shared_ptr<A, 1>);
 }
 
 namespace ns3 {
-typedef ns1::shared_ptr<ns2::A> APtr;
+typedef ns1::shared_ptr<ns2::A, 2> APtr;
 void take_aptr(APtr);
-void take_sp_a(ns1::shared_ptr<ns2::A>);
+void take_sp_a(ns1::shared_ptr<ns2::A, 3>);
 typedef const int Int;
 }
 

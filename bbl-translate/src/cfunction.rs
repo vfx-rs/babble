@@ -7,8 +7,7 @@ use bbl_extract::{
     function::{Argument, Function, Method, MethodKind},
     index_map::{IndexMapKey, UstrIndexMap},
     qualtype::{QualType, TypeRef},
-    template_argument::{TemplateParameterDecl, TemplateType},
-    type_alias::TypeAlias,
+    templates::{TemplateParameterDecl, TemplateArgument},
 };
 use hashbrown::HashSet;
 use tracing::{error, instrument, trace};
@@ -206,7 +205,7 @@ impl CFunction {
 pub fn translate_arguments(
     arguments: &[Argument],
     template_parms: &[TemplateParameterDecl],
-    template_args: &[Option<TemplateType>],
+    template_args: &[TemplateArgument],
     used_argument_names: &mut HashSet<String>,
     type_replacements: &TypeReplacements,
 ) -> Result<Vec<CArgument>, Error> {
@@ -259,7 +258,7 @@ pub fn translate_function(
     function: &Function,
     functions: &mut UstrIndexMap<CFunction, CFunctionId>,
     used_names: &mut HashSet<String>,
-    template_args: &[Option<TemplateType>],
+    template_args: &[TemplateArgument],
     type_replacements: &TypeReplacements,
 ) -> Result<()> {
     // build the namespace prefix
@@ -620,7 +619,7 @@ pub fn translate_function(
 pub fn translate_method(
     class: &ClassDecl,
     class_template_parms: &[TemplateParameterDecl],
-    template_args: &[Option<TemplateType>],
+    template_args: &[TemplateArgument],
     source: CFunctionSource,
     method: &Method,
     class_qname: &str,

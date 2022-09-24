@@ -4,19 +4,19 @@ use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
 use bbl_clang::cursor::{CurClassTemplate, CurStructDecl, CurTypedef, Cursor};
+use bbl_clang::template_argument::TemplateArgumentKind;
 use bbl_clang::ty::Type;
 use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::TranslationUnit};
 use tracing::{debug, error, info, instrument, trace, warn};
 use ustr::{Ustr, UstrMap};
 
+use crate::class::extract_class_decl;
 use crate::class::{ClassBindKind, ClassDecl, MethodSpecializationId};
 use crate::function::{extract_function, Function, Method};
 use crate::index_map::{IndexMapKey, UstrIndexMap};
 use crate::namespace::{self, extract_namespace, Namespace};
-use crate::template_argument::{TemplateArgument, TemplateType};
-use crate::type_alias;
-use crate::type_alias::{ClassTemplateSpecialization, FunctionTemplateSpecialization, TypeAlias};
-use crate::{class::extract_class_decl, type_alias::extract_class_template_specialization};
+use crate::templates::{TemplateArgument, ClassTemplateSpecialization, extract_class_template_specialization, FunctionTemplateSpecialization};
+use crate::type_alias::{extract_typedef_decl, TypeAlias};
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -56,6 +56,14 @@ impl Debug for AST {
 
         for type_alias in self.type_aliases.iter() {
             writeln!(f, "{type_alias:?}")?;
+        }
+
+        for cts in self.class_template_specializations().iter() {
+            writeln!(f, "{cts:?}")?;
+        }
+
+        for fts in self.function_template_specializations().iter() {
+            writeln!(f, "{fts:?}")?;
         }
 
         Ok(())
@@ -137,7 +145,7 @@ impl AST {
         &self.classes
     }
 
-    pub fn classe_template_specializations(
+    pub fn class_template_specializations(
         &self,
     ) -> &UstrIndexMap<ClassTemplateSpecialization, ClassTemplateSpecializationId> {
         &self.class_template_specializations
@@ -249,7 +257,7 @@ impl AST {
         &mut self,
         class_id: ClassId,
         name: &str,
-        args: Vec<Option<TemplateType>>,
+        args: Vec<TemplateArgument>,
     ) -> Result<ClassTemplateSpecializationId> {
         let class_decl = self.classes.index_mut(class_id);
 
@@ -263,9 +271,7 @@ impl AST {
             namespaces: Vec::new(),
         };
 
-        let id = self
-            .class_template_specializations
-            .insert(usr.into(), cts);
+        let id = self.class_template_specializations.insert(usr.into(), cts);
 
         let id = ClassTemplateSpecializationId(id);
 
@@ -358,7 +364,7 @@ impl AST {
         &mut self,
         function_id: FunctionId,
         name: &str,
-        template_arguments: Vec<Option<TemplateType>>,
+        template_arguments: Vec<TemplateArgument>,
     ) -> Result<FunctionTemplateSpecializationId> {
         let function_decl = self.functions.index_mut(function_id);
 
@@ -423,7 +429,7 @@ impl AST {
         class_id: ClassId,
         method_id: MethodId,
         name: &str,
-        args: Vec<Option<TemplateType>>,
+        args: Vec<TemplateArgument>,
     ) -> Result<MethodSpecializationId> {
         self.classes
             .index_mut(class_id)
@@ -449,7 +455,8 @@ impl AST {
     }
 
     pub fn insert_class_template_specialization(&mut self, class: ClassTemplateSpecialization) {
-        self.class_template_specializations.insert(class.usr().into(), class);
+        self.class_template_specializations
+            .insert(class.usr().into(), class);
     }
 
     pub fn get_type_alias(&self, usr: USR) -> Option<&TypeAlias> {
@@ -460,7 +467,10 @@ impl AST {
         self.classes.get(&usr.into())
     }
 
-    pub fn get_class_template_specialization(&self, usr: USR) -> Option<&ClassTemplateSpecialization> {
+    pub fn get_class_template_specialization(
+        &self,
+        usr: USR,
+    ) -> Option<&ClassTemplateSpecialization> {
         self.class_template_specializations.get(&usr.into())
     }
 
@@ -468,8 +478,12 @@ impl AST {
         self.functions.insert(function.usr().into(), function);
     }
 
-    pub fn insert_function_template_specialization(&mut self, function: FunctionTemplateSpecialization) {
-        self.function_template_specializations.insert(function.usr().into(), function);
+    pub fn insert_function_template_specialization(
+        &mut self,
+        function: FunctionTemplateSpecialization,
+    ) {
+        self.function_template_specializations
+            .insert(function.usr().into(), function);
     }
 
     pub fn insert_type_alias(&mut self, type_alias: TypeAlias) -> usize {
@@ -578,14 +592,7 @@ pub fn extract_ast(
             // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
             // (for opaque types in the API)
             if c.is_definition() {
-                extract_class_decl(
-                    c.try_into()?,
-                    depth + 1,
-                    tu,
-                    &namespaces,
-                    ast,
-                    already_visited,
-                )?;
+                extract_class_decl(c.try_into()?, depth + 1, tu, ast, already_visited)?;
             }
 
             return Ok(());
@@ -601,7 +608,6 @@ pub fn extract_ast(
                     c_class_template.as_class_decl(),
                     depth + 1,
                     tu,
-                    &namespaces,
                     ast,
                     already_visited,
                 )?;
@@ -620,7 +626,6 @@ pub fn extract_ast(
                     c_struct.as_class_decl(),
                     depth + 1,
                     tu,
-                    &namespaces,
                     ast,
                     already_visited,
                 )?;
@@ -629,7 +634,10 @@ pub fn extract_ast(
             return Ok(());
         }
         CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
+            extract_typedef_decl(c.try_into()?, depth + 1, already_visited, ast, tu)?;
+            return Ok(());
             // check if this type alias has a TemplateRef child, in which case it's a class template specialization
+            /*
             if c.has_child_of_kind(CursorKind::TemplateRef) {
                 let cts = extract_class_template_specialization(
                     c.try_into()?,
@@ -652,6 +660,7 @@ pub fn extract_ast(
                     c.display_name()
                 );
             }
+            */
 
             return Ok(());
         }
@@ -738,6 +747,33 @@ pub fn dump_cursor(c: Cursor, tu: &TranslationUnit) {
     dump(c, 0, 20, &mut av, tu, &[], None);
 }
 
+fn get_template_args(c: Cursor) -> String {
+    if c.num_template_arguments() != -1 {
+        let mut args = Vec::new();
+        for i in 0..c.num_template_arguments() {
+            match c.template_argument_kind(i as u32) {
+                Ok(TemplateArgumentKind::Integral) => {
+                    let value = c.template_argument_value(i as u32);
+                    args.push(format!("{value}"));
+                }
+                Ok(TemplateArgumentKind::Type) => {
+                    if let Ok(ty) = c.template_argument_type(i as u32) {
+                        args.push(ty.spelling());
+                    } else {
+                        args.push("Type".to_string());
+                    }
+                }
+                Ok(k) => args.push(format!("{k:?}")),
+                Err(e) => args.push(format!("Invalid")),
+            };
+        }
+
+        format!("<{}>", args.join(", "))
+    } else {
+        "".to_string()
+    }
+}
+
 use colored::*;
 pub fn dump(
     c: Cursor,
@@ -755,11 +791,7 @@ pub fn dump(
 
     let indent = format!("{:width$}", "", width = depth * 4);
 
-    let template_args = if c.num_template_arguments() != -1 {
-        format!("[{}]", c.num_template_arguments())
-    } else {
-        "".to_string()
-    };
+    let template_args = get_template_args(c);
 
     let color_s = if let Some(color_s) = color_s {
         color_s
@@ -801,11 +833,7 @@ pub fn dump(
     if let Ok(cr) = c.referenced() {
         if cr != c {
             if already_visited.contains(&cr.usr()) {
-                let template_args = if c.num_template_arguments() != -1 {
-                    format!("[{}]", c.num_template_arguments())
-                } else {
-                    "".to_string()
-                };
+                let template_args = get_template_args(c);
 
                 println!(
                     "{}",
@@ -841,11 +869,7 @@ pub fn dump(
     if let Ok(cr) = c.specialized_template() {
         if cr != c {
             if already_visited.contains(&cr.usr()) {
-                let template_args = if c.num_template_arguments() != -1 {
-                    format!("[{}]", c.num_template_arguments())
-                } else {
-                    "".to_string()
-                };
+                let template_args = get_template_args(c);
 
                 println!(
                     "{}",
@@ -987,6 +1011,7 @@ pub fn dump_type(
                 Some(Color::BrightBlack),
             );
         } else {
+            let template_args = get_template_args(c_decl);
             println!(
                 "{}",
                 format!(
@@ -1017,11 +1042,6 @@ pub fn dump_type(
             );
         }
     }
-
-    // if let Ok(ty) = ty.named_type() {
-    //     print!("{}", format!("{indent}  ↪n→ ").color(color_s));
-    //     dump_type(ty, depth+1, max_depth, already_visited, tu, skip_kinds, Some(color_s));
-    // }
 }
 
 #[instrument(level = "trace", skip(tu))]

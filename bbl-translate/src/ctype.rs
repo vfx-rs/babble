@@ -6,7 +6,7 @@ use std::{
 use bbl_clang::{cursor::USR, ty::TypeKind};
 use bbl_extract::{
     qualtype::{QualType, TypeRef},
-    template_argument::{TemplateParameterDecl, TemplateType},
+    templates::{TemplateArgument, TemplateParameterDecl},
 };
 use tracing::{error, instrument};
 
@@ -165,7 +165,7 @@ impl TypeReplacements {
 pub fn translate_qual_type(
     qual_type: &QualType,
     template_parms: &[TemplateParameterDecl],
-    template_args: &[Option<TemplateType>],
+    template_args: &[TemplateArgument],
     type_replacements: &TypeReplacements,
 ) -> Result<CQualType, TranslateTypeError> {
     match &qual_type.type_ref {
@@ -225,13 +225,13 @@ pub fn translate_qual_type(
                 Err(TranslateTypeError::TemplateArgNotFound(parm_name.into()))
             } else {
                 match &template_args[parm_index] {
-                    Some(TemplateType::Type(tty)) => {
+                    TemplateArgument::Type(tty) => {
                         translate_qual_type(tty, template_parms, template_args, type_replacements)
                     }
-                    Some(TemplateType::Integer(_n)) => {
+                    TemplateArgument::Integral(_n) => {
                         todo!()
                     }
-                    None => Err(TranslateTypeError::InvalidTemplateArgumentKind(
+                    _ => Err(TranslateTypeError::InvalidTemplateArgumentKind(
                         parm_name.into(),
                     )),
                 }

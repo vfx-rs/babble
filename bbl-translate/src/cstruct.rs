@@ -5,8 +5,7 @@ use bbl_extract::{
     ast::{ClassId, MethodId, AST},
     class::{ClassBindKind, ClassDecl, MethodSpecializationId},
     index_map::{IndexMapKey, UstrIndexMap},
-    template_argument::TemplateType,
-    type_alias::ClassTemplateSpecialization,
+    templates::{TemplateArgument, ClassTemplateSpecialization},
 };
 use hashbrown::HashSet;
 use tracing::{error, instrument, trace, warn};
@@ -111,7 +110,7 @@ pub fn translate_class(
     ast: &AST,
     class_id: ClassId,
     class: &ClassDecl,
-    template_args: &[Option<TemplateType>],
+    template_args: &[TemplateArgument],
     structs: &mut UstrIndexMap<CStruct, CStructId>,
     functions: &mut UstrIndexMap<CFunction, CFunctionId>,
     used_names: &mut HashSet<String>,
@@ -241,7 +240,7 @@ pub fn translate_class_template(
     ast: &AST,
     class_id: ClassId,
     class: &ClassDecl,
-    template_args: &[Option<TemplateType>],
+    template_args: &[TemplateArgument],
     structs: &mut UstrIndexMap<CStruct, CStructId>,
     functions: &mut UstrIndexMap<CFunction, CFunctionId>,
     used_names: &mut HashSet<String>,

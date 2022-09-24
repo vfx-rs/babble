@@ -19,4 +19,4 @@ tracing = { version = "0.1.36", features = ["log", "log-always"] }
 [features]
 clang_16 = ["clang-sys/clang_16_0"]
 clang_13 = ["clang-sys/clang_13_0"]
-default = ["clang_13"]
+default = ["clang_16"]

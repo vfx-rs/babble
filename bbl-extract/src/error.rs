@@ -81,6 +81,10 @@ pub enum Error {
     ClassCannotBeValueType(String),
     #[error("Failed to get access specifier for \"{0}\"")]
     FailedToGetAccessSpecifierFor(String),
+    #[error("Tried to extract class decl \"{0}\" as a template specialization but it is not a specialization")]
+    ClassDeclIsNotSpecialization(USR),
+    #[error("Too few template arguments ({num}) on \"{usr}\"")]
+    TooFewTemplateArguments { usr: USR, num: i32 },
 }
 
 impl From<bbl_clang::error::Error> for Error {

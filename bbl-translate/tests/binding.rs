@@ -3,9 +3,9 @@ mod common;
 use std::path::Path;
 
 use bbl_clang::{cli_args, cli_args_with, virtual_file::configure_temp_cmake_project};
+use bbl_extract::templates::TemplateArgument;
 use bbl_extract::{
     parse_file_and_extract_ast, parse_string_and_extract_ast, qualtype::QualType,
-    template_argument::TemplateType,
 };
 
 use bbl_translate::error::Error;
@@ -318,7 +318,7 @@ public:
     ast.specialize_class(
         class,
         "ClassFloat",
-        vec![Some(TemplateType::Type(QualType::float()))],
+        vec![TemplateArgument::Type(QualType::float())],
     )?;
 
     ast.pretty_print(0);
@@ -381,7 +381,7 @@ T function_template(T&& a, float*);
     ast.specialize_function(
         function,
         "function_float",
-        vec![Some(TemplateType::Type(QualType::float()))],
+        vec![TemplateArgument::Type(QualType::float())],
     )?;
 
     ast.pretty_print(0);
@@ -427,7 +427,7 @@ public:
         class,
         method,
         "method_float",
-        vec![Some(TemplateType::Type(QualType::float()))],
+        vec![TemplateArgument::Type(QualType::float())],
     )?;
 
     ast.pretty_print(0);

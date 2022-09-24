@@ -16,14 +16,12 @@ pub mod index_map;
 pub mod namespace;
 pub mod qualtype;
 pub mod stdlib;
-pub mod template_argument;
+pub mod templates;
 pub mod type_alias;
 use ast::{dump, extract_ast, extract_ast_from_namespace, Include, AST};
 pub mod error;
 use error::Error;
 use tracing::instrument;
-
-use crate::template_argument::TemplateType;
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 

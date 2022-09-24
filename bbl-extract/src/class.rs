@@ -17,7 +17,7 @@ use crate::index_map::IndexMapKey;
 use crate::parse_string_and_extract_ast;
 use crate::qualtype::extract_type;
 use crate::stdlib::create_std_string;
-use crate::template_argument::{TemplateParameterDecl, TemplateType};
+use crate::templates::{TemplateParameterDecl, TemplateArgument, extract_class_template_specialization};
 use crate::{function::Method, qualtype::QualType};
 use bbl_clang::cursor_kind::CursorKind;
 
@@ -313,7 +313,7 @@ impl ClassDecl {
         &self,
         depth: usize,
         ast: &AST,
-        class_template_args: Option<&[Option<TemplateType>]>,
+        class_template_args: Option<&[TemplateArgument]>,
     ) {
         if !self.template_parameters.is_empty() {
             self.pretty_print_template(depth, ast, class_template_args);
@@ -360,7 +360,7 @@ impl ClassDecl {
         println!("{indent}}}");
     }
 
-    pub fn format(&self, ast: &AST, template_args: Option<&[Option<TemplateType>]>) -> String {
+    pub fn format(&self, ast: &AST, template_args: Option<&[TemplateArgument]>) -> String {
         let ns_string = self
             .namespaces
             .iter()
@@ -387,7 +387,7 @@ impl ClassDecl {
         &self,
         depth: usize,
         ast: &AST,
-        template_args: Option<&[Option<TemplateType>]>,
+        template_args: Option<&[TemplateArgument]>,
     ) {
         let indent = format!("{:width$}", "", width = depth * 2);
 
@@ -508,7 +508,7 @@ impl ClassDecl {
         &mut self,
         method_id: MethodId,
         name: &str,
-        template_arguments: Vec<Option<TemplateType>>,
+        template_arguments: Vec<TemplateArgument>,
     ) -> Result<MethodSpecializationId> {
         let method_decl = &mut self.methods[method_id.get()];
 
@@ -540,45 +540,50 @@ impl Display for ClassDecl {
     }
 }
 
-#[instrument(skip(depth, tu, namespaces, ast, already_visited), level = "trace")]
+#[instrument(skip(depth, tu, ast, already_visited), level = "trace")]
 pub fn extract_class_decl(
-    class_template: CurClassDecl,
+    class_decl: CurClassDecl,
     depth: usize,
     tu: &TranslationUnit,
-    namespaces: &[USR],
     ast: &mut AST,
     already_visited: &mut Vec<USR>,
 ) -> Result<USR> {
     let indent = format!("{:width$}", "", width = depth * 2);
-    if already_visited.contains(&class_template.usr()) {
-        return Ok(class_template.usr());
-    } else {
-        already_visited.push(class_template.usr());
-    }
-
-    trace!(
-        "{indent}extract_class_decl({}) {}",
-        class_template.usr(),
-        class_template.display_name()
-    );
-
-    let namespaces = get_namespaces_for_decl(class_template.into(), tu, ast, already_visited)?;
 
     // Check for std:: types we're going to extract manually here
-    if class_template.display_name().starts_with("basic_string<") {
-        debug!("Extracting basic_string {}", class_template.usr());
-        let cd = create_std_string(class_template.into(), namespaces);
+    if class_decl.display_name().starts_with("basic_string<") {
+        debug!("Extracting basic_string {}", class_decl.usr());
+        let cd = create_std_string(class_decl.into(), ast);
         let usr = cd.usr();
         ast.insert_class(cd);
         return Ok(usr);
     }
+
+    if class_decl.specialized_template().is_ok() {
+        // this is a class template specialization, handle it separately
+        return extract_class_template_specialization(class_decl, depth, already_visited, ast, tu);
+    }
+
+    if already_visited.contains(&class_decl.usr()) {
+        return Ok(class_decl.usr());
+    } else {
+        already_visited.push(class_decl.usr());
+    }
+
+    trace!(
+        "{indent}extract_class_decl({}) {}",
+        class_decl.usr(),
+        class_decl.display_name()
+    );
+
+    let namespaces = get_namespaces_for_decl(class_decl.into(), tu, ast, already_visited)?;
 
     let mut methods = Vec::new();
     let mut fields = Vec::new();
     let mut template_parameters = Vec::new();
     let mut rule_of_five = RuleOfFive::default();
 
-    let members = class_template.children();
+    let members = class_decl.children();
     let mut index = 0;
     let mut has_private_fields = false;
     for member in members {
@@ -684,7 +689,7 @@ pub fn extract_class_decl(
                         )
                         .map_err(|e| {
                             ExtractClassError::FailedToExtractField {
-                                class: class_template.display_name(),
+                                class: class_decl.display_name(),
                                 name: member.display_name(),
                                 source: Box::new(e),
                             }
@@ -728,7 +733,7 @@ pub fn extract_class_decl(
         }
     }
 
-    let name = class_template.spelling();
+    let name = class_decl.spelling();
 
     // If this is a template decl we won't be able to get a type from it so just set POD to false
     // Note that we have a slightly different definition of POD from cpp: we do not consider records with private fields
@@ -736,10 +741,10 @@ pub fn extract_class_decl(
     // TODO(AL): well, actually... they're not in C but they are in Rust. Though if you have a private field you probably
     // have a non-trivial constructor, but we should probably not force that here
     let is_pod = if template_parameters.is_empty() {
-        match class_template.ty() {
+        match class_decl.ty() {
             Ok(ty) => ty.is_pod() && !has_private_fields,
             Err(e) => {
-                error!("Could not get type from {class_template:?}");
+                error!("Could not get type from {class_decl:?}");
                 false
             }
         }
@@ -749,8 +754,8 @@ pub fn extract_class_decl(
 
     debug!("Got new ClassDecl {name}");
     let cd = ClassDecl::new(
-        class_template.usr(),
-        class_template.spelling(),
+        class_decl.usr(),
+        class_decl.spelling(),
         fields,
         methods,
         namespaces,
@@ -760,7 +765,7 @@ pub fn extract_class_decl(
     );
     ast.insert_class(cd);
 
-    Ok(class_template.usr())
+    Ok(class_decl.usr())
 }
 
 fn get_method_state(method: Cursor) -> MethodState {
@@ -842,7 +847,7 @@ impl Field {
         &self,
         ast: &AST,
         class_template_parameters: &[TemplateParameterDecl],
-        class_template_args: Option<&[Option<TemplateType>]>,
+        class_template_args: Option<&[TemplateArgument]>,
     ) -> String {
         format!(
             "{}: {}",
@@ -856,16 +861,15 @@ impl Field {
 /// Choose the type replacement for the give `TemplateParameterDecl`
 pub(crate) fn specialize_template_parameter(
     decl: &TemplateParameterDecl,
-    args: Option<&[Option<TemplateType>]>,
+    args: Option<&[TemplateArgument]>,
 ) -> String {
     if let Some(args) = args {
         if let Some(arg) = args.get(decl.index()) {
-            if let Some(arg) = arg {
-                match arg {
-                    TemplateType::Type(name) => return name.to_string(),
-                    TemplateType::Integer(name) => return name.clone(),
-                };
-            }
+            match arg {
+                TemplateArgument::Type(qt) => return qt.name.clone(),
+                TemplateArgument::Integral(i) => return format!("{i}"),
+                _ => format!("arg:?")
+            };
         } else if let TemplateParameterDecl::Integer {
             default: Some(value),
             ..

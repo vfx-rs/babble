@@ -5,17 +5,22 @@ use bbl_clang::{
 };
 
 use crate::{
+    ast::AST,
     class::{ClassDecl, MethodState, RuleOfFive},
     function::{Argument, Const, PureVirtual, Static, Virtual},
     function::{Method, MethodKind},
     namespace,
     qualtype::{QualType, TypeRef},
-    template_argument::TemplateParameterDecl,
+    templates::TemplateParameterDecl,
 };
 
-pub fn create_std_string(class: Cursor, namespaces: Vec<USR>) -> ClassDecl {
-    let mut method_namespaces = namespaces.clone();
-    method_namespaces.push(class.usr());
+pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
+    let u_std = ast
+        .find_namespace("std")
+        .map(|id| ast.namespaces()[id].usr())
+        .unwrap();
+
+    let method_namespaces = vec![u_std, class.usr()];
 
     let methods = vec![
         Method::new(
@@ -135,11 +140,12 @@ pub fn create_std_string(class: Cursor, namespaces: Vec<USR>) -> ClassDecl {
 
     ClassDecl::new(
         class.usr(),
-        class.spelling(),
+        "string".to_string(),
         Vec::new(),
         methods,
-        namespaces,
-        vec![TemplateParameterDecl::typ("_CharT", 0)],
+        vec![u_std],
+        // vec![TemplateParameterDecl::typ("_CharT", 0)],
+        vec![],
         false,
         RuleOfFive {
             ctor: MethodState::Defined,

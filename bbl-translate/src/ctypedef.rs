@@ -2,7 +2,7 @@ use bbl_clang::cursor::USR;
 use bbl_extract::{
     ast::{ClassId, FunctionId, AST},
     index_map::{IndexMapKey, UstrIndexMap},
-    type_alias::{ClassTemplateSpecialization, FunctionTemplateSpecialization},
+    templates::{ClassTemplateSpecialization, FunctionTemplateSpecialization},
 };
 use hashbrown::HashSet;
 use tracing::instrument;

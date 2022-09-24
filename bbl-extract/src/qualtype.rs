@@ -11,7 +11,7 @@ use crate::{
     ast::AST,
     class::{extract_class_decl, specialize_template_parameter, ClassBindKind},
     error::Error,
-    template_argument::{TemplateParameterDecl, TemplateType},
+    templates::{TemplateArgument, TemplateParameterDecl},
     type_alias::extract_typedef_decl,
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -163,7 +163,7 @@ impl QualType {
         &self,
         ast: &AST,
         class_template_parameters: &[TemplateParameterDecl],
-        class_template_args: Option<&[Option<TemplateType>]>,
+        class_template_args: Option<&[TemplateArgument]>,
     ) -> String {
         let result = String::new();
 
@@ -219,7 +219,7 @@ impl QualType {
 fn specialize_template_type(
     t: &str,
     class_template_parameters: &[TemplateParameterDecl],
-    class_template_args: Option<&[Option<TemplateType>]>,
+    class_template_args: Option<&[TemplateArgument]>,
 ) -> String {
     // find `t` in the parameters, then use that to find the arg, if it exists
     for decl in class_template_parameters {
@@ -367,7 +367,6 @@ pub fn extract_type(
                     c_decl.try_into()?,
                     depth + 1,
                     tu,
-                    &Vec::new(),
                     ast,
                     already_visited,
                 )?;

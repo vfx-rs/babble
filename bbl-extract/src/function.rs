@@ -9,7 +9,7 @@ use tracing::instrument;
 use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, FunctionTemplateSpecializationId};
 use crate::class::MethodSpecializationId;
 use crate::qualtype::{extract_type, extract_type_from_typeref};
-use crate::template_argument::{TemplateParameterDecl, TemplateType};
+use crate::templates::{TemplateParameterDecl, TemplateArgument};
 use crate::{ast::AST, qualtype::QualType};
 use bbl_clang::cursor_kind::CursorKind;
 
@@ -38,7 +38,7 @@ impl Argument {
         &self,
         ast: &AST,
         class_template_parameters: &[TemplateParameterDecl],
-        class_template_args: Option<&[Option<TemplateType>]>,
+        class_template_args: Option<&[TemplateArgument]>,
     ) -> String {
         format!(
             "{}: {}",
@@ -190,7 +190,7 @@ impl Function {
         &self,
         ast: &AST,
         outer_template_parameters: &[TemplateParameterDecl],
-        template_args: Option<&[Option<TemplateType>]>,
+        template_args: Option<&[TemplateArgument]>,
     ) -> String {
         self.format(ast, outer_template_parameters, template_args)
     }
@@ -199,7 +199,7 @@ impl Function {
         &self,
         ast: &AST,
         outer_template_parameters: &[TemplateParameterDecl],
-        template_args: Option<&[Option<TemplateType>]>,
+        template_args: Option<&[TemplateArgument]>,
     ) -> String {
         let mut s = self.name.to_string();
 
@@ -225,7 +225,7 @@ impl Function {
         depth: usize,
         ast: &AST,
         outer_template_parameters: &[TemplateParameterDecl],
-        template_args: Option<&[Option<TemplateType>]>,
+        template_args: Option<&[TemplateArgument]>,
     ) {
         let indent = format!("{:width$}", "", width = depth * 2);
 
@@ -442,7 +442,7 @@ impl Method {
         &self,
         ast: &AST,
         class_template_parameters: &[TemplateParameterDecl],
-        class_template_args: Option<&[Option<TemplateType>]>,
+        class_template_args: Option<&[TemplateArgument]>,
     ) -> String {
         self.format(ast, class_template_parameters, class_template_args)
     }
@@ -451,7 +451,7 @@ impl Method {
         &self,
         ast: &AST,
         class_template_parameters: &[TemplateParameterDecl],
-        class_template_args: Option<&[Option<TemplateType>]>,
+        class_template_args: Option<&[TemplateArgument]>,
     ) -> String {
         let mut s = self
             .function
@@ -481,7 +481,7 @@ impl Method {
         depth: usize,
         ast: &AST,
         class_template_parameters: &[TemplateParameterDecl],
-        class_template_args: Option<&[Option<TemplateType>]>,
+        class_template_args: Option<&[TemplateArgument]>,
     ) {
         let indent = format!("{:width$}", "", width = depth * 2);
 
@@ -539,7 +539,7 @@ pub struct MethodTemplateSpecialization {
     /// ones.
     ///
     /// Revisit and maybe we want to make that a hard error
-    pub(crate) template_arguments: Vec<Option<TemplateType>>,
+    pub(crate) template_arguments: Vec<TemplateArgument>,
     /// The typedef itself is namespaced
     pub(crate) namespaces: Vec<USR>,
 }
@@ -557,7 +557,7 @@ impl MethodTemplateSpecialization {
         &self.name
     }
 
-    pub fn template_arguments(&self) -> &[Option<TemplateType>] {
+    pub fn template_arguments(&self) -> &[TemplateArgument] {
         &self.template_arguments
     }
 
