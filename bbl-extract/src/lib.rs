@@ -17,7 +17,7 @@ pub mod namespace;
 pub mod qualtype;
 pub mod stdlib;
 pub mod templates;
-pub mod type_alias;
+pub mod typedef;
 use ast::{dump, extract_ast, extract_ast_from_namespace, Include, AST};
 pub mod error;
 use error::Error;

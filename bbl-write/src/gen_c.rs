@@ -56,10 +56,10 @@ pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
 
     // Generate typedefs
     header = format!("{header}/* Typedefs */\n");
-    // for td in c_ast.typedefs.iter() {
-    //     let decl = generate_typedef(td, c_ast)?;
-    //     header = format!("{header}{decl}\n")
-    // }
+    for td in c_ast.typedefs.iter() {
+        let decl = generate_typedef(td, c_ast)?;
+        header = format!("{header}{decl}\n")
+    }
 
     writeln!(&mut header)?;
 
@@ -373,7 +373,6 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<St
             TypeKind::ULongLong => "unsigned long long".to_string(),
             TypeKind::UShort => "unsigned short".to_string(),
             TypeKind::Void => "void".to_string(),
-            // _ => qt.format(c_ast, use_public_names)?,
             _ => unimplemented!("need to implement builtin {tk}"),
         },
         CTypeRef::Ref(usr) => {
@@ -384,13 +383,12 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<St
                 // no struct with this USR, see if there's a typedef instead
                 format!("{}{const_}", td.name_external.clone())
             } else {
-                unimplemented!("no struct or typedef")
+                unimplemented!("no struct or typedef for {usr}")
             }
         }
         CTypeRef::Pointer(pointee) => {
             format!("{}*{const_}", gen_c_type(pointee, c_ast, use_public_names)?)
         }
-        // _ => qt.format(c_ast, use_public_names)?,
         _ => unimplemented!("Need to implement {qt:?}"),
     })
 }
@@ -415,13 +413,7 @@ fn generate_struct_declaration(st: &CStruct, c_ast: &CAST) -> Result<String> {
 fn generate_typedef(td: &CTypedef, c_ast: &CAST) -> Result<String> {
     Ok(format!(
         "typedef {} {};",
-        c_ast
-            .get_struct(td.typ)
-            .ok_or_else(|| Error::FailedToGenerateTypedef {
-                name: td.name_external.clone(),
-                source: Box::new(TypeError::TypeRefNotFound(td.typ))
-            })?
-            .name_internal,
+        gen_c_type(&td.underlying_type, c_ast, true)?,
         td.name_external
     ))
 }

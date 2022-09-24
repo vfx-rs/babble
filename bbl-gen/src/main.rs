@@ -86,7 +86,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ast = extract_ast_from_namespace(args.namespace.as_deref(), cur, &tu)?;
 
     debug!("\n\n");
-    ast.pretty_print(0);
+    println!("{ast:?}");
 
     Ok(())
 }

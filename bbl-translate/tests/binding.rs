@@ -51,7 +51,7 @@ public:
     let method = ast.find_method(class, "method(a: UInt) -> Int")?;
     ast.ignore_method(class, method);
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
 
@@ -90,7 +90,7 @@ public:
         None,
     )?;
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
 
     let class = ast.find_class("B")?;
 
@@ -192,7 +192,7 @@ public:
         Some("Imath_3_1"),
     )?;
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
 
     let namespace = ast.find_namespace("Imath_3_1")?;
     ast.rename_namespace(namespace, "Imath");
@@ -242,7 +242,7 @@ public:
         Err(bbl_extract::error::Error::MethodNotFound)
     ));
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
 
     Ok(())
 }
@@ -282,7 +282,7 @@ public:
         Err(bbl_extract::error::Error::MultipleMatches)
     ));
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
 
     Ok(())
 }
@@ -312,7 +312,7 @@ public:
         None,
     )?;
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
 
     let class = ast.find_class("Class")?;
     ast.specialize_class(
@@ -321,7 +321,7 @@ public:
         vec![TemplateArgument::Type(QualType::float())],
     )?;
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
     c_ast.pretty_print(0)?;
@@ -350,7 +350,7 @@ int basic_function(int&& a, float*);
         None,
     )?;
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
     assert_eq!(c_ast.structs.len(), 0);
@@ -376,7 +376,7 @@ T function_template(T&& a, float*);
         None,
     )?;
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
     let function = ast.find_function("function_template")?;
     ast.specialize_function(
         function,
@@ -384,7 +384,7 @@ T function_template(T&& a, float*);
         vec![TemplateArgument::Type(QualType::float())],
     )?;
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
     c_ast.pretty_print(0)?;
@@ -420,7 +420,7 @@ public:
         None,
     )?;
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
     let class = ast.find_class("Class")?;
     let method = ast.find_method(class, "method_template")?;
     ast.specialize_method(
@@ -430,7 +430,7 @@ public:
         vec![TemplateArgument::Type(QualType::float())],
     )?;
 
-    ast.pretty_print(0);
+    println!("{ast:?}");
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
     c_ast.pretty_print(0)?;
@@ -465,7 +465,7 @@ public:
     )?;
 
     let ast = parse_file_and_extract_ast(&filename, &cli_args_with(&args)?, true, Some("Test"))?;
-    ast.pretty_print(0);
+    println!("{ast:?}");
 
     Ok(())
 }
@@ -491,10 +491,10 @@ public:
             Some("Test"),
         )?;
 
-        ast.pretty_print(0);
+        println!("{ast:?}");
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;
-        c_ast.pretty_print(0)?;
+        println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 2);
         assert_eq!(c_ast.functions.len(), 7);

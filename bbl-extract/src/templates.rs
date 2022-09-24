@@ -1,9 +1,17 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_snake_case)]
 
-use bbl_clang::{cursor::{CurClassDecl, USR, CurClassTemplate}, translation_unit::TranslationUnit, template_argument::TemplateArgumentKind};
+use bbl_clang::{
+    cursor::{CurClassDecl, CurClassTemplate, USR},
+    template_argument::TemplateArgumentKind,
+    translation_unit::TranslationUnit,
+};
 
-use crate::{qualtype::{QualType, extract_type}, class::extract_class_decl, ast::{AST, get_namespaces_for_decl, get_qualified_name}};
+use crate::{
+    ast::{get_namespaces_for_decl, get_qualified_name, AST},
+    class::{extract_class_decl, ClassBindKind},
+    qualtype::{extract_type, QualType},
+};
 
 use super::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -135,6 +143,12 @@ impl ClassTemplateSpecialization {
 
     pub fn namespaces(&self) -> &[USR] {
         &self.namespaces
+    }
+
+    pub fn bind_kind(&self, ast: &AST) -> Result<ClassBindKind> {
+        ast.get_class(self.specialized_decl)
+            .map(|class| *class.bind_kind())
+            .ok_or(Error::ClassNotFound(self.specialized_decl.to_string()))
     }
 
     pub fn pretty_print(&self, depth: usize, ast: &AST) {

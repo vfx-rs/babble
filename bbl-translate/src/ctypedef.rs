@@ -3,15 +3,18 @@ use bbl_extract::{
     ast::{ClassId, FunctionId, AST},
     index_map::{IndexMapKey, UstrIndexMap},
     templates::{ClassTemplateSpecialization, FunctionTemplateSpecialization},
+    typedef::Typedef,
 };
 use hashbrown::HashSet;
 use tracing::instrument;
 
 use crate::{
+    build_namespace_prefix,
     cfunction::{translate_function, CFunction, CFunctionId},
     cstruct::{translate_class_template, CStruct, CStructId},
-    ctype::TypeReplacements,
+    ctype::{translate_qual_type, CQualType, TypeReplacements},
     error::Error,
+    get_c_names,
 };
 
 #[instrument(level = "trace", skip(ast, functions, used_names))]
@@ -59,33 +62,6 @@ pub fn translate_class_template_specialization(
         .ok_or_else(|| Error::ClassNotFound(cts.specialized_decl().as_str().to_string()))?;
     let class = &ast.classes()[class_id];
 
-    // let (ns_prefix_external, ns_prefix_internal) = build_namespace_prefix(ast, cts.namespaces())?;
-
-    // get unique, prefixed names for the typedef
-    // TODO (AL): need to resolve this properly: we're currently storing the name of the typedef class template
-    // specialization and then using this name when creating the monomorphizations of the class. This works well when
-    // other functions and types only refer to the CTS by its typedef name, but if they use the underlying class template
-    // name, we'll still have references to the underlying template instead of the typedef, and we'll need to patch those
-    // too.
-    /*
-    let (td_c_name_external, td_c_name_internal) = get_c_names(
-        cts.name(),
-        &ns_prefix_external,
-        &ns_prefix_internal,
-        used_names,
-    );
-
-    typedefs.insert(
-        cts.usr().into(),
-        CTypedef {
-            name_external: td_c_name_external,
-            name_internal: td_c_name_internal,
-            usr: cts.usr(),
-            typ: cts.specialized_decl(),
-        },
-    );
-    */
-
     translate_class_template(
         ast,
         class_id,
@@ -100,13 +76,54 @@ pub fn translate_class_template_specialization(
     Ok(())
 }
 
+pub fn translate_typedef(
+    ast: &AST,
+    td: &Typedef,
+    typedefs: &mut UstrIndexMap<CTypedef, CTypedefId>,
+    used_names: &mut HashSet<String>,
+) -> Result<(), Error> {
+    let (ns_prefix_external, ns_prefix_internal) = build_namespace_prefix(ast, td.namespaces())?;
+
+    // get unique, prefixed names for the typedef
+    // TODO (AL): need to resolve this properly: we're currently storing the name of the typedef class template
+    // specialization and then using this name when creating the monomorphizations of the class. This works well when
+    // other functions and types only refer to the CTS by its typedef name, but if they use the underlying class template
+    // name, we'll still have references to the underlying template instead of the typedef, and we'll need to patch those
+    // too.
+    let (td_c_name_external, td_c_name_internal) = get_c_names(
+        td.name(),
+        &ns_prefix_external,
+        &ns_prefix_internal,
+        used_names,
+    );
+
+    let type_replacements = TypeReplacements::default();
+    let underlying_type = translate_qual_type(td.underlying_type(), &[], &[], &type_replacements)
+        .map_err(|e| Error::FailedToTranslateTypedef {
+        usr: td.usr(),
+        source: Box::new(e),
+    })?;
+
+    typedefs.insert(
+        td.usr().into(),
+        CTypedef {
+            name_external: td_c_name_external,
+            name_internal: td_c_name_internal,
+            usr: td.usr(),
+            underlying_type,
+        },
+    );
+
+    Ok(())
+}
+
 #[derive(Debug)]
 pub struct CTypedef {
     pub name_external: String,
     pub name_internal: String,
     pub usr: USR,
     /// The underlying type that this typedef refers to
-    pub typ: USR,
+    pub underlying_type: CQualType,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]

@@ -7,7 +7,7 @@ use bbl_extract::{
     function::{Argument, Function, Method, MethodKind},
     index_map::{IndexMapKey, UstrIndexMap},
     qualtype::{QualType, TypeRef},
-    templates::{TemplateParameterDecl, TemplateArgument},
+    templates::{TemplateArgument, TemplateParameterDecl},
 };
 use hashbrown::HashSet;
 use tracing::{error, instrument, trace};
@@ -1211,7 +1211,9 @@ fn get_bind_kind(usr: USR, ast: &AST) -> Result<ClassBindKind> {
     } else if let Some(cts) = ast.get_class_template_specialization(usr) {
         get_bind_kind(cts.specialized_decl(), ast)
     } else if let Some(ta) = ast.get_type_alias(usr) {
-        get_bind_kind(ta.usr(), ast)
+        ta.underlying_type()
+            .get_bind_kind(ast)
+            .map_err(|e| Error::FailedToGetBindKind { usr, source: Box::new(e) })
     } else {
         Err(Error::RefNotFound(usr))
     }

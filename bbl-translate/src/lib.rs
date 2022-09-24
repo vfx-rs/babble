@@ -12,7 +12,7 @@ use cstruct::{translate_class, CStruct, CStructId};
 use ctype::TypeReplacements;
 use ctypedef::{
     translate_class_template_specialization, translate_function_template_specialization, CTypedef,
-    CTypedefId,
+    CTypedefId, translate_typedef,
 };
 use hashbrown::HashSet;
 
@@ -21,15 +21,38 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 use bbl_extract::{
     ast::{ClassId, FunctionId, AST},
-    type_alias::TypeAlias,
 };
 use tracing::{debug, warn};
+use std::fmt::Debug;
 
 pub struct CAST {
     pub structs: UstrIndexMap<CStruct, CStructId>,
     pub typedefs: UstrIndexMap<CTypedef, CTypedefId>,
     pub functions: UstrIndexMap<CFunction, CFunctionId>,
     pub includes: Vec<Include>,
+}
+
+impl Debug for CAST {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for st in self.structs.iter() {
+            write!(f, "{st:?}")?;
+        }
+
+        for td in self.typedefs.iter() {
+            write!(f, "{td:?}")?;
+        }
+
+        for fun in self.functions.iter() {
+            write!(f, "{fun:?}")?;
+        }
+
+        for inc in self.includes.iter() {
+            write!(f, "{inc:?}")?;
+        }
+
+
+        Ok(())
+    }
 }
 
 impl CAST {
@@ -169,29 +192,9 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
         translate_function_template_specialization(ast, fts, &mut functions, &mut used_names)?;
     }
 
-    /*
-    for (_type_alias_id, type_alias) in ast.type_aliases().iter().enumerate() {
-        match type_alias {
-            TypeAlias::ClassTemplateSpecialization(cts) => translate_class_template_specialization(
-                ast,
-                cts,
-                &mut structs,
-                &mut typedefs,
-                &mut functions,
-                &mut used_names,
-            )?,
-            TypeAlias::FunctionTemplateSpecialization(fts) => {
-                translate_function_template_specialization(
-                    ast,
-                    fts,
-                    &mut functions,
-                    &mut used_names,
-                )?
-            }
-            _ => todo!(),
-        }
+    for (_type_alias_id, td) in ast.type_aliases().iter().enumerate() {
+        translate_typedef(ast, td, &mut typedefs, &mut used_names)?;
     }
-    */
 
     for (function_id, function) in ast.functions().iter().enumerate() {
         if function.is_templated() {

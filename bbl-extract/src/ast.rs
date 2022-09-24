@@ -16,7 +16,7 @@ use crate::function::{extract_function, Function, Method};
 use crate::index_map::{IndexMapKey, UstrIndexMap};
 use crate::namespace::{self, extract_namespace, Namespace};
 use crate::templates::{TemplateArgument, ClassTemplateSpecialization, extract_class_template_specialization, FunctionTemplateSpecialization};
-use crate::type_alias::{extract_typedef_decl, TypeAlias};
+use crate::typedef::{extract_typedef_decl, Typedef};
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -32,7 +32,7 @@ pub struct AST {
     pub(crate) function_template_specializations:
         UstrIndexMap<FunctionTemplateSpecialization, FunctionTemplateSpecializationId>,
     pub(crate) namespaces: UstrIndexMap<Namespace, NamespaceId>,
-    pub(crate) type_aliases: UstrIndexMap<TypeAlias, TypeAliasId>,
+    pub(crate) type_aliases: UstrIndexMap<Typedef, TypeAliasId>,
     pub(crate) includes: Vec<Include>,
 }
 
@@ -163,7 +163,7 @@ impl AST {
     }
 
     /// Get a reference to the map holding all the [`TypeAlias`]es extracted from the translation unit
-    pub fn type_aliases(&self) -> &UstrIndexMap<TypeAlias, TypeAliasId> {
+    pub fn type_aliases(&self) -> &UstrIndexMap<Typedef, TypeAliasId> {
         &self.type_aliases
     }
 
@@ -459,7 +459,7 @@ impl AST {
             .insert(class.usr().into(), class);
     }
 
-    pub fn get_type_alias(&self, usr: USR) -> Option<&TypeAlias> {
+    pub fn get_type_alias(&self, usr: USR) -> Option<&Typedef> {
         self.type_aliases.get(&usr.into())
     }
 
@@ -486,7 +486,7 @@ impl AST {
             .insert(function.usr().into(), function);
     }
 
-    pub fn insert_type_alias(&mut self, type_alias: TypeAlias) -> usize {
+    pub fn insert_type_alias(&mut self, type_alias: Typedef) -> usize {
         self.type_aliases
             .insert(type_alias.usr().into(), type_alias)
     }
@@ -514,34 +514,6 @@ impl AST {
             Ok((&class.name, class.rename.as_ref()))
         } else {
             Err(Error::ClassOrNamespaceNotFound(usr))
-        }
-    }
-
-    pub fn pretty_print(&self, depth: usize) {
-        for inc in self.includes.iter() {
-            println!("{}", inc.get_statement());
-        }
-
-        for namespace in self.namespaces.iter() {
-            namespace.pretty_print(depth + 1, self);
-            println!();
-        }
-
-        println!();
-        for class in self.classes.iter() {
-            class.pretty_print(depth + 1, self, None);
-            println!();
-        }
-
-        println!();
-        for function in self.functions.iter() {
-            function.pretty_print(depth + 1, self, &[], None);
-            println!();
-        }
-
-        for type_alias in self.type_aliases.iter() {
-            type_alias.pretty_print(depth + 1, self, &[]);
-            println!();
         }
     }
 }
@@ -587,10 +559,6 @@ pub fn extract_ast(
 
     match c.kind() {
         CursorKind::ClassDecl => {
-            // We might extract a class template when visiting a type alias so check that we haven't already done so
-            // Also make sure that we're dealing with a definition rather than a forward declaration
-            // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
-            // (for opaque types in the API)
             if c.is_definition() {
                 extract_class_decl(c.try_into()?, depth + 1, tu, ast, already_visited)?;
             }
@@ -598,10 +566,6 @@ pub fn extract_ast(
             return Ok(());
         }
         CursorKind::ClassTemplate => {
-            // We might extract a class template when visiting a type alias so check that we haven't already done so
-            // Also make sure that we're dealing with a definition rather than a forward declaration
-            // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
-            // (for opaque types in the API)
             if c.is_definition() {
                 let c_class_template: CurClassTemplate = c.try_into()?;
                 extract_class_decl(
@@ -616,10 +580,6 @@ pub fn extract_ast(
             return Ok(());
         }
         CursorKind::StructDecl => {
-            // We might extract a class template when visiting a type alias so check that we haven't already done so
-            // Also make sure that we're dealing with a definition rather than a forward declaration
-            // TODO: We're probably going to need to handle forward declarations for which we never find a definition too
-            // (for opaque types in the API)
             if c.is_definition() {
                 let c_struct: CurStructDecl = c.try_into()?;
                 extract_class_decl(
@@ -635,33 +595,6 @@ pub fn extract_ast(
         }
         CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
             extract_typedef_decl(c.try_into()?, depth + 1, already_visited, ast, tu)?;
-            return Ok(());
-            // check if this type alias has a TemplateRef child, in which case it's a class template specialization
-            /*
-            if c.has_child_of_kind(CursorKind::TemplateRef) {
-                let cts = extract_class_template_specialization(
-                    c.try_into()?,
-                    depth + 1,
-                    already_visited,
-                    ast,
-                    tu,
-                    &namespaces,
-                )
-                .map_err(|e| {
-                    Error::FailedToExtractClassTemplateSpecialization {
-                        name: c.display_name(),
-                        source: Box::new(e),
-                    }
-                })?;
-                ast.insert_class_template_specialization(cts);
-            } else {
-                debug!(
-                    "TypeAliasDecl {} not handled as it is not a CTS",
-                    c.display_name()
-                );
-            }
-            */
-
             return Ok(());
         }
         CursorKind::Namespace => {
@@ -697,9 +630,6 @@ pub fn extract_ast(
 
             return Ok(());
         }
-        // CursorKind::NamespaceRef => {
-
-        // }
         _ => (),
     }
 
@@ -707,7 +637,6 @@ pub fn extract_ast(
 
     if let Ok(cr) = c.referenced() {
         if cr != c && !already_visited.contains(&cr.usr()) {
-            // print!("{}-> ", indent);
             if !cr.usr().is_empty() {
                 already_visited.push(cr.usr());
             }
@@ -764,7 +693,7 @@ fn get_template_args(c: Cursor) -> String {
                     }
                 }
                 Ok(k) => args.push(format!("{k:?}")),
-                Err(e) => args.push(format!("Invalid")),
+                Err(e) => args.push("Invalid".to_string()),
             };
         }
 

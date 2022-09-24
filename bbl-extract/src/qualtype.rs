@@ -12,7 +12,7 @@ use crate::{
     class::{extract_class_decl, specialize_template_parameter, ClassBindKind},
     error::Error,
     templates::{TemplateArgument, TemplateParameterDecl},
-    type_alias::extract_typedef_decl,
+    typedef::extract_typedef_decl,
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -58,6 +58,28 @@ impl TypeRef {
 
         Ok(result)
     }
+
+    pub fn get_bind_kind(&self, ast: &AST) -> Result<ClassBindKind> {
+        use TypeRef::*;
+        match self {
+            Builtin(_) => Ok(ClassBindKind::ValueType),
+            Ref(usr) => {
+                if let Some(class) = ast.get_class(*usr) {
+                    Ok(*class.bind_kind())
+                } else if let Some(cts) = ast.get_class_template_specialization(*usr) {
+                    cts.bind_kind(ast)
+                } else if let Some(td) = ast.get_type_alias(*usr) {
+                    todo!()
+                } else {
+                    Err(Error::ClassNotFound(usr.to_string()))
+                }
+            }
+            Pointer(p) => p.type_ref.get_bind_kind(ast),
+            LValueReference(p) => p.type_ref.get_bind_kind(ast),
+            RValueReference(p) => p.type_ref.get_bind_kind(ast),
+            _ => unreachable!()
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -85,6 +107,10 @@ impl QualType {
             is_const: false,
             type_ref: TypeRef::Unknown(tk),
         }
+    }
+
+    pub fn get_bind_kind(&self, ast: &AST) -> Result<ClassBindKind> {
+        self.type_ref.get_bind_kind(ast)
     }
 
     pub fn float() -> Self {

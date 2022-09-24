@@ -18,20 +18,20 @@ use std::fmt::Debug;
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub struct TypeAlias {
+pub struct Typedef {
     name: String,
     usr: USR,
     namespaces: Vec<USR>,
     underlying_type: QualType,
 }
 
-impl Debug for TypeAlias {
+impl Debug for Typedef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "TypeAlias {} = {:?}", self.name, self.underlying_type)
     }
 }
 
-impl TypeAlias {
+impl Typedef {
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -55,7 +55,7 @@ impl TypeAlias {
         outer_template_parameters: &[TemplateParameterDecl],
     ) {
         println!(
-            "+ TypeAlias {} {} = {}",
+            "+ Typedef {} {} = {}",
             self.usr,
             get_qualified_name(&self.name, &self.namespaces, ast).unwrap(),
             self.underlying_type.format(ast, &[], None)
@@ -74,7 +74,7 @@ pub fn extract_typedef_decl<'a>(
     already_visited: &mut Vec<USR>,
     ast: &'a mut AST,
     tu: &TranslationUnit,
-) -> Result<&'a TypeAlias> {
+) -> Result<&'a Typedef> {
     let usr = c_typedef.usr();
     if already_visited.contains(&usr) {
         trace!("already visiting. skipping.");
@@ -97,7 +97,7 @@ pub fn extract_typedef_decl<'a>(
         tu,
     )?;
 
-    let id = ast.insert_type_alias(TypeAlias {
+    let id = ast.insert_type_alias(Typedef {
         name,
         usr,
         namespaces,

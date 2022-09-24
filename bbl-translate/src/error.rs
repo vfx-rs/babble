@@ -54,6 +54,16 @@ pub enum Error {
         usr: USR,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to get bind kind for \"{usr}\"")]
+    FailedToGetBindKind {
+        usr: USR,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    #[error("Failed to translate typedef type for \"{usr}\"")]
+    FailedToTranslateTypedef {
+        usr: USR,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

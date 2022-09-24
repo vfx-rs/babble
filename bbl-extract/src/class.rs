@@ -868,7 +868,7 @@ pub(crate) fn specialize_template_parameter(
             match arg {
                 TemplateArgument::Type(qt) => return qt.name.clone(),
                 TemplateArgument::Integral(i) => return format!("{i}"),
-                _ => format!("arg:?")
+                _ => format!("{arg:?}")
             };
         } else if let TemplateParameterDecl::Integer {
             default: Some(value),
