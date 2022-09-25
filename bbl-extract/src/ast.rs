@@ -99,7 +99,7 @@ impl Include {
 
     /// Get the formatted filename, including brackets.
     ///
-    /// i.e. for `#include <dir/file.h>` this would return "<dir/file.h>""
+    /// i.e. for `#include <dir/file.h>` this would return "<dir/file.h>"
     pub fn get_bracketed_name(&self) -> String {
         format!("{0}{1}{0}", self.bracket(), self.name())
     }

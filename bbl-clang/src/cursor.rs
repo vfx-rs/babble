@@ -9,21 +9,22 @@ use super::string::CXStringEx;
 use clang_sys::{
     clang_CXXConstructor_isConvertingConstructor, clang_CXXConstructor_isCopyConstructor,
     clang_CXXConstructor_isDefaultConstructor, clang_CXXConstructor_isMoveConstructor,
-    clang_CXXMethod_isConst, clang_CXXMethod_isDefaulted, clang_CXXMethod_isPureVirtual,
-    clang_CXXMethod_isStatic, clang_CXXMethod_isVirtual, clang_CXXRecord_isAbstract,
-    clang_Cursor_getArgument, clang_Cursor_getNumArguments, clang_Cursor_getNumTemplateArguments,
-    clang_Cursor_getTemplateArgumentKind, clang_Cursor_getTemplateArgumentType,
-    clang_Cursor_getTemplateArgumentUnsignedValue, clang_Cursor_getTemplateArgumentValue,
-    clang_Cursor_getVarDeclInitializer, clang_Cursor_hasVarDeclExternalStorage,
-    clang_Cursor_hasVarDeclGlobalStorage, clang_equalCursors, clang_getCXXAccessSpecifier,
-    clang_getCanonicalCursor, clang_getCursorDefinition, clang_getCursorDisplayName,
+    clang_CXXMethod_isConst, clang_CXXMethod_isDefaulted, clang_CXXMethod_isDeleted,
+    clang_CXXMethod_isPureVirtual, clang_CXXMethod_isStatic, clang_CXXMethod_isVirtual,
+    clang_CXXRecord_isAbstract, clang_Cursor_getArgument, clang_Cursor_getNumArguments,
+    clang_Cursor_getNumTemplateArguments, clang_Cursor_getTemplateArgumentKind,
+    clang_Cursor_getTemplateArgumentType, clang_Cursor_getTemplateArgumentUnsignedValue,
+    clang_Cursor_getTemplateArgumentValue, clang_Cursor_getVarDeclInitializer,
+    clang_Cursor_hasVarDeclExternalStorage, clang_Cursor_hasVarDeclGlobalStorage,
+    clang_equalCursors, clang_getCXXAccessSpecifier, clang_getCanonicalCursor,
+    clang_getCursorDefinition, clang_getCursorDisplayName,
     clang_getCursorExceptionSpecificationType, clang_getCursorKind, clang_getCursorLocation,
     clang_getCursorPrettyPrinted, clang_getCursorPrintingPolicy, clang_getCursorReferenced,
     clang_getCursorResultType, clang_getCursorSemanticParent, clang_getCursorSpelling,
     clang_getCursorType, clang_getCursorUSR, clang_getNullCursor,
-    clang_getTypedefDeclUnderlyingType, clang_isCursorDefinition, clang_isInvalid,
-    clang_visitChildren, CXChildVisitResult, CXChildVisit_Break, CXChildVisit_Continue,
-    CXChildVisit_Recurse, CXClientData, CXCursor, clang_getSpecializedCursorTemplate,
+    clang_getSpecializedCursorTemplate, clang_getTypedefDeclUnderlyingType,
+    clang_isCursorDefinition, clang_isInvalid, clang_visitChildren, CXChildVisitResult,
+    CXChildVisit_Break, CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor,
 };
 use std::{
     convert::TryFrom,
@@ -295,9 +296,7 @@ impl Cursor {
     }
 
     pub fn cxx_method_is_deleted(&self) -> bool {
-        // TODO(AL): implement this properly once we've patched libclang to implement this function
-        // unsafe { clang_CXXMethod_isDeleted(self.inner) != 0 }
-        false
+        unsafe { clang_CXXMethod_isDeleted(self.inner) != 0 }
     }
 
     pub fn cxx_method_is_virtual(&self) -> bool {

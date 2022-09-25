@@ -594,8 +594,6 @@ pub fn extract_class_decl(
         }
         match member.kind() {
             CursorKind::TemplateTypeParameter => {
-                // TODO(AL): Doesn't seem to be a way to get a type default - probably doesn't matter since we only need
-                // the types for including in cpp instantiations so they will be defaulted there anyway?
                 let name = member.display_name();
                 template_parameters.push(TemplateParameterDecl::Type { name, index });
                 index += 1;
