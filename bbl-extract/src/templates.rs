@@ -23,7 +23,6 @@ use std::{
 
 pub fn extract_class_template_specialization(
     c_class_decl: CurClassDecl,
-    depth: usize,
     already_visited: &mut Vec<USR>,
     ast: &mut AST,
     tu: &TranslationUnit,
@@ -44,7 +43,6 @@ pub fn extract_class_template_specialization(
 
     extract_class_decl(
         specialized_decl.as_class_decl(),
-        depth,
         tu,
         ast,
         already_visited,
@@ -87,7 +85,6 @@ pub fn extract_template_args(
                 let ty = c_class_decl.template_argument_type(i as u32)?;
                 result.push(TemplateArgument::Type(extract_type(
                     ty,
-                    0,
                     &[],
                     already_visited,
                     ast,

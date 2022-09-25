@@ -568,20 +568,19 @@ impl MethodTemplateSpecialization {
 
 pub fn extract_argument(
     c_arg: Cursor,
-    depth: usize,
     template_parameters: &[String],
     already_visited: &mut Vec<USR>,
     ast: &mut AST,
     tu: &TranslationUnit,
 ) -> Result<Argument> {
     let children = c_arg.children();
-    trace!("{:width$}extracting arg {c_arg:?}", "", width = depth * 2);
+    trace!("extracting arg {c_arg:?}");
 
     let ty = c_arg.ty()?;
-    trace!("{:width$}  has type {ty:?}", "", width = depth * 2);
+    trace!("  has type {ty:?}");
 
     let qual_type = 
-        extract_type(ty, depth + 1, template_parameters, already_visited, ast, tu)?;
+        extract_type(ty, template_parameters, already_visited, ast, tu)?;
 
     Ok(Argument {
         name: c_arg.spelling(),
@@ -589,21 +588,18 @@ pub fn extract_argument(
     })
 }
 
-#[instrument(skip(depth, already_visited, tu, ast), level = "trace")]
+#[instrument(skip(already_visited, tu, ast), level = "trace")]
 pub fn extract_function(
     c_function: Cursor,
-    depth: usize,
     extra_template_parameters: &[TemplateParameterDecl],
     already_visited: &mut Vec<USR>,
     tu: &TranslationUnit,
     ast: &mut AST,
 ) -> Result<Function> {
-    let indent = format!("{:width$}", "", width = depth * 2);
-
     let c_function = c_function.canonical()?;
 
     debug!(
-        "{indent}+ CXXMethod {} {}",
+        "+ CXXMethod {} {}",
         c_function.display_name(),
         if c_function.cxx_method_is_const() {
             "const"
@@ -661,7 +657,6 @@ pub fn extract_function(
     let result = 
         extract_type(
             ty_result,
-            depth + 1,
             &string_template_parameters,
             already_visited,
             ast,
@@ -679,13 +674,12 @@ pub fn extract_function(
     let mut i = 0;
     let mut it = children.iter().skip(skip);
     for c_arg in it {
-        debug!("{indent}    arg: {}", c_arg.display_name());
+        debug!("    arg: {}", c_arg.display_name());
 
         if c_arg.kind() == CursorKind::ParmDecl {
             arguments.push(
                 extract_argument(
                     *c_arg,
-                    depth,
                     &string_template_parameters,
                     already_visited,
                     ast,
@@ -706,7 +700,7 @@ pub fn extract_function(
 
     for child in c_function.children() {
         debug!(
-            "{indent}    - {}: {} {}",
+            "    - {}: {} {}",
             child.display_name(),
             child.kind(),
             child.usr()
@@ -722,7 +716,7 @@ pub fn extract_function(
                 };
 
                 debug!(
-                    "{indent}      - {}: {} {}",
+                    "      - {}: {} {}",
                     c_ref.display_name(),
                     c_ref.kind(),
                     c_ref.usr()
@@ -748,21 +742,18 @@ pub fn extract_function(
     ))
 }
 
-#[instrument(skip(depth, already_visited, tu, ast), level = "trace")]
+#[instrument(skip(already_visited, tu, ast), level = "trace")]
 pub fn extract_method(
     c_method: Cursor,
-    depth: usize,
     class_template_parameters: &[TemplateParameterDecl],
     already_visited: &mut Vec<USR>,
     tu: &TranslationUnit,
     ast: &mut AST,
 ) -> Result<Method> {
-    let indent = format!("{:width$}", "", width = depth * 2);
-
     let c_method = c_method.canonical()?;
 
     debug!(
-        "{indent}+ CXXMethod {} {}",
+        "+ CXXMethod {} {}",
         c_method.display_name(),
         if c_method.cxx_method_is_const() {
             "const"
@@ -792,7 +783,6 @@ pub fn extract_method(
     Ok(Method {
         function: extract_function(
             c_method,
-            depth,
             class_template_parameters,
             already_visited,
             tu,

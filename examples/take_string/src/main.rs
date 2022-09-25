@@ -62,7 +62,7 @@ pub fn main() {
 
         let name = CppString::from("VFX Rustaceans");
 
-        let mut out = CppString::new();
+        let out = CppString::new();
         ffi::Test_Class_take_string(&mut tc, out.inner, name.inner);
 
         out.to_string()

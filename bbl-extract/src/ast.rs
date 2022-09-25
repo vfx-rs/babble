@@ -555,12 +555,10 @@ pub fn extract_ast(
         // println!("");
         return Ok(());
     }
-    let indent = format!("{:width$}", "", width = depth * 2);
-
     match c.kind() {
         CursorKind::ClassDecl => {
             if c.is_definition() {
-                extract_class_decl(c.try_into()?, depth + 1, tu, ast, already_visited)?;
+                extract_class_decl(c.try_into()?, tu, ast, already_visited)?;
             }
 
             return Ok(());
@@ -570,7 +568,6 @@ pub fn extract_ast(
                 let c_class_template: CurClassTemplate = c.try_into()?;
                 extract_class_decl(
                     c_class_template.as_class_decl(),
-                    depth + 1,
                     tu,
                     ast,
                     already_visited,
@@ -584,7 +581,6 @@ pub fn extract_ast(
                 let c_struct: CurStructDecl = c.try_into()?;
                 extract_class_decl(
                     c_struct.as_class_decl(),
-                    depth + 1,
                     tu,
                     ast,
                     already_visited,
@@ -594,7 +590,7 @@ pub fn extract_ast(
             return Ok(());
         }
         CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
-            extract_typedef_decl(c.try_into()?, depth + 1, already_visited, ast, tu)?;
+            extract_typedef_decl(c.try_into()?, already_visited, ast, tu)?;
             return Ok(());
         }
         CursorKind::Namespace => {
@@ -619,7 +615,7 @@ pub fn extract_ast(
         }
         CursorKind::FunctionDecl | CursorKind::FunctionTemplate => {
             let fun =
-                extract_function(c, depth + 1, &[], already_visited, tu, ast).map_err(|e| {
+                extract_function(c, &[], already_visited, tu, ast).map_err(|e| {
                     Error::FailedToExtractFunction {
                         name: c.display_name(),
                         source: Box::new(e),
@@ -633,6 +629,7 @@ pub fn extract_ast(
         _ => (),
     }
 
+    let indent = format!("{:width$}", "", width = depth * 2);
     trace!("{indent}{}: {} {}", c.kind(), c.display_name(), c.usr());
 
     if let Ok(cr) = c.referenced() {

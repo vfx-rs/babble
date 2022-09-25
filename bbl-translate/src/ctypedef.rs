@@ -14,7 +14,6 @@ use crate::{
     cstruct::{translate_class_template, CStruct, CStructId},
     ctype::{translate_qual_type, CQualType, TypeReplacements},
     error::Error,
-    get_c_names,
 };
 
 #[instrument(level = "trace", skip(ast, functions, used_names))]

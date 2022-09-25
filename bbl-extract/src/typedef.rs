@@ -67,10 +67,9 @@ impl Typedef {
     }
 }
 
-#[instrument(skip(depth, already_visited, ast, tu), level = "trace")]
+#[instrument(skip(already_visited, ast, tu), level = "trace")]
 pub fn extract_typedef_decl<'a>(
     c_typedef: CurTypedef,
-    depth: usize,
     already_visited: &mut Vec<USR>,
     ast: &'a mut AST,
     tu: &TranslationUnit,
@@ -88,7 +87,6 @@ pub fn extract_typedef_decl<'a>(
 
     let underlying_type = extract_type(
         c_typedef.underlying_type()?,
-        depth + 1,
         &[],
         already_visited,
         ast,

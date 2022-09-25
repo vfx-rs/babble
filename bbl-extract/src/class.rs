@@ -540,16 +540,13 @@ impl Display for ClassDecl {
     }
 }
 
-#[instrument(skip(depth, tu, ast, already_visited), level = "trace")]
+#[instrument(skip(tu, ast, already_visited), level = "trace")]
 pub fn extract_class_decl(
     class_decl: CurClassDecl,
-    depth: usize,
     tu: &TranslationUnit,
     ast: &mut AST,
     already_visited: &mut Vec<USR>,
 ) -> Result<USR> {
-    let indent = format!("{:width$}", "", width = depth * 2);
-
     // Check for std:: types we're going to extract manually here
     if class_decl.display_name().starts_with("basic_string<") {
         debug!("Extracting basic_string {}", class_decl.usr());
@@ -561,7 +558,7 @@ pub fn extract_class_decl(
 
     if class_decl.specialized_template().is_ok() {
         // this is a class template specialization, handle it separately
-        return extract_class_template_specialization(class_decl, depth, already_visited, ast, tu);
+        return extract_class_template_specialization(class_decl, already_visited, ast, tu);
     }
 
     if already_visited.contains(&class_decl.usr()) {
@@ -571,7 +568,7 @@ pub fn extract_class_decl(
     }
 
     trace!(
-        "{indent}extract_class_decl({}) {}",
+        "extract_class_decl({}) {}",
         class_decl.usr(),
         class_decl.display_name()
     );
@@ -632,7 +629,6 @@ pub fn extract_class_decl(
                     if access == AccessSpecifier::Public {
                         match extract_method(
                             member,
-                            depth + 1,
                             &template_parameters,
                             already_visited,
                             tu,
@@ -681,7 +677,6 @@ pub fn extract_class_decl(
                     if access == AccessSpecifier::Public {
                         let field = extract_field(
                             member,
-                            depth,
                             &template_parameters,
                             already_visited,
                             ast,
@@ -703,27 +698,27 @@ pub fn extract_class_decl(
                 }
             }
             _ => {
-                debug!("{indent}  {member:?}");
+                debug!("  {member:?}");
                 for child in member.children() {
-                    debug!("{indent}    {child:?}");
+                    debug!("    {child:?}");
                     match child.kind() {
                         CursorKind::TypeRef => {
                             if let Ok(c) = child.referenced() {
-                                debug!("{indent}    -> {c:?}");
+                                debug!("    -> {c:?}");
                             }
                         }
                         CursorKind::ParmDecl => {
                             if let Ok(ty) = child.ty() {
-                                debug!("{indent}      type {ty:?}")
+                                debug!("      type {ty:?}")
                             }
 
                             for c in child.children() {
-                                debug!("{indent}      {c:?}");
+                                debug!("      {c:?}");
                             }
                         }
                         CursorKind::CompoundStmt => {
                             for stmt in child.children() {
-                                debug!("{indent}      {stmt:?}");
+                                debug!("      {stmt:?}");
                             }
                         }
                         _ => (),
@@ -789,14 +784,11 @@ fn method_is_move_assignment_operator(method: Cursor, class: Cursor) -> bool {
 
 pub fn extract_field(
     c_field: Cursor,
-    depth: usize,
     class_template_parameters: &[TemplateParameterDecl],
     already_visited: &mut Vec<USR>,
     ast: &mut AST,
     tu: &TranslationUnit,
 ) -> Result<Field> {
-    let indent = format!("{:width$}", "", width = depth * 2);
-
     let template_parameters = class_template_parameters
         .iter()
         .map(|t| t.name().to_string())
@@ -805,7 +797,6 @@ pub fn extract_field(
     let ty = c_field.ty()?;
     let qual_type = extract_type(
         ty,
-        depth + 1,
         &template_parameters,
         already_visited,
         ast,

@@ -289,10 +289,9 @@ impl Display for QualType {
 }
 
 /// Extract a qualified type from a clang Type
-#[instrument(skip(depth, already_visited, ast, tu), level = "trace")]
+#[instrument(skip(already_visited, ast, tu), level = "trace")]
 pub fn extract_type(
     ty: Type,
-    depth: usize,
     template_parameters: &[String],
     already_visited: &mut Vec<USR>,
     ast: &mut AST,
@@ -318,21 +317,18 @@ pub fn extract_type(
         })
     } else if let Ok(c_decl) = ty.type_declaration() {
         trace!(
-            "{:width$}type {name} has decl {spelling} {usr}",
-            "",
-            width = 2 * depth,
+            "type {name} has decl {spelling} {usr}",
             spelling = c_decl.spelling(),
             usr = c_decl.usr()
         );
         // extract here if we need to
         let u_ref = match c_decl.kind() {
             CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
-                extract_typedef_decl(c_decl.try_into()?, depth + 1, already_visited, ast, tu)?
+                extract_typedef_decl(c_decl.try_into()?, already_visited, ast, tu)?
             }
             CursorKind::ClassDecl => {
                 extract_class_decl(
                     c_decl.try_into()?,
-                    depth + 1,
                     tu,
                     ast,
                     already_visited,
@@ -353,7 +349,6 @@ pub fn extract_type(
                 let pointee = ty.pointee_type()?;
                 let ty_ref = extract_type(
                     pointee,
-                    depth + 1,
                     template_parameters,
                     already_visited,
                     ast,
@@ -369,7 +364,6 @@ pub fn extract_type(
                 let pointee = ty.pointee_type()?;
                 let ty_ref = extract_type(
                     pointee,
-                    depth + 1,
                     template_parameters,
                     already_visited,
                     ast,
@@ -385,7 +379,6 @@ pub fn extract_type(
                 let pointee = ty.pointee_type()?;
                 let ty_ref = extract_type(
                     pointee,
-                    depth + 1,
                     template_parameters,
                     already_visited,
                     ast,
