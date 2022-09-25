@@ -74,13 +74,11 @@ pub fn extract_typedef_decl<'a>(
     already_visited: &mut Vec<USR>,
     ast: &'a mut AST,
     tu: &TranslationUnit,
-) -> Result<&'a Typedef> {
+) -> Result<USR> {
     let usr = c_typedef.usr();
     if already_visited.contains(&usr) {
         trace!("already visiting. skipping.");
-        return ast
-            .get_type_alias(c_typedef.usr())
-            .ok_or_else(|| Error::TypeAliasNotFound(c_typedef.usr()));
+        return Ok(usr);
     } else {
         already_visited.push(usr);
     }
@@ -104,10 +102,7 @@ pub fn extract_typedef_decl<'a>(
         underlying_type,
     });
 
-    // literally just inserted it
-    let ta = ast.get_type_alias(usr).unwrap();
-
-    Ok(ta)
+    Ok(usr)
 }
 
 #[cfg(test)]
@@ -163,8 +158,12 @@ mod tests {
 
                     ClassDecl c:@S@B B rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
 
-                    ClassTemplateSpecialization c:@APtr APtr specializes=c:@ST>2#T#NI@shared_ptr template_arguments=[Some(Type(c:@S@A))] namespaces=[]
-                    ClassTemplateSpecialization c:ec50d40f103284de.cpp@T@BPtr BPtr specializes=c:@ST>2#T#NI@shared_ptr template_arguments=[Some(Type(c:@S@B))] namespaces=[]
+                    TypeAlias APtr = shared_ptr<A>
+                    TypeAlias BPtr = shared_ptr<B>
+                    TypeAlias APtr2 = APtr
+                    TypeAlias BPtr2 = BPtr
+                    ClassTemplateSpecialization c:@S@shared_ptr>#$@S@A#VI4 shared_ptr_A_4_ specialized_decl=c:@ST>2#T#NI@shared_ptr template_arguments=[A, 4] namespaces=[]
+                    ClassTemplateSpecialization c:@S@shared_ptr>#$@S@B#VI4 shared_ptr_B_4_ specialized_decl=c:@ST>2#T#NI@shared_ptr template_arguments=[B, 4] namespaces=[]
             "#
                 )
             );

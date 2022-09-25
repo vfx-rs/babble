@@ -80,22 +80,13 @@ pub fn translate_typedef(
     ast: &AST,
     td: &Typedef,
     typedefs: &mut UstrIndexMap<CTypedef, CTypedefId>,
-    used_names: &mut HashSet<String>,
 ) -> Result<(), Error> {
     let (ns_prefix_external, ns_prefix_internal) = build_namespace_prefix(ast, td.namespaces())?;
 
-    // get unique, prefixed names for the typedef
-    // TODO (AL): need to resolve this properly: we're currently storing the name of the typedef class template
-    // specialization and then using this name when creating the monomorphizations of the class. This works well when
-    // other functions and types only refer to the CTS by its typedef name, but if they use the underlying class template
-    // name, we'll still have references to the underlying template instead of the typedef, and we'll need to patch those
-    // too.
-    let (td_c_name_external, td_c_name_internal) = get_c_names(
-        td.name(),
-        &ns_prefix_external,
-        &ns_prefix_internal,
-        used_names,
-    );
+    // we don't sgenerate unique names for typedefs, because it's perfectly fine to typedef one name to itself, and this
+    // allows us to seamlessly handle manual implementations for typedef'd templated std types like std::string
+    let td_c_name_external = format!("{ns_prefix_external}{}", td.name());
+    let td_c_name_internal = format!("{ns_prefix_internal}{}", td.name());
 
     let type_replacements = TypeReplacements::default();
     let underlying_type = translate_qual_type(td.underlying_type(), &[], &[], &type_replacements)

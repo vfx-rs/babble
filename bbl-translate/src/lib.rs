@@ -193,7 +193,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
     }
 
     for (_type_alias_id, td) in ast.type_aliases().iter().enumerate() {
-        translate_typedef(ast, td, &mut typedefs, &mut used_names)?;
+        translate_typedef(ast, td, &mut typedefs)?;
     }
 
     for (function_id, function) in ast.functions().iter().enumerate() {

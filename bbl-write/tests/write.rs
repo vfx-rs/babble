@@ -352,25 +352,24 @@ fn write_take_std_string() -> Result<(), Error> {
             Some("Test_1_0"),
         )?;
 
-    println!("{ast:?}");
+        println!("{ast:?}");
 
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;
-        // println!("{c_ast:?}");
+        println!("{c_ast:?}");
 
-        // assert_eq!(c_ast.structs.len(), 2);
-        // assert_eq!(c_ast.functions.len(), 13);
+        assert_eq!(c_ast.structs.len(), 2);
+        assert_eq!(c_ast.functions.len(), 13);
 
-        // let (c_header, c_source) = gen_c("test", &c_ast)?;
-        // println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
         Ok(())
     })
 }
 
-/*
 #[test]
 fn write_take_std_string_fun() -> Result<(), Error> {
     run_test(|| {
@@ -387,7 +386,7 @@ fn write_take_std_string_fun() -> Result<(), Error> {
             Some("Test_1_0"),
         )?;
 
-        ast.pretty_print(0);
+        println!("{ast:?}");
 
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
@@ -404,7 +403,6 @@ fn write_take_std_string_fun() -> Result<(), Error> {
         Ok(())
     })
 }
-*/
 
 #[test]
 fn build_take_std_string() -> Result<(), Error> {

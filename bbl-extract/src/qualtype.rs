@@ -288,65 +288,6 @@ impl Display for QualType {
     }
 }
 
-/// Get a qualified type from a reference to a type
-#[instrument(skip(depth), level = "trace")]
-pub fn extract_type_from_typeref(c_tr: Cursor, depth: usize) -> Result<QualType> {
-    if let Ok(c_ref) = c_tr.referenced() {
-        let c_ref =
-            if c_ref.kind() == CursorKind::ClassDecl || c_ref.kind() == CursorKind::ClassTemplate {
-                c_ref.canonical()?
-            } else {
-                c_ref
-            };
-
-        let is_const = if let Ok(ty) = c_tr.ty() {
-            ty.is_const_qualified()
-        } else {
-            false
-        };
-
-        match c_ref.kind() {
-            CursorKind::ClassDecl | CursorKind::ClassTemplate => {
-                let c_ref = c_ref.canonical()?;
-                Ok(QualType {
-                    name: c_ref.spelling(),
-                    is_const,
-                    type_ref: TypeRef::Ref(c_ref.usr()),
-                })
-            }
-            CursorKind::TemplateTypeParameter => Ok(QualType {
-                name: c_ref.spelling(),
-                is_const,
-                type_ref: TypeRef::TemplateTypeParameter(c_ref.spelling()),
-            }),
-            CursorKind::TypedefDecl => Ok(QualType {
-                name: c_ref.spelling(),
-                is_const,
-                type_ref: TypeRef::Ref(c_ref.usr()),
-            }),
-            _ => {
-                let loc = c_tr.location().spelling_location();
-                error!(
-                    "{:width$}[{file}:{line}] unhandled type {c_tr:?} is a {c_ref:?}",
-                    "",
-                    width = depth * 2,
-                    file = loc.file.file_name(),
-                    line = loc.line,
-                    c_tr = c_tr,
-                    c_ref = c_ref
-                );
-                Ok(QualType::unknown(c_ref.ty()?.kind()))
-            }
-        }
-    } else {
-        error!(
-            "could not get referenced type from TypeRef {}",
-            c_tr.display_name()
-        );
-        Ok(QualType::unknown(c_tr.ty()?.kind()))
-    }
-}
-
 /// Extract a qualified type from a clang Type
 #[instrument(skip(depth, already_visited, ast, tu), level = "trace")]
 pub fn extract_type(
@@ -384,9 +325,9 @@ pub fn extract_type(
             usr = c_decl.usr()
         );
         // extract here if we need to
-        match c_decl.kind() {
+        let u_ref = match c_decl.kind() {
             CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
-                extract_typedef_decl(c_decl.try_into()?, depth + 1, already_visited, ast, tu)?;
+                extract_typedef_decl(c_decl.try_into()?, depth + 1, already_visited, ast, tu)?
             }
             CursorKind::ClassDecl => {
                 extract_class_decl(
@@ -395,16 +336,16 @@ pub fn extract_type(
                     tu,
                     ast,
                     already_visited,
-                )?;
+                )?
             }
-            CursorKind::TypeRef => warn!("Should extract class here"),
-            _ => warn!("Unhandled type decl {:?}", c_decl),
-        }
+            CursorKind::TypeRef => unimplemented!("Should extract class here?"),
+            _ => unimplemented!("Unhandled type decl {:?}", c_decl),
+        };
 
         Ok(QualType {
             name,
             is_const,
-            type_ref: TypeRef::Ref(c_decl.usr()),
+            type_ref: TypeRef::Ref(u_ref),
         })
     } else {
         match ty.kind() {

@@ -8,7 +8,7 @@ use tracing::instrument;
 
 use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, FunctionTemplateSpecializationId};
 use crate::class::MethodSpecializationId;
-use crate::qualtype::{extract_type, extract_type_from_typeref};
+use crate::qualtype::{extract_type};
 use crate::templates::{TemplateParameterDecl, TemplateArgument};
 use crate::{ast::AST, qualtype::QualType};
 use bbl_clang::cursor_kind::CursorKind;
@@ -580,34 +580,8 @@ pub fn extract_argument(
     let ty = c_arg.ty()?;
     trace!("{:width$}  has type {ty:?}", "", width = depth * 2);
 
-    let qual_type = if ty.is_builtin() || ty.is_pointer() || ty.kind() == TypeKind::Elaborated {
-        extract_type(ty, depth + 1, template_parameters, already_visited, ast, tu)?
-    } else if !children.is_empty() {
-        // match children[0].kind() {
-        //     CursorKind::TypeRef | CursorKind::TemplateRef => {
-        //         extract_type_from_typeref(children[0], depth + 1)?
-        //     }
-        //     _ => {
-        //         debug!("other kind {:?}", children[0].kind(),);
-        //         QualType::unknown(children[0].ty()?.kind())
-        //     }
-        // }
-
-        let mut type_ref = None;
-        for child in children {
-            match child.kind() {
-                CursorKind::TypeRef | CursorKind::TemplateRef => {
-                    type_ref = Some(extract_type_from_typeref(child, depth + 1)?);
-                }
-                _ => (),
-            }
-        }
-
-        type_ref.ok_or_else(|| Error::FailedToGetTypeFrom(c_arg.display_name()))?
-    } else {
-        error!("coulnd't do argument type");
-        QualType::unknown(children[0].ty()?.kind())
-    };
+    let qual_type = 
+        extract_type(ty, depth + 1, template_parameters, already_visited, ast, tu)?;
 
     Ok(Argument {
         name: c_arg.spelling(),
@@ -683,10 +657,8 @@ pub fn extract_function(
 
     let ty_result = c_function.result_ty()?;
     debug!("result type is {:?}", ty_result);
-    let result = if ty_result.is_builtin()
-        || ty_result.is_pointer()
-        || ty_result.kind() == TypeKind::Elaborated
-    {
+
+    let result = 
         extract_type(
             ty_result,
             depth + 1,
@@ -697,22 +669,7 @@ pub fn extract_function(
         )
         .map_err(|e| Error::FailedToExtractResult {
             source: Box::new(e),
-        })?
-    } else {
-        let c_result = children.get(skip).ok_or(Error::FailedToGetCursor)?;
-
-        skip += 1;
-
-        if c_result.kind() == CursorKind::TypeRef || c_result.kind() == CursorKind::TemplateRef {
-            extract_type_from_typeref(*c_result, depth + 1).map_err(|e| {
-                Error::FailedToExtractResult {
-                    source: Box::new(e),
-                }
-            })?
-        } else {
-            QualType::unknown(ty_result.kind())
-        }
-    };
+        })?;
 
     let num_arguments = match c_function.num_arguments() {
         Ok(n) => n as usize,

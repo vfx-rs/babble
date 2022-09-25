@@ -138,7 +138,7 @@ pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
         ),
     ];
 
-    let mut cd = ClassDecl::new(
+    ClassDecl::new(
         class.usr(),
         "string".to_string(),
         Vec::new(),
@@ -155,9 +155,5 @@ pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
             move_assign: MethodState::Undefined,
             dtor: MethodState::Defined,
         },
-    );
-
-    cd.rename = Some("string".to_string());
-
-    cd
+    )
 }
