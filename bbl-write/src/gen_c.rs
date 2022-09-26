@@ -68,14 +68,14 @@ pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
     for fun in c_ast.functions.iter() {
         let decl = gen_function_declaration(fun, c_ast).map_err(|source| {
             Error::FailedToGenerateFunction {
-                name: fun.name_private.clone(),
+                name: fun.name_internal.clone(),
                 source: Box::new(source),
             }
         })?;
 
         let defn = gen_function_definition(fun, c_ast).map_err(|source| {
             Error::FailedToGenerateFunction {
-                name: fun.name_private.clone(),
+                name: fun.name_internal.clone(),
                 source: Box::new(source),
             }
         })?;
@@ -101,7 +101,7 @@ fn gen_function_signature(
     let result = format!(
         "{} {}",
         gen_c_type(&fun.result, c_ast, use_public_names)?,
-        fun.name_private
+        fun.name_internal
     );
 
     let arg_str = fun
@@ -127,15 +127,15 @@ fn gen_function_declaration(fun: &CFunction, c_ast: &CAST) -> Result<String, Err
     let mut result = format!(
         "{};\n",
         gen_function_signature(fun, c_ast, true).map_err(|e| Error::FailedToGenerateSignature {
-            name: fun.name_private.clone(),
+            name: fun.name_internal.clone(),
             source: Box::new(e)
         })?
     );
 
-    if fun.name_private != fun.name_public {
+    if fun.name_internal != fun.name_external {
         result = format!(
             "{result}#define {} {};\n",
-            fun.name_public, fun.name_private
+            fun.name_external, fun.name_internal
         );
     }
 
@@ -341,7 +341,7 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
 fn gen_function_definition(fun: &CFunction, c_ast: &CAST) -> Result<String, Error> {
     let mut body = gen_function_signature(fun, c_ast, false).map_err(|e| {
         Error::FailedToGenerateSignature {
-            name: fun.name_private.clone(),
+            name: fun.name_internal.clone(),
             source: Box::new(e),
         }
     })?;

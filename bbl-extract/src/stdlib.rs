@@ -1,14 +1,14 @@
 use bbl_clang::{
     cursor::{Cursor, USR},
     exception::ExceptionSpecificationKind,
-    ty::TypeKind,
+    ty::TypeKind, access_specifier::AccessSpecifier,
 };
 
 use crate::{
     ast::AST,
     class::{ClassDecl, MethodState, RuleOfFive},
     function::{Argument, Const, PureVirtual, Static, Virtual},
-    function::{Method, MethodKind},
+    function::{Method, MethodKind, Deleted},
     namespace,
     qualtype::{QualType, TypeRef},
     templates::TemplateParameterDecl,
@@ -37,6 +37,7 @@ pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
             Static(false),
             Virtual(false),
             PureVirtual(false),
+            Deleted(false),
         ),
         Method::new(
             USR::new("BBL:basic_string_ctor_char_ptr"),
@@ -55,6 +56,7 @@ pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
             Static(false),
             Virtual(false),
             PureVirtual(false),
+            Deleted(false),
         ),
         Method::new(
             USR::new("BBL:basic_string_dtor"),
@@ -70,6 +72,7 @@ pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
             Static(false),
             Virtual(false),
             PureVirtual(false),
+            Deleted(false),
         ),
         Method::new(
             USR::new("BBL:basic_string_copy_ctor"),
@@ -91,6 +94,7 @@ pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
             Static(false),
             Virtual(false),
             PureVirtual(false),
+            Deleted(false),
         ),
         Method::new(
             USR::new("BBL:basic_string_move_ctor"),
@@ -112,6 +116,7 @@ pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
             Static(false),
             Virtual(false),
             PureVirtual(false),
+            Deleted(false),
         ),
         Method::new(
             USR::new("BBL:basic_string_c_str"),
@@ -135,6 +140,7 @@ pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
             Static(false),
             Virtual(false),
             PureVirtual(false),
+            Deleted(false),
         ),
     ];
 
@@ -148,12 +154,12 @@ pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
         vec![],
         false,
         RuleOfFive {
-            ctor: MethodState::Defined,
-            copy_ctor: MethodState::Defined,
-            move_ctor: MethodState::Defined,
+            ctor: MethodState::Defined(AccessSpecifier::Public),
+            copy_ctor: MethodState::Defined(AccessSpecifier::Public),
+            move_ctor: MethodState::Defined(AccessSpecifier::Public),
             copy_assign: MethodState::Undefined,
             move_assign: MethodState::Undefined,
-            dtor: MethodState::Defined,
+            dtor: MethodState::Defined(AccessSpecifier::Public),
         },
     )
 }

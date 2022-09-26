@@ -73,7 +73,7 @@ pub fn write_rust_ffi(source: &mut String, c_ast: &CAST) -> Result<()> {
 }
 
 fn write_function_internal(source: &mut String, fun: &CFunction, c_ast: &CAST) -> Result<()> {
-    write!(source, "pub fn {}(", fun.name_private)?;
+    write!(source, "pub fn {}(", fun.name_internal)?;
 
     let mut first = true;
     for arg in fun.arguments.iter() {
@@ -100,16 +100,16 @@ fn write_function_internal(source: &mut String, fun: &CFunction, c_ast: &CAST) -
 }
 
 fn write_function_external(source: &mut String, fun: &CFunction) -> Result<()> {
-    let external = if fun.name_public != fun.name_private {
-        &fun.name_public
+    let external = if fun.name_external != fun.name_internal {
+        &fun.name_external
     } else {
-        &fun.name_private
+        &fun.name_internal
     };
 
     writeln!(
         source,
         "pub use internal::{} as {};",
-        fun.name_private, external
+        fun.name_internal, external
     )?;
 
     Ok(())

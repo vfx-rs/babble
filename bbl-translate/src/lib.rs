@@ -35,19 +35,19 @@ pub struct CAST {
 impl Debug for CAST {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for st in self.structs.iter() {
-            write!(f, "{st:?}")?;
+            writeln!(f, "{st:?}")?;
         }
 
         for td in self.typedefs.iter() {
-            write!(f, "{td:?}")?;
+            writeln!(f, "{td:?}")?;
         }
 
         for fun in self.functions.iter() {
-            write!(f, "{fun:?}")?;
+            writeln!(f, "{fun:?}")?;
         }
 
         for inc in self.includes.iter() {
-            write!(f, "{inc:?}")?;
+            writeln!(f, "{inc:?}")?;
         }
 
 
@@ -81,7 +81,7 @@ impl CAST {
         for fun in self.functions.iter() {
             fun.pretty_print(depth, self)
                 .map_err(|e| Error::FailedToFormatFunction {
-                    name: fun.name_private.clone(),
+                    name: fun.name_internal.clone(),
                     source: Box::new(e),
                 })?;
         }

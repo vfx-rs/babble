@@ -21,7 +21,6 @@ use crate::{
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Debug)]
 pub struct CArgument {
     pub name: String,
     pub qual_type: CQualType,
@@ -30,6 +29,12 @@ pub struct CArgument {
 }
 
 impl Display for CArgument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.name, self.qual_type)
+    }
+}
+
+impl std::fmt::Debug for CArgument {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: {}", self.name, self.qual_type)
     }
@@ -70,12 +75,11 @@ pub struct MethodInfo {
     pub class_qname: String,
 }
 
-#[derive(Debug)]
 pub struct CFunction {
     /// The name of the function with internal namespace baked in, e.g. Imath_3_1_V3f_dot
-    pub name_private: String,
+    pub name_internal: String,
     /// The name of the function that will be used for a public #define, e.g. Imath_V3f_dot
-    pub name_public: String,
+    pub name_external: String,
     /// The return type of the function
     pub result: CQualType,
     // The function arguments
@@ -90,6 +94,20 @@ pub struct CFunction {
     pub body: Expr,
 }
 
+impl std::fmt::Debug for CFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "CFunction {} {}({:?}) {} -> {:?}",
+            self.name_internal,
+            self.name_external,
+            self.arguments,
+            if self.is_noexcept { "noexcept" } else { "" },
+            self.result
+        )
+    }
+}
+
 impl CFunction {
     #[instrument(level = "trace", skip(ast))]
     pub fn pretty_print(&self, _depth: usize, ast: &CAST) -> Result<()> {
@@ -102,16 +120,16 @@ impl CFunction {
 
         println!(
             "{}({arg_str}) -> {};",
-            self.name_private,
+            self.name_internal,
             self.result
                 .format(ast, false)
                 .map_err(|e| Error::FailedToFormatFunction {
-                    name: self.name_private.clone(),
+                    name: self.name_internal.clone(),
                     source: Box::new(e)
                 })?
         );
-        if self.name_private != self.name_public {
-            println!("#define {} {}", self.name_public, self.name_private);
+        if self.name_internal != self.name_external {
+            println!("#define {} {}", self.name_external, self.name_internal);
         }
 
         Ok(())
@@ -592,8 +610,8 @@ pub fn translate_function(
     functions.insert(
         function.usr().into(),
         CFunction {
-            name_private: fn_name_private,
-            name_public: fn_name_public,
+            name_internal: fn_name_private,
+            name_external: fn_name_public,
             // force an integer return for the error code
             result: CQualType {
                 name: "[result]".to_string(),
@@ -1150,8 +1168,8 @@ pub fn translate_method(
         get_c_names(fn_name, st_prefix_public, st_prefix_private, used_names);
 
     Ok(CFunction {
-        name_private: fn_name_private,
-        name_public: fn_name_public,
+        name_internal: fn_name_private,
+        name_external: fn_name_public,
         result: CQualType::int("int", false),
         arguments,
         source,
@@ -1213,7 +1231,10 @@ fn get_bind_kind(usr: USR, ast: &AST) -> Result<ClassBindKind> {
     } else if let Some(ta) = ast.get_type_alias(usr) {
         ta.underlying_type()
             .get_bind_kind(ast)
-            .map_err(|e| Error::FailedToGetBindKind { usr, source: Box::new(e) })
+            .map_err(|e| Error::FailedToGetBindKind {
+                usr,
+                source: Box::new(e),
+            })
     } else {
         Err(Error::RefNotFound(usr))
     }

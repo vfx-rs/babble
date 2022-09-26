@@ -25,3 +25,4 @@ tracing-subscriber = { version = "0.3.15" }
 opentelemetry = {version = "0.17.0", optional = true }
 tracing-opentelemetry = {version = "0.17.4", optional = true }
 opentelemetry-jaeger = {version = "0.16.0", optional = true }
+indoc = "1.0.7"

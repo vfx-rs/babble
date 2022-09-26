@@ -11,6 +11,8 @@ use bbl_write::{cmake::build_project, error::Error, gen_c::gen_c};
 
 use crate::common::init_log;
 
+use indoc::indoc;
+
 #[test]
 fn write_simple_class() -> Result<(), Error> {
     let mut ast = parse_string_and_extract_ast(
@@ -150,7 +152,7 @@ void fun(Class c);
     c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 1);
-    assert_eq!(c_ast.functions.len(), 1);
+    assert_eq!(c_ast.functions.len(), 5);
 
     let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
@@ -233,7 +235,7 @@ public:
     c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 2);
-    assert_eq!(c_ast.functions.len(), 1);
+    assert_eq!(c_ast.functions.len(), 5);
 
     let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
@@ -282,7 +284,7 @@ public:
     c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 2);
-    assert_eq!(c_ast.functions.len(), 1);
+    assert_eq!(c_ast.functions.len(), 5);
 
     let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
@@ -361,10 +363,118 @@ fn write_take_std_string() -> Result<(), Error> {
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 13);
+        assert_eq!(c_ast.functions.len(), 16);
 
         let (c_header, c_source) = gen_c("test", &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+
+        Ok(())
+    })
+}
+
+#[test]
+fn write_implicit_ctor() -> Result<(), Error> {
+    run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
+            class Class {
+            };
+
+            class Class2 {
+            };
+        "#
+            ),
+            &cli_args_with(&["-std=c++11"])?,
+            true,
+            None,
+        )?;
+
+        println!("{ast:?}");
+        /* 
+        assert_eq!(
+            format!("{ast:?}"),
+            indoc!(
+                r#"
+        Namespace c:@S@Class Class None
+        ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[ctor ] template_parameters=[] specializations=[] namespaces=[]
+        Field b: float
+        Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@Class# Class rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+
+    "#
+            )
+        );
+        */
+
+        let class_id = ast.find_class("Class2")?;
+        ast.class_set_bind_kind(class_id, ClassBindKind::OpaquePtr)?;
+
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
+
+        // assert_eq!(c_ast.structs.len(), 2);
+        // assert_eq!(c_ast.functions.len(), 13);
+
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+
+
+        Ok(())
+    })
+}
+
+#[test]
+fn write_inherited() -> Result<(), Error> {
+    run_test(|| {
+        let ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
+            class Base {
+                int a;
+            public:
+                float b;
+                Base() = delete;
+                Base(int a, float b);
+                void base_do_thing();
+            };
+
+            class Class : public Base {
+            public:
+                float c;
+                void derived_do_thing() const;
+            };
+        "#
+            ),
+            &cli_args_with(&["-std=c++11"])?,
+            true,
+            None,
+        )?;
+
+        println!("{ast:?}");
+        /* 
+        assert_eq!(
+            format!("{ast:?}"),
+            indoc!(
+                r#"
+        Namespace c:@S@Class Class None
+        ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[ctor ] template_parameters=[] specializations=[] namespaces=[]
+        Field b: float
+        Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@Class# Class rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+
+    "#
+            )
+        );
+        */
+
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
+
+        // assert_eq!(c_ast.structs.len(), 2);
+        // assert_eq!(c_ast.functions.len(), 13);
+
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+
 
         Ok(())
     })

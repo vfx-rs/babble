@@ -187,6 +187,7 @@ dependencies = [
  "bbl-extract",
  "bbl-translate",
  "env_logger",
+ "indoc",
  "log",
  "opentelemetry",
  "opentelemetry-jaeger",

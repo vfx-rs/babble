@@ -107,13 +107,22 @@ pub fn translate_typedef(
     Ok(())
 }
 
-#[derive(Debug)]
 pub struct CTypedef {
     pub name_external: String,
     pub name_internal: String,
     pub usr: USR,
     /// The underlying type that this typedef refers to
     pub underlying_type: CQualType,
+}
+
+impl std::fmt::Debug for CTypedef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "CTypedef {} {} {:?}",
+            self.name_internal, self.name_external, self.underlying_type
+        )
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]

@@ -1,11 +1,13 @@
 use std::fmt::Display;
 
-use bbl_clang::cursor::USR;
+use bbl_clang::{cursor::USR, exception::ExceptionSpecificationKind};
 use bbl_extract::{
     ast::{ClassId, MethodId, AST},
     class::{ClassBindKind, ClassDecl, MethodSpecializationId},
+    function::{Argument, Const, Deleted, Method, MethodKind, PureVirtual, Static, Virtual},
     index_map::{IndexMapKey, UstrIndexMap},
-    templates::{TemplateArgument, ClassTemplateSpecialization},
+    qualtype::QualType,
+    templates::{ClassTemplateSpecialization, TemplateArgument},
 };
 use hashbrown::HashSet;
 use tracing::{error, instrument, trace, warn};
@@ -19,13 +21,18 @@ use crate::{
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Debug)]
 pub struct CField {
     pub(crate) name: String,
     pub(crate) qual_type: CQualType,
 }
 
 impl Display for CField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.name, self.qual_type)
+    }
+}
+
+impl std::fmt::Debug for CField {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: {}", self.name, self.qual_type)
     }
@@ -54,7 +61,6 @@ impl CField {
     }
 }
 
-#[derive(Debug)]
 pub struct CStruct {
     /// The name of the struct with internal namespace baked in, e.g. Imath_3_1_V3f
     pub name_internal: String,
@@ -65,6 +71,16 @@ pub struct CStruct {
     /// The class from whence this struct came
     pub class_id: ClassId,
     pub usr: USR,
+}
+
+impl std::fmt::Debug for CStruct {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "CStruct {} {} {} {:?} fields={:?}",
+            self.usr, self.name_internal, self.name_external, self.bind_kind, self.fields
+        )
+    }
 }
 
 impl CStruct {
@@ -169,8 +185,11 @@ pub fn translate_class(
 
     let qname = class.get_qualified_name(ast)?;
 
+    // check if we need to insert implicitly defined default constructors
+    let implicit_methods = generate_implicit_methods(class);
+
     // translate the class's methods to functions
-    for (method_id, method) in class.methods().iter().enumerate() {
+    for (method_id, method) in class.methods().iter().chain(&implicit_methods).enumerate() {
         if method.is_templated() {
             // if the method itself has template parameters, then skip it and we'll deal with specializations
             // separately
@@ -180,6 +199,10 @@ pub fn translate_class(
                     method.get_qualified_name(ast)?
                 );
             }
+            continue;
+        }
+
+        if method.is_deleted() {
             continue;
         }
 
@@ -212,6 +235,9 @@ pub fn translate_class(
             MethodSpecializationId::new(spec_method_id),
         ));
         let method = class.get_method(spec_method.specialized_decl());
+        if method.is_deleted() {
+            continue;
+        }
 
         let c_function = translate_method(
             class,
@@ -307,8 +333,11 @@ pub fn translate_class_template(
 
     let qname = cts.get_qualified_name(ast)?;
 
+    // check if we need to insert implicitly defined default constructors
+    let implicit_methods = generate_implicit_methods(class);
+
     // translate the class's methods to functions
-    for (method_id, method) in class.methods().iter().enumerate() {
+    for (method_id, method) in class.methods().iter().chain(&implicit_methods).enumerate() {
         if method.is_templated() {
             // if the method itself has template parameters, then skip it and we'll deal with specializations
             // separately
@@ -318,6 +347,10 @@ pub fn translate_class_template(
                     method.get_qualified_name(ast)?
                 );
             }
+            continue;
+        }
+
+        if method.is_deleted() {
             continue;
         }
 
@@ -351,6 +384,9 @@ pub fn translate_class_template(
             MethodSpecializationId::new(spec_method_id),
         ));
         let method = class.get_method(spec_method.specialized_decl());
+        if method.is_deleted() {
+            continue;
+        }
 
         let c_function = translate_method(
             class,
@@ -371,6 +407,107 @@ pub fn translate_class_template(
     }
 
     Ok(())
+}
+
+fn generate_implicit_methods(class: &ClassDecl) -> Vec<Method> {
+    let mut implicit_methods = Vec::new();
+    if class.needs_implicit_ctor() {
+        let mut namespaces = class.namespaces().to_vec();
+        namespaces.push(class.usr());
+        implicit_methods.push(Method::new(
+            USR::new(&format!("{}#implicit_ctor", class.usr())),
+            "ctor".to_string(),
+            MethodKind::DefaultConstructor,
+            QualType::void(),
+            Vec::new(),
+            None,
+            namespaces,
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(false),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ));
+    }
+
+    if class.needs_implicit_copy_ctor() {
+        let mut namespaces = class.namespaces().to_vec();
+        namespaces.push(class.usr());
+        implicit_methods.push(Method::new(
+            USR::new(&format!("{}#implicit_copy_ctor", class.usr())),
+            "copy_ctor".to_string(),
+            MethodKind::CopyConstructor,
+            QualType::void(),
+            vec![Argument::new(
+                "rhs",
+                QualType::lvalue_reference(
+                    &format!("{} const&", class.name()),
+                    QualType::type_ref(class.name(), true, class.usr()),
+                ),
+            )],
+            None,
+            namespaces,
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(false),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ));
+    }
+
+    if class.needs_implicit_move_ctor() {
+        let mut namespaces = class.namespaces().to_vec();
+        namespaces.push(class.usr());
+        implicit_methods.push(Method::new(
+            USR::new(&format!("{}#implicit_move_ctor", class.usr())),
+            "move_ctor".to_string(),
+            MethodKind::MoveConstructor,
+            QualType::void(),
+            vec![Argument::new(
+                "rhs",
+                QualType::rvalue_reference(
+                    &format!("{}&&", class.name()),
+                    QualType::type_ref(class.name(), true, class.usr()),
+                ),
+            )],
+            None,
+            namespaces,
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(false),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ));
+    }
+
+    if class.needs_implicit_dtor() {
+        let mut namespaces = class.namespaces().to_vec();
+        namespaces.push(class.usr());
+        implicit_methods.push(Method::new(
+            USR::new(&format!("{}#implicit_dtor", class.usr())),
+            "dtor".to_string(),
+            MethodKind::Destructor,
+            QualType::void(),
+            Vec::new(),
+            None,
+            namespaces,
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(false),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ));
+    }
+
+    implicit_methods
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]

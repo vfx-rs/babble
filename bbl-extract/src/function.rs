@@ -16,6 +16,7 @@ use bbl_clang::cursor_kind::CursorKind;
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+#[derive(Clone, PartialEq, Eq)]
 pub struct Argument {
     pub(crate) name: String,
     pub(crate) qual_type: QualType,
@@ -64,6 +65,7 @@ impl Argument {
     }
 }
 
+#[derive(Clone)]
 pub struct Function {
     pub(crate) usr: USR,
     pub(crate) name: String,
@@ -118,6 +120,13 @@ impl Function {
             specializations: Vec::new(),
             exception_specification_kind,
         }
+    }
+
+    /// Does this function's signiature match `other`?
+    /// 
+    /// In other words, is it identical, except for the USR and the namespaces?
+    pub fn signature_matches(&self, other: &Function) -> bool {
+        self.name == other.name && self.result == other.result && self.arguments == other.arguments && self.template_parameters == other.template_parameters && self.exception_specification_kind == other.exception_specification_kind
     }
 
     /// Get the name of the function
@@ -261,12 +270,14 @@ impl Function {
     }
 }
 
+#[derive(Clone)]
 pub struct Method {
     pub(crate) function: Function,
     pub(crate) kind: MethodKind,
     pub(crate) is_const: bool,
     pub(crate) is_virtual: bool,
     pub(crate) is_pure_virtual: bool,
+    pub(crate) is_deleted: bool,
     pub(crate) specializations: Vec<MethodSpecializationId>,
 }
 
@@ -297,6 +308,9 @@ pub struct Virtual(pub bool);
 #[derive(Copy, Clone, Debug)]
 pub struct PureVirtual(pub bool);
 
+#[derive(Copy, Clone, Debug)]
+pub struct Deleted(pub bool);
+
 #[allow(clippy::too_many_arguments)]
 impl Method {
     pub fn new(
@@ -313,6 +327,7 @@ impl Method {
         is_static: Static,
         is_virtual: Virtual,
         is_pure_virtual: PureVirtual,
+        is_deleted: Deleted,
     ) -> Self {
         Method {
             function: Function::new(
@@ -329,8 +344,15 @@ impl Method {
             is_const: is_const.0,
             is_virtual: is_virtual.0,
             is_pure_virtual: is_virtual.0,
+            is_deleted: is_deleted.0,
             specializations: Vec::new(),
         }
+    }
+
+    pub fn signature_matches(&self, other: &Method) -> bool {
+        self.function.signature_matches(&other.function)
+        && self.kind == other.kind 
+        && self.is_const == other.is_const
     }
 
     pub fn name(&self) -> &str {
@@ -375,6 +397,10 @@ impl Method {
 
     pub fn is_regular_method(&self) -> bool {
         matches!(self.kind, MethodKind::Method)
+    }
+
+    pub fn is_deleted(&self) -> bool {
+        self.is_deleted
     }
 
     pub fn result(&self) -> &QualType {
@@ -796,6 +822,7 @@ pub fn extract_method(
         is_const: c_method.cxx_method_is_const(),
         is_virtual: c_method.cxx_method_is_virtual(),
         is_pure_virtual: c_method.cxx_method_is_pure_virtual(),
+        is_deleted: c_method.cxx_method_is_deleted(),
         specializations: Vec::new(),
     })
 }

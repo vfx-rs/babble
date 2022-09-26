@@ -23,7 +23,7 @@ pub enum CTypeRef {
     Unknown(TypeKind),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CQualType {
     pub(crate) name: String,
     pub(crate) is_const: bool,
@@ -111,17 +111,34 @@ impl CQualType {
 
 impl Display for CQualType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.is_const {
-            write!(f, "const ")?;
-        }
+        let const_ = if self.is_const { " const" } else { "" };
 
         match &self.type_ref {
             CTypeRef::Builtin(tk) => {
-                write!(f, "{}", tk.spelling())
+                write!(f, "{}{const_}", tk.spelling())
             }
-            CTypeRef::Pointer(pointee) => write!(f, "{}*", *pointee),
+            CTypeRef::Pointer(pointee) => write!(f, "{}*{const_}", *pointee),
             CTypeRef::Ref(usr) => {
-                write!(f, "{}", usr)
+                write!(f, "{}{const_}", usr)
+            }
+            CTypeRef::Unknown(tk) => {
+                write!(f, "UNKNOWN({})", tk.spelling())
+            }
+        }
+    }
+}
+
+impl std::fmt::Debug for CQualType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let const_ = if self.is_const { " const" } else { "" };
+
+        match &self.type_ref {
+            CTypeRef::Builtin(tk) => {
+                write!(f, "{}{const_}", tk.spelling())
+            }
+            CTypeRef::Pointer(pointee) => write!(f, "{}*{const_}", *pointee),
+            CTypeRef::Ref(usr) => {
+                write!(f, "{}{const_}", usr)
             }
             CTypeRef::Unknown(tk) => {
                 write!(f, "UNKNOWN({})", tk.spelling())
