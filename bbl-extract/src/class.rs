@@ -574,10 +574,12 @@ pub fn extract_class_decl(
 
     if class_decl.specialized_template().is_ok() {
         // this is a class template specialization, handle it separately
+        debug!("extract_class_decl: {} is a CTS", class_decl.usr());
         return extract_class_template_specialization(class_decl, already_visited, ast, tu);
     }
 
     if already_visited.contains(&class_decl.usr()) {
+        debug!("extract_class_decl: already visited {}", class_decl.usr());
         return Ok(class_decl.usr());
     } else {
         already_visited.push(class_decl.usr());
@@ -597,15 +599,18 @@ pub fn extract_class_decl(
             let u_base = extract_class_decl(c_base_decl.try_into()?, tu, ast, already_visited)?;
             let access = c_base.cxx_access_specifier()?;
 
-            let base = ast.get_class(u_base).unwrap();
-            for method in &base.methods {
-                if method.is_any_constructor() {
-                    // we store constructors regardless of their access since we want to know about private constructors
-                    // in order to not generate implicit versions for them
-                    base_constructors.push(method.clone());
-                } else if (!method.is_destructor() && access == AccessSpecifier::Public) {
-                    base_methods.push(method.clone());
+            if let Some(base) = ast.get_class_decl_recursive(u_base) {
+                for method in &base.methods {
+                    if method.is_any_constructor() {
+                        // we store constructors regardless of their access since we want to know about private constructors
+                        // in order to not generate implicit versions for them
+                        base_constructors.push(method.clone());
+                    } else if (!method.is_destructor() && access == AccessSpecifier::Public) {
+                        base_methods.push(method.clone());
+                    }
                 }
+            } else {
+                panic!("Should have just inserted base {u_base} of class decl {} but it is not found.", class_decl.usr())
             }
         }
     }
@@ -804,7 +809,7 @@ pub fn extract_class_decl(
         false
     };
 
-    debug!("Got new ClassDecl {name}");
+    debug!("extract_class_decl: inserting {}", class_decl.usr());
     let cd = ClassDecl::new(
         class_decl.usr(),
         class_decl.spelling(),

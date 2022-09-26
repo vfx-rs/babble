@@ -6,6 +6,7 @@ use bbl_clang::{
     template_argument::TemplateArgumentKind,
     translation_unit::TranslationUnit,
 };
+use tracing::log::{trace, debug};
 
 use crate::{
     ast::{get_namespaces_for_decl, get_qualified_name, AST},
@@ -27,6 +28,7 @@ pub fn extract_class_template_specialization(
     ast: &mut AST,
     tu: &TranslationUnit,
 ) -> Result<USR> {
+    trace!("extract_class_template_specialization: {c_class_decl:?}");
     if already_visited.contains(&c_class_decl.usr()) {
         return Ok(c_class_decl.usr());
     } else {
@@ -40,6 +42,7 @@ pub fn extract_class_template_specialization(
         .specialized_template()
         .map_err(|_| Error::ClassDeclIsNotSpecialization(c_class_decl.usr()))?
         .try_into()?;
+    debug!("extract_class_template_specialization: got specialized decl {specialized_decl:?}");
 
     extract_class_decl(
         specialized_decl.as_class_decl(),

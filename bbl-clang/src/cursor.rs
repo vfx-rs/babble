@@ -404,7 +404,10 @@ impl Deref for CurClassDecl {
 impl TryFrom<Cursor> for CurClassDecl {
     type Error = Error;
     fn try_from(c: Cursor) -> Result<Self, Self::Error> {
-        if c.kind() == CursorKind::ClassDecl {
+        if c.kind() == CursorKind::ClassDecl
+            || c.kind() == CursorKind::StructDecl
+            || c.kind() == CursorKind::ClassTemplate
+        {
             Ok(CurClassDecl(c))
         } else {
             Err(Error::FailedToConvertCursorKind {

@@ -474,6 +474,29 @@ impl AST {
         self.class_template_specializations.get(&usr.into())
     }
 
+    /// Get the class represented by `usr`. If `usr` represents a class template specilialization, navigate through
+    /// all specializations to find the underlying class template, and return its decl.
+    pub fn get_class_decl_recursive(&self, usr: USR) -> Option<&ClassDecl> {
+        debug!("looking up {}", usr);
+        if let Some(c) = self.get_class(usr) {
+            debug!("found classdecl {}", usr);
+            Some(c)
+        } else if let Some(c) = self.get_class_template_specialization(usr) {
+            debug!("looking up CTS {} from {}", c.specialized_decl(), usr);
+            self.get_class_decl_recursive(c.specialized_decl())
+        } else if let Some(td) = self.get_type_alias(usr) {
+            debug!("looking up typedef {td:?}");
+            if let Some(usr) = td.underlying_type().underlying_decl_recursive() {
+                self.get_class_decl_recursive(usr)
+            } else {
+                None
+            }
+        } else {
+            debug!("NOT found any {}", usr);
+            None
+        }
+    }
+
     pub fn insert_function(&mut self, function: Function) {
         self.functions.insert(function.usr().into(), function);
     }

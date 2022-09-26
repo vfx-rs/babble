@@ -9,11 +9,11 @@ path = "src/main.rs"
 
 
 [dependencies]
-bbl-extract = {path="../bbl-extract", version="0.1.0"}
-bbl-clang = {path="../bbl-clang", version="0.1.0"}
+bbl = {path = "../bbl", version="0.1.0"}
 clap = { version = "3.2.17", features = ["derive", "unstable-doc"] }
 env_logger = "0.9.0"
 log = "0.4.17"
+anyhow = "1.0.65"
 # ustr = "0.9.0"
 # hashbrown = "0.12.3"
 # levenshtein = "1.0.5"

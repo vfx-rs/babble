@@ -6,7 +6,7 @@ use bbl_clang::cursor::USR;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Clang error")]
-    ClangError(bbl_clang::error::Error),
+    ClangError(#[source] bbl_clang::error::Error),
     #[error("Could not find class \"{0}\" in AST")]
     ClassNotFound(String),
     #[error("Could not find namespace \"{0}\" in AST")]

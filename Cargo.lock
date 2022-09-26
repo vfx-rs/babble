@@ -157,8 +157,8 @@ dependencies = [
 name = "bbl-gen"
 version = "0.1.0"
 dependencies = [
- "bbl-clang",
- "bbl-extract",
+ "anyhow",
+ "bbl",
  "clap",
  "env_logger",
  "log",

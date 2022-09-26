@@ -562,6 +562,7 @@ fn build_take_std_string() -> Result<(), Error> {
             &c_ast,
             &find_packages,
             &link_libraries,
+            &[],
             Some(&cmake_prefix_path),
         )?;
 

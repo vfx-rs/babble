@@ -50,6 +50,7 @@ pub fn bind(
         &c_ast,
         options.find_packages,
         options.link_libraries,
+        options.compile_definitions,
         options.cmake_prefix_path.as_deref(),
     )?;
 
@@ -84,21 +85,23 @@ pub fn bind(
     Ok(())
 }
 
-pub struct BindOptions<'a> {
+pub struct BindOptions<'a, 'b, 'c, 'd, 'e> {
     pub cmake_prefix_path: Option<PathBuf>,
-    pub find_packages: &'a [&'static str],
-    pub link_libraries: &'a [&'static str],
-    pub clang_args: &'a [&'static str],
+    pub find_packages: &'a [&'a str],
+    pub link_libraries: &'b [&'b str],
+    pub compile_definitions: &'e [&'e str],
+    pub clang_args: &'c [&'c str],
     pub log_diagnostics: bool,
-    pub limit_to_namespace: Option<&'static str>,
+    pub limit_to_namespace: Option<&'d str>,
 }
 
-impl<'a> Default for BindOptions<'a> {
+impl<'a, 'b, 'c, 'd, 'e> Default for BindOptions<'a, 'b, 'c, 'd, 'e> {
     fn default() -> Self {
         BindOptions {
             cmake_prefix_path: None,
             find_packages: &[],
             link_libraries: &[],
+            compile_definitions: &[],
             clang_args: &[],
             log_diagnostics: true,
             limit_to_namespace: None,

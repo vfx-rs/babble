@@ -77,7 +77,7 @@ impl TypeRef {
             Pointer(p) => p.type_ref.get_bind_kind(ast),
             LValueReference(p) => p.type_ref.get_bind_kind(ast),
             RValueReference(p) => p.type_ref.get_bind_kind(ast),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -166,6 +166,16 @@ impl QualType {
             name: name.to_string(),
             is_const,
             type_ref: TypeRef::Ref(usr),
+        }
+    }
+
+    pub fn underlying_decl_recursive(&self) -> Option<USR> {
+        match self.type_ref {
+            TypeRef::LValueReference(ref pointee)
+            | TypeRef::Pointer(ref pointee)
+            | TypeRef::RValueReference(ref pointee) => pointee.underlying_decl_recursive(),
+            TypeRef::Ref(usr) => Some(usr),
+            _ => None,
         }
     }
 
@@ -327,12 +337,7 @@ pub fn extract_type(
                 extract_typedef_decl(c_decl.try_into()?, already_visited, ast, tu)?
             }
             CursorKind::ClassDecl => {
-                extract_class_decl(
-                    c_decl.try_into()?,
-                    tu,
-                    ast,
-                    already_visited,
-                )?
+                extract_class_decl(c_decl.try_into()?, tu, ast, already_visited)?
             }
             CursorKind::TypeRef => unimplemented!("Should extract class here?"),
             _ => unimplemented!("Unhandled type decl {:?}", c_decl),
@@ -347,13 +352,7 @@ pub fn extract_type(
         match ty.kind() {
             TypeKind::Pointer => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(
-                    pointee,
-                    template_parameters,
-                    already_visited,
-                    ast,
-                    tu,
-                )?;
+                let ty_ref = extract_type(pointee, template_parameters, already_visited, ast, tu)?;
                 Ok(QualType {
                     name,
                     is_const,
@@ -362,13 +361,7 @@ pub fn extract_type(
             }
             TypeKind::LValueReference => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(
-                    pointee,
-                    template_parameters,
-                    already_visited,
-                    ast,
-                    tu,
-                )?;
+                let ty_ref = extract_type(pointee, template_parameters, already_visited, ast, tu)?;
                 Ok(QualType {
                     name,
                     is_const,
@@ -377,13 +370,7 @@ pub fn extract_type(
             }
             TypeKind::RValueReference => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(
-                    pointee,
-                    template_parameters,
-                    already_visited,
-                    ast,
-                    tu,
-                )?;
+                let ty_ref = extract_type(pointee, template_parameters, already_visited, ast, tu)?;
                 Ok(QualType {
                     name,
                     is_const,
