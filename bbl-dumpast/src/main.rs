@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use bbl_clang::cli_args;
 use bbl_clang::cursor_kind::CursorKind;
 use bbl_extract::{ast::dump, *};
 
@@ -41,21 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .init();
     }
 
-    let tu = parse_file(args.filename, 
-        &[            
-            "-fmath-errno",
-            "-ffp-contract=on",
-            "-fno-rounding-math",
-            "-resource-dir",
-            "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
-            "-std=c++14",
-            "-I/usr/include",
-            "-I/usr/local/include",
-            "-I/home/anders/packages/openexr/3.1.5/platform-linux/arch-x86_64/cxx11abi-0/cfg-release/include",
-            "-I/home/anders/packages/imath/3.1.5/platform-linux/arch-x86_64/cxx11abi-0/cfg-release/include",
-            "-I/home/anders/packages/imath/3.1.5/platform-linux/arch-x86_64/cxx11abi-0/cfg-release/include/Imath",
-        ],
-        true)?;
+    let tu = parse_file(args.filename, &cli_args()?, true)?;
 
     println!("INCLUDES");
     tu.get_inclusions(|_file, locations| {

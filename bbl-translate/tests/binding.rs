@@ -29,13 +29,7 @@ public:
 };
     
         "#,
-        &[
-            "-resource-dir",
-            "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
-            "-std=c++14",
-            "-I/usr/include",
-            "-I/usr/local/include",
-        ],
+        &cli_args()?,
         true,
         None,
     )?;
@@ -79,13 +73,7 @@ public:
 }
     
         "#,
-        &[
-            "-resource-dir",
-            "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
-            "-std=c++14",
-            "-I/usr/include",
-            "-I/usr/local/include",
-        ],
+        &cli_args()?,
         true,
         None,
     )?;
@@ -181,13 +169,7 @@ public:
 }
 
         "#,
-        &[
-            "-resource-dir",
-            "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
-            "-std=c++14",
-            "-I/usr/include",
-            "-I/usr/local/include",
-        ],
+        &cli_args()?,
         true,
         Some("Imath_3_1"),
     )?;
@@ -224,13 +206,7 @@ public:
 };
     
         "#,
-        &[
-            "-resource-dir",
-            "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
-            "-std=c++14",
-            "-I/usr/include",
-            "-I/usr/local/include",
-        ],
+        &cli_args()?,
         true,
         None,
     )?;
@@ -264,13 +240,7 @@ public:
 };
     
         "#,
-        &[
-            "-resource-dir",
-            "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
-            "-std=c++14",
-            "-I/usr/include",
-            "-I/usr/local/include",
-        ],
+        &cli_args()?,
         true,
         None,
     )?;
@@ -339,13 +309,7 @@ namespace Test {
 int basic_function(int&& a, float*);
 }
         "#,
-        &[
-            "-resource-dir",
-            "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
-            "-std=c++14",
-            "-I/usr/include",
-            "-I/usr/local/include",
-        ],
+        &cli_args()?,
         true,
         None,
     )?;
@@ -409,13 +373,7 @@ public:
 };
 }
         "#,
-        &[
-            "-resource-dir",
-            "/home/anders/packages/llvm/14.0.0/lib/clang/14.0.0",
-            "-std=c++14",
-            "-I/usr/include",
-            "-I/usr/local/include",
-        ],
+        &cli_args()?,
         true,
         None,
     )?;
