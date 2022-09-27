@@ -12,7 +12,7 @@ use crate::{
     class::{extract_class_decl, specialize_template_parameter, ClassBindKind},
     error::Error,
     templates::{TemplateArgument, TemplateParameterDecl},
-    typedef::extract_typedef_decl,
+    typedef::extract_typedef_decl, AllowList,
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -306,6 +306,7 @@ pub fn extract_type(
     already_visited: &mut Vec<USR>,
     ast: &mut AST,
     tu: &TranslationUnit,
+    allow_list: &AllowList,
 ) -> Result<QualType> {
     let is_const = ty.is_const_qualified();
     let name = if is_const {
@@ -334,10 +335,10 @@ pub fn extract_type(
         // extract here if we need to
         let u_ref = match c_decl.kind() {
             CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
-                extract_typedef_decl(c_decl.try_into()?, already_visited, ast, tu)?
+                extract_typedef_decl(c_decl.try_into()?, already_visited, ast, tu, allow_list)?
             }
             CursorKind::ClassDecl => {
-                extract_class_decl(c_decl.try_into()?, tu, ast, already_visited)?
+                extract_class_decl(c_decl.try_into()?, tu, ast, already_visited, allow_list)?
             }
             CursorKind::TypeRef => unimplemented!("Should extract class here?"),
             _ => unimplemented!("Unhandled type decl {:?}", c_decl),
@@ -352,7 +353,7 @@ pub fn extract_type(
         match ty.kind() {
             TypeKind::Pointer => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(pointee, template_parameters, already_visited, ast, tu)?;
+                let ty_ref = extract_type(pointee, template_parameters, already_visited, ast, tu, allow_list)?;
                 Ok(QualType {
                     name,
                     is_const,
@@ -361,7 +362,7 @@ pub fn extract_type(
             }
             TypeKind::LValueReference => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(pointee, template_parameters, already_visited, ast, tu)?;
+                let ty_ref = extract_type(pointee, template_parameters, already_visited, ast, tu, allow_list)?;
                 Ok(QualType {
                     name,
                     is_const,
@@ -370,7 +371,7 @@ pub fn extract_type(
             }
             TypeKind::RValueReference => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(pointee, template_parameters, already_visited, ast, tu)?;
+                let ty_ref = extract_type(pointee, template_parameters, already_visited, ast, tu, allow_list)?;
                 Ok(QualType {
                     name,
                     is_const,

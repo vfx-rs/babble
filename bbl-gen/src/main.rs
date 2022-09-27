@@ -49,6 +49,14 @@ struct Args {
     /// cmake target_compile_definitions
     #[clap(short, long, value_parser)]
     compile_definitions: Vec<String>,
+
+    /// allowed elements
+    #[clap(short, long, value_parser)]
+    allow_list: Vec<String>,
+
+    /// blocked elements
+    #[clap(short, long, value_parser)]
+    block_list: Vec<String>,
 }
 
 impl Display for Verbosity {
@@ -93,6 +101,8 @@ fn main() -> Result<()> {
     let find_packages: Vec<&str> = args.packages.iter().map(|p| p.as_str()).collect();
     let link_libraries: Vec<&str> = args.link_libraries.iter().map(|p| p.as_str()).collect();
     let compile_definitions: Vec<&str> = args.compile_definitions.iter().map(|p| p.as_str()).collect();
+    let allow_list = AllowList::new(args.allow_list.clone());
+    println!("ALLOW LIST: {:?}", allow_list);
 
     let options = BindOptions {
         // We use CMake to configure the compilation and linking of our shim library, so need to point CMAKE_PREFIX_PATH
@@ -102,6 +112,7 @@ fn main() -> Result<()> {
         find_packages: &find_packages,
         link_libraries: &link_libraries,
         compile_definitions: &compile_definitions,
+        allow_list,
         // We can limit our extraction to a single namespace in the target library. This is usually a good idea to
         // avoid doing extra work (bbl-extract will extract everything it finds, even if it's never used, and the less
         // c++ it has to exract, the less likely it is to choke on constructs we haven't implemented yet)

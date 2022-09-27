@@ -3,7 +3,7 @@ mod common;
 use std::path::PathBuf;
 
 use bbl_clang::{cli_args, cli_args_with, virtual_file::configure_temp_cmake_project};
-use bbl_extract::{class::ClassBindKind, parse_file_and_extract_ast, parse_string_and_extract_ast};
+use bbl_extract::{AllowList, class::ClassBindKind, parse_file_and_extract_ast, parse_string_and_extract_ast};
 use bbl_translate::translate_cpp_ast_to_c;
 use common::run_test;
 
@@ -28,6 +28,7 @@ public:
         &cli_args()?,
         true,
         None,
+        &AllowList::default(),
     )?;
 
     println!("{ast:?}");
@@ -64,6 +65,7 @@ public:
         &cli_args()?,
         true,
         None,
+        &AllowList::default(),
     )?;
 
     println!("{ast:?}");
@@ -105,6 +107,7 @@ void fun(Class c);
         &cli_args()?,
         true,
         None,
+        &AllowList::default(),
     )?;
 
     println!("{ast:?}");
@@ -141,6 +144,7 @@ void fun(Class c);
         &cli_args()?,
         true,
         None,
+        &AllowList::default(),
     )?;
 
     println!("{ast:?}");
@@ -180,6 +184,7 @@ public:
         &cli_args()?,
         true,
         None,
+        &AllowList::default(),
     )?;
 
     println!("{ast:?}");
@@ -221,6 +226,7 @@ public:
         &cli_args()?,
         true,
         None,
+        &AllowList::default(),
     )?;
 
     println!("{ast:?}");
@@ -268,6 +274,7 @@ public:
         &cli_args()?,
         true,
         Some("Test_1_0"),
+        &AllowList::default(),
     )?;
 
     println!("{ast:?}");
@@ -309,6 +316,7 @@ fn take_std_string_by_value() -> Result<(), Error> {
             &cli_args()?,
             true,
             Some("Test_1_0"),
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");
@@ -352,6 +360,7 @@ fn write_take_std_string() -> Result<(), Error> {
             &cli_args()?,
             true,
             Some("Test_1_0"),
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");
@@ -388,23 +397,24 @@ fn write_implicit_ctor() -> Result<(), Error> {
             &cli_args_with(&["-std=c++11"])?,
             true,
             None,
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");
-        /* 
-        assert_eq!(
-            format!("{ast:?}"),
-            indoc!(
-                r#"
-        Namespace c:@S@Class Class None
-        ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[ctor ] template_parameters=[] specializations=[] namespaces=[]
-        Field b: float
-        Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@Class# Class rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+        /*
+            assert_eq!(
+                format!("{ast:?}"),
+                indoc!(
+                    r#"
+            Namespace c:@S@Class Class None
+            ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[ctor ] template_parameters=[] specializations=[] namespaces=[]
+            Field b: float
+            Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@Class# Class rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
 
-    "#
-            )
-        );
-        */
+        "#
+                )
+            );
+            */
 
         let class_id = ast.find_class("Class2")?;
         ast.class_set_bind_kind(class_id, ClassBindKind::OpaquePtr)?;
@@ -417,7 +427,6 @@ fn write_implicit_ctor() -> Result<(), Error> {
 
         let (c_header, c_source) = gen_c("test", &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
-
 
         Ok(())
     })
@@ -448,23 +457,24 @@ fn write_inherited() -> Result<(), Error> {
             &cli_args_with(&["-std=c++11"])?,
             true,
             None,
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");
-        /* 
-        assert_eq!(
-            format!("{ast:?}"),
-            indoc!(
-                r#"
-        Namespace c:@S@Class Class None
-        ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[ctor ] template_parameters=[] specializations=[] namespaces=[]
-        Field b: float
-        Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@Class# Class rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+        /*
+            assert_eq!(
+                format!("{ast:?}"),
+                indoc!(
+                    r#"
+            Namespace c:@S@Class Class None
+            ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[ctor ] template_parameters=[] specializations=[] namespaces=[]
+            Field b: float
+            Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@Class# Class rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
 
-    "#
-            )
-        );
-        */
+        "#
+                )
+            );
+            */
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
@@ -474,7 +484,6 @@ fn write_inherited() -> Result<(), Error> {
 
         let (c_header, c_source) = gen_c("test", &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
-
 
         Ok(())
     })
@@ -494,6 +503,7 @@ fn write_take_std_string_fun() -> Result<(), Error> {
             &cli_args()?,
             true,
             Some("Test_1_0"),
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");
@@ -540,6 +550,7 @@ fn build_take_std_string() -> Result<(), Error> {
             &cli_args_with(&args)?,
             true,
             Some("Test_1_0"),
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");

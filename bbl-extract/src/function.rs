@@ -6,6 +6,7 @@ use log::*;
 use std::fmt::{Debug, Display};
 use tracing::instrument;
 
+use crate::AllowList;
 use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, FunctionTemplateSpecializationId};
 use crate::class::MethodSpecializationId;
 use crate::qualtype::{extract_type};
@@ -598,6 +599,7 @@ pub fn extract_argument(
     already_visited: &mut Vec<USR>,
     ast: &mut AST,
     tu: &TranslationUnit,
+    allow_list: &AllowList,
 ) -> Result<Argument> {
     let children = c_arg.children();
     trace!("extracting arg {c_arg:?}");
@@ -606,7 +608,7 @@ pub fn extract_argument(
     trace!("  has type {ty:?}");
 
     let qual_type = 
-        extract_type(ty, template_parameters, already_visited, ast, tu)?;
+        extract_type(ty, template_parameters, already_visited, ast, tu, allow_list)?;
 
     Ok(Argument {
         name: c_arg.spelling(),
@@ -621,6 +623,7 @@ pub fn extract_function(
     already_visited: &mut Vec<USR>,
     tu: &TranslationUnit,
     ast: &mut AST,
+    allow_list: &AllowList,
 ) -> Result<Function> {
     let c_function = c_function.canonical()?;
 
@@ -687,6 +690,7 @@ pub fn extract_function(
             already_visited,
             ast,
             tu,
+            allow_list,
         )
         .map_err(|e| Error::FailedToExtractResult {
             source: Box::new(e),
@@ -710,6 +714,7 @@ pub fn extract_function(
                     already_visited,
                     ast,
                     tu,
+                    allow_list,
                 )
                 .map_err(|e| Error::FailedToExtractArgument {
                     name: c_arg.display_name(),
@@ -775,6 +780,7 @@ pub fn extract_method(
     already_visited: &mut Vec<USR>,
     tu: &TranslationUnit,
     ast: &mut AST,
+    allow_list: &AllowList,
 ) -> Result<Method> {
     let c_method = c_method.canonical()?;
 
@@ -813,6 +819,7 @@ pub fn extract_method(
             already_visited,
             tu,
             ast,
+            allow_list,
         )
         .map_err(|e| Error::FailedToExtractMethod {
             name: c_method.display_name(),
@@ -908,7 +915,7 @@ mod tests {
     use bbl_clang::cli_args;
     use indoc::indoc;
 
-    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast};
+    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList};
 
     #[test]
     fn extract_static_method() -> Result<(), Error> {
@@ -928,6 +935,7 @@ mod tests {
             &cli_args()?,
             true,
             None,
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");
@@ -970,6 +978,7 @@ mod tests {
             &cli_args()?,
             true,
             None,
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");

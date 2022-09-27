@@ -5,6 +5,7 @@ use std::convert::TryInto;
 use std::fmt::Display;
 use tracing::{debug, error, info, instrument, trace, warn};
 
+use crate::AllowList;
 use crate::ast::{dump_cursor, get_namespaces_for_decl, get_qualified_name, TypeAliasId, AST};
 use crate::class::extract_class_decl;
 use crate::namespace::extract_namespace;
@@ -73,6 +74,7 @@ pub fn extract_typedef_decl<'a>(
     already_visited: &mut Vec<USR>,
     ast: &'a mut AST,
     tu: &TranslationUnit,
+    allow_list: &AllowList,
 ) -> Result<USR> {
     let usr = c_typedef.usr();
     if already_visited.contains(&usr) {
@@ -91,6 +93,7 @@ pub fn extract_typedef_decl<'a>(
         already_visited,
         ast,
         tu,
+        allow_list,
     )?;
 
     let id = ast.insert_type_alias(Typedef {
@@ -110,7 +113,7 @@ mod tests {
     use indoc::indoc;
     use log::Level;
 
-    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast};
+    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList};
 
     #[test]
     fn extract_typealias_typedef() -> Result<(), Error> {
@@ -140,6 +143,7 @@ mod tests {
                 &cli_args()?,
                 true,
                 None,
+                &AllowList::default(),
             )?;
 
             println!("{ast:?}");
@@ -188,6 +192,7 @@ mod tests {
                 &cli_args()?,
                 true,
                 None,
+                &AllowList::default(),
             )?;
 
             println!("{ast:?}");

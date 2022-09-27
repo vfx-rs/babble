@@ -1,10 +1,11 @@
 use std::path::{Path, PathBuf};
 
 use bbl_clang::{cli_args_with, virtual_file::configure_temp_cmake_project};
-use bbl_extract::parse_file_and_extract_ast;
+use bbl_extract::{parse_file_and_extract_ast};
 use bbl_write::{cmake::build_project, gen_c::gen_c, gen_rust_ffi::write_rust_ffi_module};
 
 pub use bbl_extract::ast::AST;
+pub use bbl_extract::AllowList;
 pub use bbl_translate::translate_cpp_ast_to_c;
 use tracing::debug;
 
@@ -27,6 +28,7 @@ pub fn parse(header: &str, options: &BindOptions) -> Result<AST, Error> {
         &clang_args,
         options.log_diagnostics,
         options.limit_to_namespace,
+        &options.allow_list,
     )?;
 
     Ok(ast)
@@ -89,10 +91,11 @@ pub struct BindOptions<'a, 'b, 'c, 'd, 'e> {
     pub cmake_prefix_path: Option<PathBuf>,
     pub find_packages: &'a [&'a str],
     pub link_libraries: &'b [&'b str],
-    pub compile_definitions: &'e [&'e str],
     pub clang_args: &'c [&'c str],
-    pub log_diagnostics: bool,
     pub limit_to_namespace: Option<&'d str>,
+    pub compile_definitions: &'e [&'e str],
+    pub allow_list: AllowList,
+    pub log_diagnostics: bool,
 }
 
 impl<'a, 'b, 'c, 'd, 'e> Default for BindOptions<'a, 'b, 'c, 'd, 'e> {
@@ -105,6 +108,7 @@ impl<'a, 'b, 'c, 'd, 'e> Default for BindOptions<'a, 'b, 'c, 'd, 'e> {
             clang_args: &[],
             log_diagnostics: true,
             limit_to_namespace: None,
+            allow_list: AllowList::default(),
         }
     }
 }

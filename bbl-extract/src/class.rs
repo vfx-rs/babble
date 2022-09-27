@@ -14,7 +14,7 @@ use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAlia
 use crate::error::{self, ExtractClassError};
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::index_map::IndexMapKey;
-use crate::parse_string_and_extract_ast;
+use crate::{parse_string_and_extract_ast, AllowList};
 use crate::qualtype::extract_type;
 use crate::stdlib::create_std_string;
 use crate::templates::{TemplateParameterDecl, TemplateArgument, extract_class_template_specialization};
@@ -562,7 +562,9 @@ pub fn extract_class_decl(
     tu: &TranslationUnit,
     ast: &mut AST,
     already_visited: &mut Vec<USR>,
+    allow_list: &AllowList,
 ) -> Result<USR> {
+    println!("EXTRACT");
     // Check for std:: types we're going to extract manually here
     if class_decl.display_name().starts_with("basic_string<") {
         debug!("Extracting basic_string {}", class_decl.usr());
@@ -575,7 +577,7 @@ pub fn extract_class_decl(
     if class_decl.specialized_template().is_ok() {
         // this is a class template specialization, handle it separately
         debug!("extract_class_decl: {} is a CTS", class_decl.usr());
-        return extract_class_template_specialization(class_decl, already_visited, ast, tu);
+        return extract_class_template_specialization(class_decl, already_visited, ast, tu, allow_list);
     }
 
     if already_visited.contains(&class_decl.usr()) {
@@ -585,10 +587,13 @@ pub fn extract_class_decl(
         already_visited.push(class_decl.usr());
     }
 
-    trace!(
+    let namespaces = get_namespaces_for_decl(class_decl.into(), tu, ast, already_visited)?;
+    let class_decl_qualified_name = get_qualified_name(&class_decl.display_name(), &namespaces, ast)?;
+
+    debug!(
         "extract_class_decl({}) {}",
         class_decl.usr(),
-        class_decl.display_name()
+        class_decl_qualified_name,
     );
 
     // First, trawl the bases for all their methods we'll want to inherit
@@ -596,7 +601,7 @@ pub fn extract_class_decl(
     let mut base_constructors = Vec::new();
     for c_base in class_decl.children_of_kind(CursorKind::CXXBaseSpecifier, false) {
         if let Ok(c_base_decl) = c_base.referenced() {
-            let u_base = extract_class_decl(c_base_decl.try_into()?, tu, ast, already_visited)?;
+            let u_base = extract_class_decl(c_base_decl.try_into()?, tu, ast, already_visited, allow_list)?;
             let access = c_base.cxx_access_specifier()?;
 
             if let Some(base) = ast.get_class_decl_recursive(u_base) {
@@ -615,8 +620,6 @@ pub fn extract_class_decl(
         }
     }
 
-    let namespaces = get_namespaces_for_decl(class_decl.into(), tu, ast, already_visited)?;
-
     let mut methods = Vec::new();
     let mut fields = Vec::new();
     let mut template_parameters = Vec::new();
@@ -626,13 +629,21 @@ pub fn extract_class_decl(
     let mut index = 0;
     let mut has_private_fields = false;
     for member in members {
-        debug!("member {:?}", member);
+        let member_qualified_name = format!("{}::{}", class_decl_qualified_name, member.display_name());
+        debug!("member {}", member_qualified_name);
+        if !allow_list.allows(&member_qualified_name) {
+            continue;
+        }
+
+
         if let Ok(access) = member.cxx_access_specifier() {
             if access != AccessSpecifier::Public {
                 continue;
             }
         } else {
-            return Err(Error::FailedToGetAccessSpecifierFor(member.display_name()));
+            warn!("Failed to get access specifier for member {}", member.display_name());
+            continue;
+            // return Err(Error::FailedToGetAccessSpecifierFor(member.display_name()));
         }
         match member.kind() {
             CursorKind::TemplateTypeParameter => {
@@ -673,6 +684,7 @@ pub fn extract_class_decl(
                             already_visited,
                             tu,
                             ast,
+                            allow_list,
                         ) {
                             Ok(method) => methods.push(method),
                             Err(e) => {
@@ -720,6 +732,7 @@ pub fn extract_class_decl(
                             already_visited,
                             ast,
                             tu,
+                            allow_list,
                         )
                         .map_err(|e| {
                             ExtractClassError::FailedToExtractField {
@@ -850,6 +863,7 @@ pub fn extract_field(
     already_visited: &mut Vec<USR>,
     ast: &mut AST,
     tu: &TranslationUnit,
+    allow_list: &AllowList,
 ) -> Result<Field> {
     let template_parameters = class_template_parameters
         .iter()
@@ -863,6 +877,7 @@ pub fn extract_field(
         already_visited,
         ast,
         tu,
+        allow_list,
     )?;
 
     Ok(Field {
@@ -942,7 +957,7 @@ mod tests {
     use bbl_clang::cli_args;
     use indoc::indoc;
 
-    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast};
+    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList};
 
     #[test]
     fn extract_pod() -> Result<(), Error> {
@@ -960,6 +975,7 @@ mod tests {
             &cli_args()?,
             true,
             None,
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");
@@ -998,6 +1014,7 @@ mod tests {
             &cli_args()?,
             true,
             None,
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");
@@ -1037,6 +1054,7 @@ mod tests {
             &cli_args()?,
             true,
             None,
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");
@@ -1087,6 +1105,7 @@ mod tests {
             &cli_args()?,
             true,
             None,
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");
@@ -1161,6 +1180,7 @@ mod tests {
             &cli_args()?,
             true,
             None,
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");
@@ -1221,6 +1241,7 @@ mod tests {
             &cli_args()?,
             true,
             None,
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");

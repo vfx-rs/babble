@@ -21,6 +21,7 @@ pub mod typedef;
 use ast::{dump, extract_ast, extract_ast_from_namespace, Include, AST};
 pub mod error;
 use error::Error;
+use regex::Regex;
 use tracing::instrument;
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -58,6 +59,7 @@ pub fn parse_file_and_extract_ast<
     cli_args: &[S],
     log_diagnostics: bool,
     namespace: Option<&str>,
+    allow_list: &AllowList,
 ) -> Result<AST> {
     let index = Index::new();
     let tu = index.create_translation_unit(path, cli_args)?;
@@ -75,9 +77,22 @@ pub fn parse_file_and_extract_ast<
 
     let cur = tu.get_cursor()?;
 
-    let ast = extract_ast_from_namespace(namespace, cur, &tu)?;
+    let ast = extract_ast_from_namespace(namespace, cur, &tu, allow_list)?;
 
     Ok(ast)
+}
+
+#[instrument(level = "trace")]
+pub fn parse_string<
+    S1: AsRef<str> + std::fmt::Debug,
+    S: AsRef<str> + std::fmt::Debug,
+>(
+    contents: S1,
+    cli_args: &[S],
+    log_diagnostics: bool,
+) -> Result<TranslationUnit> {
+    let path = virtual_file::write_temp_file(contents.as_ref())?;
+    parse_file(&path, cli_args, log_diagnostics)
 }
 
 #[instrument(level = "trace")]
@@ -89,9 +104,10 @@ pub fn parse_string_and_extract_ast<
     cli_args: &[S],
     log_diagnostics: bool,
     namespace: Option<&str>,
+    allow_list: &AllowList,
 ) -> Result<AST> {
     let path = virtual_file::write_temp_file(contents.as_ref())?;
-    parse_file_and_extract_ast(&path, cli_args, log_diagnostics, namespace)
+    parse_file_and_extract_ast(&path, cli_args, log_diagnostics, namespace, allow_list)
 }
 
 #[instrument(level = "trace")]
@@ -151,4 +167,38 @@ pub(crate) fn get_test_filename(base: &str) -> String {
         .as_os_str()
         .to_string_lossy()
         .to_string()
+}
+
+#[derive(Debug, Default)]
+pub struct AllowList {
+    regexes: Vec<regex::Regex>,
+    /// If false, actually a block list
+    allow: bool,
+}
+
+impl AllowList {
+    pub fn new(prefixes: Vec<String>) -> AllowList {
+        let regexes = prefixes.iter().map(|s| Regex::new(s).unwrap()).collect();
+        AllowList { regexes, allow: true }
+    }
+
+    pub fn block_list(prefixes: Vec<String>) -> AllowList {
+        let regexes = prefixes.iter().map(|s| Regex::new(s).unwrap()).collect();
+        AllowList { regexes, allow: false }
+    }
+
+    pub fn allows(&self, name: &str) -> bool {
+        if self.regexes.is_empty() {
+            return true;
+        }
+
+        for re in &self.regexes {
+            // TODO (AL): now you have two problems...
+            if re.is_match(name) {
+                return self.allow;
+            }
+        }
+
+        !self.allow
+    }
 }

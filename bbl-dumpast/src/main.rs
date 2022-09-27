@@ -9,8 +9,12 @@ use clap::{Parser, ValueEnum};
 #[derive(Parser)]
 struct Args {
     /// Filename to parse to extract AST
-    #[clap(value_parser)]
-    filename: String,
+    #[clap(short, long, value_parser)]
+    filename: Option<String>,
+
+    /// C++ snippet to extract
+    #[clap(short, long, value_parser)]
+    source: Option<String>,
 
     /// Optional namespace to restrict AST extraction to
     #[clap(short, long, value_parser)]
@@ -42,7 +46,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .init();
     }
 
-    let tu = parse_file(args.filename, &cli_args()?, true)?;
+    let tu = if let Some(filename) = args.filename {
+        parse_file(filename, &cli_args()?, true)?
+    } else if let Some(source) = args.source {
+        parse_string(source, &cli_args()?, true)?
+    } else {
+        panic!("Must supply either filename or source argument")
+    };
 
     println!("INCLUDES");
     tu.get_inclusions(|_file, locations| {

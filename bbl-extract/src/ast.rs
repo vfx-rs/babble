@@ -10,6 +10,7 @@ use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::Translat
 use tracing::{debug, error, info, instrument, trace, warn};
 use ustr::{Ustr, UstrMap};
 
+use crate::AllowList;
 use crate::class::extract_class_decl;
 use crate::class::{ClassBindKind, ClassDecl, MethodSpecializationId};
 use crate::function::{extract_function, Function, Method};
@@ -558,6 +559,7 @@ pub fn get_qualified_name(decl: &str, namespaces: &[USR], ast: &AST) -> Result<S
     Ok(result)
 }
 
+#[allow(clippy::too_many_arguments)]
 /// Main recursive function to walk the AST and extract the pieces we're interested in
 #[instrument(
     skip(depth, max_depth, tu, namespaces, already_visited),
@@ -571,90 +573,98 @@ pub fn extract_ast(
     ast: &mut AST,
     tu: &TranslationUnit,
     namespaces: Vec<USR>,
+    allow_list: &AllowList,
 ) -> Result<()> {
     let mut namespaces = namespaces;
 
     if depth > max_depth {
-        // println!("");
         return Ok(());
     }
-    match c.kind() {
-        CursorKind::ClassDecl => {
-            if c.is_definition() {
-                extract_class_decl(c.try_into()?, tu, ast, already_visited)?;
-            }
-
-            return Ok(());
-        }
-        CursorKind::ClassTemplate => {
-            if c.is_definition() {
-                let c_class_template: CurClassTemplate = c.try_into()?;
-                extract_class_decl(
-                    c_class_template.as_class_decl(),
-                    tu,
-                    ast,
-                    already_visited,
-                )?;
-            }
-
-            return Ok(());
-        }
-        CursorKind::StructDecl => {
-            if c.is_definition() {
-                let c_struct: CurStructDecl = c.try_into()?;
-                extract_class_decl(
-                    c_struct.as_class_decl(),
-                    tu,
-                    ast,
-                    already_visited,
-                )?;
-            }
-
-            return Ok(());
-        }
-        CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
-            extract_typedef_decl(c.try_into()?, already_visited, ast, tu)?;
-            return Ok(());
-        }
-        CursorKind::Namespace => {
-            let usr = extract_namespace(c, depth, tu, ast);
-            let name = ast
-                .get_namespace(usr)
-                .ok_or_else(|| Error::NamespaceNotFound(usr.to_string()))?
-                .name();
-
-            // We bail out on std and will insert manual AST for the types we support because fuck dealing with that
-            // horror show
-            if name == "std" {
-                let children = c.children_of_kind(CursorKind::Namespace, true);
-
-                for child in children {
-                    extract_namespace(child, depth, tu, ast);
+    
+    let namespaces = get_namespaces_for_decl(c, tu, ast, already_visited)?;
+    let decl_qualified_name = get_qualified_name(&c.display_name(), &namespaces, ast)?;
+    if allow_list.allows(&decl_qualified_name) {
+        match c.kind() {
+            CursorKind::ClassDecl => {
+                if c.is_definition() {
+                    extract_class_decl(c.try_into()?, tu, ast, already_visited, allow_list)?;
                 }
 
-                debug!("Found std namespace, bailing early");
                 return Ok(());
             }
-        }
-        CursorKind::FunctionDecl | CursorKind::FunctionTemplate => {
-            let fun =
-                extract_function(c, &[], already_visited, tu, ast).map_err(|e| {
-                    Error::FailedToExtractFunction {
-                        name: c.display_name(),
-                        source: Box::new(e),
-                    }
-                })?;
-            ast.insert_function(fun);
-            already_visited.push(c.usr());
+            CursorKind::ClassTemplate => {
+                if c.is_definition() {
+                    let c_class_template: CurClassTemplate = c.try_into()?;
+                    extract_class_decl(
+                        c_class_template.as_class_decl(),
+                        tu,
+                        ast,
+                        already_visited,
+                        allow_list,
+                    )?;
+                }
 
-            return Ok(());
+                return Ok(());
+            }
+            CursorKind::StructDecl => {
+                if c.is_definition() {
+                    let c_struct: CurStructDecl = c.try_into()?;
+                    extract_class_decl(
+                        c_struct.as_class_decl(),
+                        tu,
+                        ast,
+                        already_visited,
+                        allow_list,
+                    )?;
+                }
+
+                return Ok(());
+            }
+            CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
+                extract_typedef_decl(c.try_into()?, already_visited, ast, tu, allow_list)?;
+                return Ok(());
+            }
+            CursorKind::Namespace => {
+                let usr = extract_namespace(c, depth, tu, ast);
+                let name = ast
+                    .get_namespace(usr)
+                    .ok_or_else(|| Error::NamespaceNotFound(usr.to_string()))?
+                    .name();
+
+                // We bail out on std and will insert manual AST for the types we support because fuck dealing with that
+                // horror show
+                if name == "std" {
+                    let children = c.children_of_kind(CursorKind::Namespace, true);
+
+                    for child in children {
+                        extract_namespace(child, depth, tu, ast);
+                    }
+
+                    debug!("Found std namespace, bailing early");
+                    return Ok(());
+                }
+            }
+            CursorKind::FunctionDecl | CursorKind::FunctionTemplate => {
+                let fun =
+                    extract_function(c, &[], already_visited, tu, ast, allow_list).map_err(|e| {
+                        Error::FailedToExtractFunction {
+                            name: c.display_name(),
+                            source: Box::new(e),
+                        }
+                    })?;
+                ast.insert_function(fun);
+                already_visited.push(c.usr());
+
+                return Ok(());
+            }
+            _ => (),
         }
-        _ => (),
     }
 
     let indent = format!("{:width$}", "", width = depth * 2);
     trace!("{indent}{}: {} {}", c.kind(), c.display_name(), c.usr());
 
+    /*
     if let Ok(cr) = c.referenced() {
         if cr != c && !already_visited.contains(&cr.usr()) {
             if !cr.usr().is_empty() {
@@ -668,15 +678,22 @@ pub fn extract_ast(
                 ast,
                 tu,
                 namespaces.clone(),
+                allow_list,
             )?;
         } else {
-            debug!("{indent} already visited {cr:?}, skipping...");
+            trace!("{indent} already visited {cr:?}, skipping...");
         }
     }
+    */
 
     let children = c.children();
 
     for child in children {
+        if child.kind() == CursorKind::CompoundStmt {
+            // ignore function bodies
+            continue;
+        }
+
         extract_ast(
             child,
             depth + 1,
@@ -685,6 +702,7 @@ pub fn extract_ast(
             ast,
             tu,
             namespaces.clone(),
+            allow_list,
         )?;
     }
 
@@ -998,6 +1016,7 @@ pub fn extract_ast_from_namespace(
     name: Option<&str>,
     c_tu: Cursor,
     tu: &TranslationUnit,
+    allow_list: &AllowList,
 ) -> Result<AST> {
     let ns = if let Some(name) = name {
         if name.is_empty() {
@@ -1038,6 +1057,7 @@ pub fn extract_ast_from_namespace(
             &mut ast,
             tu,
             namespaces.clone(),
+            allow_list,
         )?;
     }
 

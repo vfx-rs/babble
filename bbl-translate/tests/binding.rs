@@ -4,9 +4,7 @@ use std::path::Path;
 
 use bbl_clang::{cli_args, cli_args_with, virtual_file::configure_temp_cmake_project};
 use bbl_extract::templates::TemplateArgument;
-use bbl_extract::{
-    parse_file_and_extract_ast, parse_string_and_extract_ast, qualtype::QualType,
-};
+use bbl_extract::{AllowList, parse_file_and_extract_ast, parse_string_and_extract_ast, qualtype::QualType};
 
 use bbl_translate::error::Error;
 
@@ -32,6 +30,7 @@ public:
         &cli_args()?,
         true,
         None,
+        &AllowList::default(),
     )?;
 
     let class = ast.find_class("Class")?;
@@ -76,6 +75,7 @@ public:
         &cli_args()?,
         true,
         None,
+        &AllowList::default(),
     )?;
 
     println!("{ast:?}");
@@ -172,6 +172,7 @@ public:
         &cli_args()?,
         true,
         Some("Imath_3_1"),
+        &AllowList::default(),
     )?;
 
     println!("{ast:?}");
@@ -209,6 +210,7 @@ public:
         &cli_args()?,
         true,
         None,
+        &AllowList::default(),
     )?;
 
     let class = ast.find_class("Class")?;
@@ -243,6 +245,7 @@ public:
         &cli_args()?,
         true,
         None,
+        &AllowList::default(),
     )?;
 
     let class = ast.find_class("Class")?;
@@ -280,6 +283,7 @@ public:
         &cli_args()?,
         true,
         None,
+        &AllowList::default(),
     )?;
 
     println!("{ast:?}");
@@ -312,6 +316,7 @@ int basic_function(int&& a, float*);
         &cli_args()?,
         true,
         None,
+        &AllowList::default(),
     )?;
 
     println!("{ast:?}");
@@ -338,6 +343,7 @@ T function_template(T&& a, float*);
         &cli_args()?,
         true,
         None,
+        &AllowList::default(),
     )?;
 
     println!("{ast:?}");
@@ -376,6 +382,7 @@ public:
         &cli_args()?,
         true,
         None,
+        &AllowList::default(),
     )?;
 
     println!("{ast:?}");
@@ -422,7 +429,8 @@ public:
         None,
     )?;
 
-    let ast = parse_file_and_extract_ast(&filename, &cli_args_with(&args)?, true, Some("Test"))?;
+    let ast =
+        parse_file_and_extract_ast(&filename, &cli_args_with(&args)?, true, Some("Test"), &AllowList::default())?;
     println!("{ast:?}");
 
     Ok(())
@@ -447,6 +455,7 @@ public:
             &cli_args()?,
             true,
             Some("Test"),
+            &AllowList::default(),
         )?;
 
         println!("{ast:?}");

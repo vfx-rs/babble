@@ -11,7 +11,7 @@ use tracing::log::{trace, debug};
 use crate::{
     ast::{get_namespaces_for_decl, get_qualified_name, AST},
     class::{extract_class_decl, ClassBindKind},
-    qualtype::{extract_type, QualType},
+    qualtype::{extract_type, QualType}, AllowList,
 };
 
 use super::error::Error;
@@ -27,6 +27,7 @@ pub fn extract_class_template_specialization(
     already_visited: &mut Vec<USR>,
     ast: &mut AST,
     tu: &TranslationUnit,
+    allow_list: &AllowList,
 ) -> Result<USR> {
     trace!("extract_class_template_specialization: {c_class_decl:?}");
     if already_visited.contains(&c_class_decl.usr()) {
@@ -35,7 +36,7 @@ pub fn extract_class_template_specialization(
         already_visited.push(c_class_decl.usr());
     }
 
-    let template_arguments = extract_template_args(c_class_decl, already_visited, ast, tu)?;
+    let template_arguments = extract_template_args(c_class_decl, already_visited, ast, tu, allow_list)?;
     let namespaces = get_namespaces_for_decl(c_class_decl.into(), tu, ast, already_visited)?;
 
     let specialized_decl: CurClassTemplate = c_class_decl
@@ -49,6 +50,7 @@ pub fn extract_class_template_specialization(
         tu,
         ast,
         already_visited,
+        allow_list,
     )?;
 
     let name = regex::Regex::new("(?:[^a-zA-Z0-9])+")
@@ -72,6 +74,7 @@ pub fn extract_template_args(
     already_visited: &mut Vec<USR>,
     ast: &mut AST,
     tu: &TranslationUnit,
+    allow_list: &AllowList,
 ) -> Result<Vec<TemplateArgument>> {
     let mut result = Vec::new();
     let num_template_args = c_class_decl.num_template_arguments();
@@ -92,6 +95,7 @@ pub fn extract_template_args(
                     already_visited,
                     ast,
                     tu,
+                    allow_list,
                 )?))
             }
             TemplateArgumentKind::Integral => result.push(TemplateArgument::Integral(
