@@ -192,10 +192,21 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
         Expr::CppMethodCall {
             receiver,
             function,
+            template_arguments,
             arguments,
         } => {
             write_expr(body, receiver, depth)?;
-            write!(body, "->{function}(")?;
+            write!(body, "->{function}")?;
+            
+            if !template_arguments.is_empty() {
+                write!(body, "<")?;
+                for arg in template_arguments {
+                    write_expr(body, arg, depth)?;
+                }
+                write!(body, ">")?;
+            }
+
+            write!(body, "(")?;
             if !arguments.is_empty() {
                 writeln!(body)?;
             }
@@ -213,10 +224,21 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
         Expr::CppStaticMethodCall {
             receiver,
             function,
+            template_arguments,
             arguments,
         } => {
             write_expr(body, receiver, depth)?;
-            write!(body, "::{function}(")?;
+            write!(body, "::{function}")?;
+
+            if !template_arguments.is_empty() {
+                write!(body, "<")?;
+                for arg in template_arguments {
+                    write_expr(body, arg, depth)?;
+                }
+                write!(body, ">")?;
+            }
+
+            write!(body, "(")?;
             if !arguments.is_empty() {
                 writeln!(body)?;
             }
@@ -233,9 +255,19 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
         }
         Expr::CppFunctionCall {
             function,
+            template_arguments,
             arguments,
         } => {
-            write!(body, "{function}(")?;
+            write!(body, "{function}")?;
+            if !template_arguments.is_empty() {
+                write!(body, "<")?;
+                for arg in template_arguments {
+                    write_expr(body, arg, depth)?;
+                }
+                write!(body, ">")?;
+            }
+
+            write!(body, "(")?;
             if !arguments.is_empty() {
                 writeln!(body)?;
             }
@@ -252,9 +284,18 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
         }
         Expr::CppConstructor {
             receiver,
+            template_arguments,
             arguments,
         } => {
             write_expr(body, receiver, depth)?;
+            if !template_arguments.is_empty() {
+                write!(body, "<")?;
+                for arg in template_arguments {
+                    write_expr(body, arg, depth)?;
+                }
+                write!(body, ">")?;
+            }
+
             write!(body, "(")?;
             if !arguments.is_empty() {
                 writeln!(body)?;

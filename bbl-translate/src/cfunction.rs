@@ -15,7 +15,7 @@ use tracing::{error, instrument, trace};
 use crate::{
     build_namespace_prefix,
     ctype::{translate_qual_type, CQualType, CTypeRef, TypeReplacements},
-    get_c_names, CAST,
+    get_c_names, CAST, error::TranslateTypeError,
 };
 
 use crate::error::Error;
@@ -226,11 +226,16 @@ pub fn translate_arguments(
     template_args: &[TemplateArgument],
     used_argument_names: &mut HashSet<String>,
     type_replacements: &TypeReplacements,
-) -> Result<Vec<CArgument>, Error> {
+) -> Result<(Vec<CArgument>, Vec<String>), Error> {
     trace!("Translating arguments {:?}", arguments);
     let mut result = Vec::new();
 
+    let mut used_template_parameters = Vec::new();
     for arg in arguments {
+        if let Some(parm) = arg.qual_type().template_parameter_name() {
+            used_template_parameters.push(parm.to_string());
+        }
+
         let qual_type = translate_qual_type(
             arg.qual_type(),
             template_parms,
@@ -266,7 +271,7 @@ pub fn translate_arguments(
         });
     }
 
-    Ok(result)
+    Ok((result, used_template_parameters))
 }
 
 #[instrument(skip(ast, functions, used_names), level = "trace")]
@@ -304,7 +309,7 @@ pub fn translate_function(
 
     let mut used_argument_names = HashSet::new();
 
-    let mut arguments = translate_arguments(
+    let (mut arguments, used_template_parameter_names) = translate_arguments(
         function.arguments(),
         function.template_parameters(),
         template_args,
@@ -315,6 +320,43 @@ pub fn translate_function(
         name: function.name().to_string(),
         source: Box::new(e),
     })?;
+
+    let mut unused_template_parameters = Vec::new();
+    // record which method template parameters are unused in the arguments (if any)
+    'outer: for p in function.template_parameters() {
+        for n in &used_template_parameter_names {
+            if n == p.name() {
+                continue 'outer;
+            }
+        }
+
+        unused_template_parameters.push(p.name().to_string());
+    }
+
+    // for each unused template parameter, find its matching argument and create a token for it
+    let call_template_arguments  = unused_template_parameters.iter().map(|parm| {
+        let parm_index = function.template_parameters()
+            .iter()
+            .position(|p| p.name() == parm)
+            .ok_or_else(|| Error::TemplateParmNotFound(parm.into()))?;
+
+        if parm_index >= template_args.len() {
+            Err(Error::TemplateArgNotFound(parm.into()))
+        } else {
+            match &template_args[parm_index] {
+                TemplateArgument::Type(tty) => {
+                    // Ok(Expr::Token(tty.name.clone()))
+                    Ok(Expr::Token(tty.format(ast, &[], Some(template_args))))
+                }
+                TemplateArgument::Integral(n) => {
+                    Ok(Expr::Token(format!("{n}")))
+                }
+                _ => Err(Error::InvalidTemplateArgumentKind(
+                    parm.into(),
+                )),
+            }
+        }
+    }).collect::<Result<Vec<Expr>>>()?;
 
     // For each argument to the original cpp function, modify its c counterpart to handle opaque api and generate the
     // necessary expressions to cast and deref it correctly back to cpp for passing to the original function.
@@ -569,6 +611,7 @@ pub fn translate_function(
 
     let call_expr = Expr::CppFunctionCall {
         function: function.get_qualified_name(ast)?,
+        template_arguments: call_template_arguments,
         arguments: arg_pass,
     };
 
@@ -676,7 +719,9 @@ pub fn translate_method(
 
     let mut used_argument_names = HashSet::new();
 
-    let mut arguments = translate_arguments(
+    let mut unused_template_parameters = Vec::new();
+
+    let (mut arguments, used_template_parameter_names) = translate_arguments(
         method.arguments(),
         &template_parms,
         template_args,
@@ -687,6 +732,41 @@ pub fn translate_method(
         name: format!("{}::{}", class.name(), method.name()),
         source: Box::new(e),
     })?;
+
+    // record which method template parameters are unused in the arguments (if any)
+    'outer: for p in method.template_parameters() {
+        for n in &used_template_parameter_names {
+            if n == p.name() {
+                continue 'outer;
+            }
+        }
+
+        unused_template_parameters.push(p.name().to_string());
+    }
+
+    // for each unused template parameter, find its matching argument and create a token for it
+    let call_template_arguments  = unused_template_parameters.iter().map(|parm| {
+        let parm_index = method.template_parameters()
+            .iter()
+            .position(|p| p.name() == parm)
+            .ok_or_else(|| Error::TemplateParmNotFound(parm.into()))?;
+
+        if parm_index >= template_args.len() {
+            Err(Error::TemplateArgNotFound(parm.into()))
+        } else {
+            match &template_args[parm_index] {
+                TemplateArgument::Type(tty) => {
+                    Ok(Expr::Token(tty.format(ast, class_template_parms, Some(template_args))))
+                }
+                TemplateArgument::Integral(n) => {
+                    Ok(Expr::Token(format!("{n}")))
+                }
+                _ => Err(Error::InvalidTemplateArgumentKind(
+                    parm.into(),
+                )),
+            }
+        }
+    }).collect::<Result<Vec<Expr>>>()?;
 
     // For each argument to the original cpp function, modify its c counterpart to handle opaque api and generate the
     // necessary expressions to cast and deref it correctly back to cpp for passing to the original function.
@@ -1039,6 +1119,7 @@ pub fn translate_method(
         let call_expr = Expr::CppStaticMethodCall {
             receiver: Box::new(Expr::Token(class_qname.to_string())),
             function: method.name().to_string(),
+            template_arguments: call_template_arguments,
             arguments: arg_pass,
         };
         if let Some(assign_expr_fn) = assign_expr_fn {
@@ -1049,6 +1130,7 @@ pub fn translate_method(
     } else if method.is_any_constructor() {
         let call_expr = Expr::CppConstructor {
             receiver: Box::new(Expr::Token(class_qname.to_string())),
+            template_arguments: call_template_arguments,
             arguments: arg_pass,
         };
         if let Some(assign_expr_fn) = assign_expr_fn {
@@ -1128,6 +1210,7 @@ pub fn translate_method(
                 value: Box::new(Expr::Token(self_name)),
             }),
             function: method.name().to_string(),
+            template_arguments: call_template_arguments,
             arguments: arg_pass,
         };
 
@@ -1297,20 +1380,24 @@ pub enum Expr {
     Compound(Vec<Expr>),
     CppFunctionCall {
         function: String,
+        template_arguments: Vec<Expr>,
         arguments: Vec<Expr>,
     },
     CppMethodCall {
         receiver: Box<Expr>,
         function: String,
+        template_arguments: Vec<Expr>,
         arguments: Vec<Expr>,
     },
     CppStaticMethodCall {
         receiver: Box<Expr>,
         function: String,
+        template_arguments: Vec<Expr>,
         arguments: Vec<Expr>,
     },
     CppConstructor {
         receiver: Box<Expr>,
+        template_arguments: Vec<Expr>,
         arguments: Vec<Expr>,
     },
     CppDestructor {

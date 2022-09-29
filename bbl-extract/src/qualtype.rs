@@ -195,6 +195,22 @@ impl QualType {
         }
     }
 
+    pub fn is_template(&self) -> bool {
+        match &self.type_ref {
+            TypeRef::TemplateNonTypeParameter(_) | TypeRef::TemplateTypeParameter(_) => true,
+            TypeRef::Builtin(_) | TypeRef::Ref(_) | TypeRef::Unknown(_) => false,
+            TypeRef::Pointer(p) | TypeRef::LValueReference(p) | TypeRef::RValueReference(p) => p.is_template(),
+        }
+    }
+
+    pub fn template_parameter_name(&self) -> Option<&str> {
+        match &self.type_ref {
+            TypeRef::TemplateNonTypeParameter(name) | TypeRef::TemplateTypeParameter(name) => Some(name.as_str()),
+            TypeRef::Builtin(_) | TypeRef::Ref(_) | TypeRef::Unknown(_) => None,
+            TypeRef::Pointer(p) | TypeRef::LValueReference(p) | TypeRef::RValueReference(p) => p.template_parameter_name(),
+        }
+    }
+
     pub fn format(
         &self,
         ast: &AST,
@@ -211,7 +227,7 @@ impl QualType {
 
         let result = match &self.type_ref {
             TypeRef::Builtin(tk) => {
-                format!("{result}{}", tk.spelling())
+                format!("{result}{}", builtin_spelling(tk))
             }
             TypeRef::Pointer(pointee) => format!(
                 "{result}{}*",
@@ -246,6 +262,28 @@ impl QualType {
         };
 
         result
+    }
+}
+
+fn builtin_spelling(tk: &TypeKind) -> String {
+    match tk {
+        TypeKind::Bool => "bool".to_string(),
+        TypeKind::Char_S => "char".to_string(),
+        TypeKind::Char_U => "unsigned char".to_string(),
+        TypeKind::Double => "double".to_string(),
+        TypeKind::Float => "float".to_string(),
+        TypeKind::Int => "int".to_string(),
+        TypeKind::Long => "long".to_string(),
+        TypeKind::LongDouble => "long double".to_string(),
+        TypeKind::LongLong => "long long".to_string(),
+        TypeKind::Short => "short".to_string(),
+        TypeKind::UChar => "unsigned char".to_string(),
+        TypeKind::UInt => "unsigned int".to_string(),
+        TypeKind::ULong => "unsigned long".to_string(),
+        TypeKind::ULongLong => "unsigned long long".to_string(),
+        TypeKind::UShort => "unsigned short".to_string(),
+        TypeKind::Void => "void".to_string(),
+        _ => unimplemented!(),
     }
 }
 

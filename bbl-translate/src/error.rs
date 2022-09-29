@@ -63,7 +63,13 @@ pub enum Error {
     FailedToTranslateTypedef {
         usr: USR,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
-    }
+    },
+    #[error("Could not find template parameter \"{0}\"")]
+    TemplateParmNotFound(String),
+    #[error("Could not find template argument \"{0}\"")]
+    TemplateArgNotFound(String),
+    #[error("Unsupported template argument kind \"{0}\"")]
+    InvalidTemplateArgumentKind(String),
 }
 
 #[derive(Debug, thiserror::Error)]
