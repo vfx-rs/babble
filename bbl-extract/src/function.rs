@@ -202,21 +202,19 @@ impl Function {
         outer_template_parameters: &[TemplateParameterDecl],
         template_args: Option<&[TemplateArgument]>,
     ) -> String {
-        self.format(ast, outer_template_parameters, template_args)
+        self.format()
     }
 
     pub fn format(
         &self,
-        ast: &AST,
-        outer_template_parameters: &[TemplateParameterDecl],
-        template_args: Option<&[TemplateArgument]>,
     ) -> String {
         let mut s = self.name.to_string();
 
         let args = self
             .arguments
             .iter()
-            .map(|p| p.format(ast, outer_template_parameters, template_args))
+            // .map(|p| p.format(ast, outer_template_parameters, template_args))
+            .map(|arg| arg.qual_type().name.clone())
             .collect::<Vec<String>>()
             .join(", ");
         s = format!("{s}({})", args);
@@ -224,7 +222,7 @@ impl Function {
         s = format!(
             "{s} -> {}",
             self.result
-                .format(ast, outer_template_parameters, template_args)
+                .name
         );
 
         s
@@ -239,7 +237,7 @@ impl Function {
     ) {
         let indent = format!("{:width$}", "", width = depth * 2);
 
-        let s = self.format(ast, outer_template_parameters, template_args);
+        let s = self.format();
 
         let mut modify_attrs = Vec::new();
         if self.ignored {
@@ -471,18 +469,15 @@ impl Method {
         class_template_parameters: &[TemplateParameterDecl],
         class_template_args: Option<&[TemplateArgument]>,
     ) -> String {
-        self.format(ast, class_template_parameters, class_template_args)
+        self.format()
     }
 
     pub fn format(
         &self,
-        ast: &AST,
-        class_template_parameters: &[TemplateParameterDecl],
-        class_template_args: Option<&[TemplateArgument]>,
     ) -> String {
         let mut s = self
             .function
-            .format(ast, class_template_parameters, class_template_args);
+            .format();
 
         if self.is_static() {
             s += " static"
@@ -512,7 +507,7 @@ impl Method {
     ) {
         let indent = format!("{:width$}", "", width = depth * 2);
 
-        let s = self.format(ast, class_template_parameters, class_template_args);
+        let s = self.format();
 
         let mut modify_attrs = Vec::new();
         if self.function.ignored {

@@ -4,7 +4,7 @@ use bbl_clang::{cli_args_with, virtual_file::configure_temp_cmake_project};
 use bbl_extract::{parse_file_and_extract_ast};
 use bbl_write::{cmake::build_project, gen_c::gen_c, gen_rust_ffi::write_rust_ffi_module};
 
-pub use bbl_extract::ast::AST;
+pub use bbl_extract::{ast::AST, templates::TemplateArgument, qualtype::QualType};
 pub use bbl_extract::AllowList;
 pub use bbl_translate::translate_cpp_ast_to_c;
 use tracing::debug;

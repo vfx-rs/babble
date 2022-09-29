@@ -195,8 +195,7 @@ pub fn translate_class(
             // separately
             if !method.is_specialized() {
                 warn!(
-                    "method {} is templated but has no specializations and so will be ignored",
-                    method.get_qualified_name(ast)?
+                    "method {} is templated but has no specializations and so will be ignored", method.signature(ast, class.template_parameters(), None)
                 );
             }
             continue;
@@ -343,8 +342,7 @@ pub fn translate_class_template(
             // separately
             if !method.is_specialized() {
                 warn!(
-                    "method {} is templated but has no specializations and so will be ignored",
-                    method.get_qualified_name(ast)?
+                    "method {method:?} is templated but has no specializations and so will be ignored"
                 );
             }
             continue;

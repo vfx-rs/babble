@@ -292,11 +292,7 @@ impl FunctionTemplateSpecialization {
 
         // this will be complicated...
         let function = ast.get_function(self.specialized_decl).unwrap();
-        function.format(
-            ast,
-            outer_template_parameters,
-            Some(self.template_arguments()),
-        )
+        function.format()
     }
 }
 

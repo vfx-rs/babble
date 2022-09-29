@@ -21,7 +21,7 @@ pub mod typedef;
 use ast::{dump, extract_ast, extract_ast_from_namespace, Include, AST};
 pub mod error;
 use error::Error;
-use regex::Regex;
+use regex::{Regex, RegexSet};
 use tracing::instrument;
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -169,21 +169,27 @@ pub(crate) fn get_test_filename(base: &str) -> String {
         .to_string()
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AllowList {
-    regexes: Vec<regex::Regex>,
+    regexes: RegexSet,
     /// If false, actually a block list
     allow: bool,
 }
 
+impl Default for AllowList {
+    fn default() -> Self {
+        AllowList { regexes: RegexSet::empty(), allow: false }
+    }
+}
+
 impl AllowList {
     pub fn new(prefixes: Vec<String>) -> AllowList {
-        let regexes = prefixes.iter().map(|s| Regex::new(s).unwrap()).collect();
+        let regexes = RegexSet::new(&prefixes).unwrap();
         AllowList { regexes, allow: true }
     }
 
     pub fn block_list(prefixes: Vec<String>) -> AllowList {
-        let regexes = prefixes.iter().map(|s| Regex::new(s).unwrap()).collect();
+        let regexes = RegexSet::new(&prefixes).unwrap();
         AllowList { regexes, allow: false }
     }
 
@@ -192,13 +198,11 @@ impl AllowList {
             return true;
         }
 
-        for re in &self.regexes {
-            // TODO (AL): now you have two problems...
-            if re.is_match(name) {
-                return self.allow;
-            }
+        if self.regexes.is_match(name) {
+            self.allow
+        } else {
+            !self.allow
         }
 
-        !self.allow
     }
 }
