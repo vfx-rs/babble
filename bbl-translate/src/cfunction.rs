@@ -647,6 +647,7 @@ pub fn translate_method(
     used_names: &mut HashSet<String>,
     ast: &AST,
     type_replacements: &TypeReplacements,
+    specialization_name: Option<&str>,
 ) -> Result<CFunction> {
     // Concatenate both the class template parameters and any template parameters on the function
     let template_parms = method
@@ -1158,7 +1159,9 @@ pub fn translate_method(
     // finally, push the return statement
     body.push(Expr::Return(Box::new(Expr::Token("0".into()))));
 
-    let fn_name = if let Some(name) = method.replacement_name() {
+    let fn_name = if let Some(name) = specialization_name {
+        name
+    } else if let Some(name) = method.replacement_name() {
         name
     } else {
         method.name()

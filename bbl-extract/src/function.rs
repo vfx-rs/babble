@@ -531,10 +531,10 @@ impl Method {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MethodKind {
     Constructor,
-    CopyConstructor,
-    MoveConstructor,
     ConvertingConstructor,
+    CopyConstructor,
     DefaultConstructor,
+    MoveConstructor,
     Destructor,
     Method,
     StaticMethod,
@@ -776,6 +776,7 @@ pub fn extract_method(
     tu: &TranslationUnit,
     ast: &mut AST,
     allow_list: &AllowList,
+    class_name: &str,
 ) -> Result<Method> {
     let c_method = c_method.canonical()?;
 
@@ -803,6 +804,9 @@ pub fn extract_method(
         MethodKind::Constructor
     } else if c_method.kind() == CursorKind::Destructor {
         MethodKind::Destructor
+    } else if c_method.spelling() == class_name {
+        // libclang seems to fail to identify templated constructors
+        MethodKind::Constructor
     } else {
         MethodKind::Method
     };

@@ -565,6 +565,7 @@ pub fn extract_class_decl(
     allow_list: &AllowList,
 ) -> Result<USR> {
     println!("EXTRACT");
+    let class_name = class_decl.spelling();
     // Check for std:: types we're going to extract manually here
     if class_decl.display_name().starts_with("basic_string<") {
         debug!("Extracting basic_string {}", class_decl.usr());
@@ -685,6 +686,7 @@ pub fn extract_class_decl(
                             tu,
                             ast,
                             allow_list,
+                            &class_name,
                         ) {
                             Ok(method) => methods.push(method),
                             Err(e) => {

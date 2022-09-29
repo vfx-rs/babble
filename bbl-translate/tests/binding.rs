@@ -10,6 +10,7 @@ use bbl_translate::error::Error;
 
 use bbl_translate::translate_cpp_ast_to_c;
 use log::error;
+use indoc::indoc;
 
 #[test]
 fn test_binding_rename() -> Result<(), Error> {
@@ -35,13 +36,13 @@ public:
 
     let class = ast.find_class("Class")?;
 
-    let method = ast.find_method(class, "method(a: Float) -> Int")?;
+    let method = ast.find_method(class, "method(float) -> int")?;
     ast.rename_method(class, method, "method_float");
 
-    let method = ast.find_method(class, "method(a: Int) -> Int")?;
+    let method = ast.find_method(class, "method(int) -> int")?;
     ast.rename_method(class, method, "method_int");
 
-    let method = ast.find_method(class, "method(a: UInt) -> Int")?;
+    let method = ast.find_method(class, "method(unsigned int) -> int")?;
     ast.ignore_method(class, method);
 
     println!("{ast:?}");
@@ -82,7 +83,7 @@ public:
 
     let class = ast.find_class("B")?;
 
-    let _method = ast.find_method(class, "take_a(a: Test::A&)")?;
+    let _method = ast.find_method(class, "take_a(const A &)")?;
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
 
@@ -402,6 +403,57 @@ public:
 
     assert_eq!(c_ast.structs.len(), 1);
     assert_eq!(c_ast.functions.len(), 1);
+
+    Ok(())
+}
+
+#[test]
+fn bind_templated_ctor() -> Result<(), Error> {
+    common::init_log();
+
+    let mut ast = parse_string_and_extract_ast(
+        r#"
+namespace Test {
+class Class {
+public:
+    template <typename T>
+    Class(const T&);
+};
+}
+        "#,
+        &cli_args()?,
+        true,
+        None,
+        &AllowList::default(),
+    )?;
+
+    let class = ast.find_class("Class")?;
+    let method = ast.find_method(class, "Class(const T &)")?;
+    ast.specialize_method(
+        class,
+        method,
+        "ctor_float",
+        vec![TemplateArgument::Type(QualType::float())],
+    )?;
+
+    println!("{ast:?}");
+
+    let c_ast = translate_cpp_ast_to_c(&ast)?;
+    println!("{c_ast:?}");
+    assert_eq!(
+        format!("{c_ast:?}"),
+        indoc!(r#"
+            CStruct c:@N@Test@S@Class Test_Class Test_Class OpaquePtr fields=[]
+            CFunction Test_Class_ctor Test_Class_ctor([result: c:@N@Test@S@Class**])  -> Int
+            CFunction Test_Class_copy_ctor Test_Class_copy_ctor([result: c:@N@Test@S@Class**, rhs: c:@N@Test@S@Class const* const])  -> Int
+            CFunction Test_Class_move_ctor Test_Class_move_ctor([result: c:@N@Test@S@Class**, rhs: c:@N@Test@S@Class const*])  -> Int
+            CFunction Test_Class_dtor Test_Class_dtor([this_: c:@N@Test@S@Class*])  -> Int
+            CFunction Test_Class_ctor_float Test_Class_ctor_float([result: c:@N@Test@S@Class**, arg: Float*])  -> Int
+        "#
+    ));
+
+    assert_eq!(c_ast.structs.len(), 1);
+    assert_eq!(c_ast.functions.len(), 5);
 
     Ok(())
 }

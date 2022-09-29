@@ -218,6 +218,7 @@ pub fn translate_class(
             used_names,
             ast,
             type_replacements,
+            None,
         )?;
 
         functions.insert(method.usr().into(), c_function);
@@ -251,6 +252,7 @@ pub fn translate_class(
             used_names,
             ast,
             type_replacements,
+            Some(spec_method.name())
         )?;
 
         functions.insert(method.usr().into(), c_function);
@@ -365,6 +367,7 @@ pub fn translate_class_template(
             used_names,
             ast,
             &type_replacements,
+            None,
         )?;
 
         functions.insert(method.usr().into(), c_function);
@@ -399,6 +402,7 @@ pub fn translate_class_template(
             used_names,
             ast,
             &type_replacements,
+            Some(spec_method.name())
         )?;
 
         functions.insert(method.usr().into(), c_function);

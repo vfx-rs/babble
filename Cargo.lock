@@ -173,6 +173,7 @@ dependencies = [
  "bbl-extract",
  "env_logger",
  "hashbrown",
+ "indoc",
  "levenshtein",
  "log",
  "thiserror",
