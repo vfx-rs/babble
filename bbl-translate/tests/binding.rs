@@ -578,6 +578,55 @@ public:
     })
 }
 
+#[test]
+fn translate_enum() -> Result<(), Error> {
+    common::init_log();
+
+    let mut ast = parse_string_and_extract_ast(
+        indoc!(
+            r#"
+            namespace Test_1_0 {
+            enum class Numbered {
+                First = 1,
+                Second,
+                Third = 3,
+            };
+
+            enum class Unnumbered {
+                First,
+                Second,
+                Third,
+            };
+
+            void take_enum(Numbered n, Unnumbered u);
+            }
+        "#
+        ),
+        &cli_args()?,
+        true,
+        None,
+        &AllowList::default(),
+    )?;
+
+    let ns = ast.find_namespace("Test_1_0")?;
+    ast.rename_namespace(ns, "Test");
+
+    let c_ast = translate_cpp_ast_to_c(&ast)?;
+    println!("{c_ast:?}");
+    assert_eq!(
+        format!("{c_ast:?}"),
+        indoc!(
+            r#"
+            CFunction Test_1_0_take_enum Test_take_enum([n: c:@N@Test_1_0@E@Numbered, u: c:@N@Test_1_0@E@Unnumbered])  -> Int
+            CEnum Test_1_0_Numbered Test_Numbered [First=1 Second=2 Third=3 ]
+            CEnum Test_1_0_Unnumbered Test_Unnumbered [First=0 Second=1 Third=2 ]
+            "#
+        )
+    );
+
+    Ok(())
+}
+
 struct SourceIter<'a> {
     current: Option<&'a (dyn std::error::Error + 'static)>,
 }

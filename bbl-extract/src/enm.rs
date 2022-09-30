@@ -15,6 +15,7 @@ pub struct Enum {
     usr: USR,
     ty: Type,
     variants: Vec<(String, i64)>,
+    namespaces: Vec<USR>,
 }
 
 impl std::fmt::Debug for Enum {
@@ -24,6 +25,7 @@ impl std::fmt::Debug for Enum {
             write!(f, "{}={} ", var.0, var.1)?;
         }
         write!(f, "]");
+        write!(f, " namespaces={:?}", self.namespaces);
         Ok(())
     }
 }
@@ -39,6 +41,14 @@ impl Enum {
 
     pub fn variants(&self) -> &[(String, i64)] {
         &self.variants
+    }
+
+    pub fn get_qualified_name(&self, ast: &AST) -> Result<String> {
+        get_qualified_name(self.name(), &self.namespaces, ast)
+    }
+
+    pub fn namespaces(&self) -> &[USR] {
+        &self.namespaces
     }
 }
 
@@ -66,7 +76,8 @@ pub fn extract_enum(c_enum: Cursor, ast: &mut AST, already_visited: &mut Vec<USR
         name,
         usr,
         ty,
-        variants
+        variants,
+        namespaces,
     });
 
     Ok(usr)

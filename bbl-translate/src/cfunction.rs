@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use backtrace::Backtrace;
 use bbl_clang::{cursor::USR, ty::TypeKind};
 use bbl_extract::{
     ast::{ClassId, FunctionId, MethodId, AST},
@@ -15,7 +16,8 @@ use tracing::{error, instrument, trace};
 use crate::{
     build_namespace_prefix,
     ctype::{translate_qual_type, CQualType, CTypeRef, TypeReplacements},
-    get_c_names, CAST, error::TranslateTypeError,
+    error::TranslateTypeError,
+    get_c_names, CAST,
 };
 
 use crate::error::Error;
@@ -334,29 +336,38 @@ pub fn translate_function(
     }
 
     // for each unused template parameter, find its matching argument and create a token for it
-    let call_template_arguments  = unused_template_parameters.iter().map(|parm| {
-        let parm_index = function.template_parameters()
-            .iter()
-            .position(|p| p.name() == parm)
-            .ok_or_else(|| Error::TemplateParmNotFound(parm.into()))?;
+    let call_template_arguments = unused_template_parameters
+        .iter()
+        .map(|parm| {
+            let parm_index = function
+                .template_parameters()
+                .iter()
+                .position(|p| p.name() == parm)
+                .ok_or_else(|| Error::TemplateParmNotFound {
+                    name: parm.into(),
+                    backtrace: Backtrace::new(),
+                })?;
 
-        if parm_index >= template_args.len() {
-            Err(Error::TemplateArgNotFound(parm.into()))
-        } else {
-            match &template_args[parm_index] {
-                TemplateArgument::Type(tty) => {
-                    // Ok(Expr::Token(tty.name.clone()))
-                    Ok(Expr::Token(tty.format(ast, &[], Some(template_args))))
+            if parm_index >= template_args.len() {
+                Err(Error::TemplateArgNotFound {
+                    name: parm.into(),
+                    backtrace: Backtrace::new(),
+                })
+            } else {
+                match &template_args[parm_index] {
+                    TemplateArgument::Type(tty) => {
+                        // Ok(Expr::Token(tty.name.clone()))
+                        Ok(Expr::Token(tty.format(ast, &[], Some(template_args))))
+                    }
+                    TemplateArgument::Integral(n) => Ok(Expr::Token(format!("{n}"))),
+                    _ => Err(Error::InvalidTemplateArgumentKind {
+                        name: parm.into(),
+                        backtrace: Backtrace::new(),
+                    }),
                 }
-                TemplateArgument::Integral(n) => {
-                    Ok(Expr::Token(format!("{n}")))
-                }
-                _ => Err(Error::InvalidTemplateArgumentKind(
-                    parm.into(),
-                )),
             }
-        }
-    }).collect::<Result<Vec<Expr>>>()?;
+        })
+        .collect::<Result<Vec<Expr>>>()?;
 
     // For each argument to the original cpp function, modify its c counterpart to handle opaque api and generate the
     // necessary expressions to cast and deref it correctly back to cpp for passing to the original function.
@@ -745,28 +756,39 @@ pub fn translate_method(
     }
 
     // for each unused template parameter, find its matching argument and create a token for it
-    let call_template_arguments  = unused_template_parameters.iter().map(|parm| {
-        let parm_index = method.template_parameters()
-            .iter()
-            .position(|p| p.name() == parm)
-            .ok_or_else(|| Error::TemplateParmNotFound(parm.into()))?;
+    let call_template_arguments = unused_template_parameters
+        .iter()
+        .map(|parm| {
+            let parm_index = method
+                .template_parameters()
+                .iter()
+                .position(|p| p.name() == parm)
+                .ok_or_else(|| Error::TemplateParmNotFound {
+                    name: parm.into(),
+                    backtrace: Backtrace::new(),
+                })?;
 
-        if parm_index >= template_args.len() {
-            Err(Error::TemplateArgNotFound(parm.into()))
-        } else {
-            match &template_args[parm_index] {
-                TemplateArgument::Type(tty) => {
-                    Ok(Expr::Token(tty.format(ast, class_template_parms, Some(template_args))))
+            if parm_index >= template_args.len() {
+                Err(Error::TemplateArgNotFound {
+                    name: parm.into(),
+                    backtrace: Backtrace::new(),
+                })
+            } else {
+                match &template_args[parm_index] {
+                    TemplateArgument::Type(tty) => Ok(Expr::Token(tty.format(
+                        ast,
+                        class_template_parms,
+                        Some(template_args),
+                    ))),
+                    TemplateArgument::Integral(n) => Ok(Expr::Token(format!("{n}"))),
+                    _ => Err(Error::InvalidTemplateArgumentKind {
+                        name: parm.into(),
+                        backtrace: Backtrace::new(),
+                    }),
                 }
-                TemplateArgument::Integral(n) => {
-                    Ok(Expr::Token(format!("{n}")))
-                }
-                _ => Err(Error::InvalidTemplateArgumentKind(
-                    parm.into(),
-                )),
             }
-        }
-    }).collect::<Result<Vec<Expr>>>()?;
+        })
+        .collect::<Result<Vec<Expr>>>()?;
 
     // For each argument to the original cpp function, modify its c counterpart to handle opaque api and generate the
     // necessary expressions to cast and deref it correctly back to cpp for passing to the original function.
@@ -1295,8 +1317,18 @@ fn get_cpp_cast_expr(qt: &CQualType, ast: &AST) -> Result<String> {
                         source: Box::new(source),
                     }
                 })?)
+            } else if let Some(enm) = ast.get_enum(*usr) {
+                Ok(enm.get_qualified_name(ast).map_err(|source| {
+                    Error::FailedToGetQualifiedName {
+                        usr: enm.usr(),
+                        source: Box::new(source),
+                    }
+                })?)
             } else {
-                Err(Error::RefNotFound(*usr))
+                Err(Error::RefNotFound {
+                    usr: *usr,
+                    backtrace: Backtrace::new(),
+                })
             }
         }
         _ => unreachable!(),
@@ -1321,8 +1353,13 @@ fn get_bind_kind(usr: USR, ast: &AST) -> Result<ClassBindKind> {
                 usr,
                 source: Box::new(e),
             })
+    } else if ast.get_enum(usr).is_some() {
+        Ok(ClassBindKind::ValueType)
     } else {
-        Err(Error::RefNotFound(usr))
+        Err(Error::RefNotFound {
+            usr,
+            backtrace: Backtrace::new(),
+        })
     }
 }
 

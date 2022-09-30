@@ -2,11 +2,13 @@ pub mod cfunction;
 pub mod cstruct;
 pub mod ctype;
 pub mod ctypedef;
+pub mod cenum;
 pub mod error;
 
 use bbl_clang::cursor::USR;
 use bbl_extract::ast::Include;
 use bbl_extract::index_map::UstrIndexMap;
+use cenum::{CEnum, CEnumId, translate_enum};
 use cfunction::{translate_function, CFunction, CFunctionId};
 use cstruct::{translate_class, CStruct, CStructId};
 use ctype::TypeReplacements;
@@ -29,6 +31,7 @@ pub struct CAST {
     pub structs: UstrIndexMap<CStruct, CStructId>,
     pub typedefs: UstrIndexMap<CTypedef, CTypedefId>,
     pub functions: UstrIndexMap<CFunction, CFunctionId>,
+    pub enums: UstrIndexMap<CEnum, CEnumId>,
     pub includes: Vec<Include>,
 }
 
@@ -44,6 +47,10 @@ impl Debug for CAST {
 
         for fun in self.functions.iter() {
             writeln!(f, "{fun:?}")?;
+        }
+
+        for enm in self.enums.iter() {
+            writeln!(f, "{enm:?}")?;
         }
 
         for inc in self.includes.iter() {
@@ -147,6 +154,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
     let mut structs = UstrIndexMap::new();
     let mut typedefs = UstrIndexMap::new();
     let mut functions = UstrIndexMap::new();
+    let mut enums = UstrIndexMap::new();
 
     let mut used_names = HashSet::new();
 
@@ -218,10 +226,15 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
         )?;
     }
 
+    for (_enum_id, enm) in ast.enums().iter().enumerate() {
+        translate_enum(ast, enm, &mut enums)?;
+    }
+
     Ok(CAST {
         structs,
         typedefs,
         functions,
+        enums,
         includes: ast.includes().to_vec(),
     })
 }

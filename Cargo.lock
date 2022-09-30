@@ -169,6 +169,7 @@ name = "bbl-translate"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "backtrace",
  "bbl-clang",
  "bbl-extract",
  "env_logger",

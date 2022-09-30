@@ -1,3 +1,4 @@
+use backtrace::Backtrace;
 use bbl_clang::cursor::USR;
 use bbl_extract::{
     ast::{ClassId, FunctionId, AST},
@@ -27,7 +28,10 @@ pub fn translate_function_template_specialization(
         .functions()
         .get_id(&fts.specialized_decl().into())
         .map(|id| FunctionId::new(*id))
-        .ok_or_else(|| Error::FunctionNotFound(fts.specialized_decl().to_string()))?;
+        .ok_or_else(|| Error::FunctionNotFound {
+            name: fts.specialized_decl().to_string(),
+            backtrace: Backtrace::new(),
+        })?;
     let function = &ast.functions()[function_id];
 
     let type_replacements = TypeReplacements::default();
@@ -58,7 +62,10 @@ pub fn translate_class_template_specialization(
         .classes()
         .get_id(&cts.specialized_decl().into())
         .map(|id| ClassId::new(*id))
-        .ok_or_else(|| Error::ClassNotFound(cts.specialized_decl().as_str().to_string()))?;
+        .ok_or_else(|| Error::ClassNotFound {
+            name: cts.specialized_decl().as_str().to_string(),
+            backtrace: Backtrace::new(),
+        })?;
     let class = &ast.classes()[class_id];
 
     translate_class_template(

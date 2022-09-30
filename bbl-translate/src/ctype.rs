@@ -3,6 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use backtrace::Backtrace;
 use bbl_clang::{cursor::USR, ty::TypeKind};
 use bbl_extract::{
     qualtype::{QualType, TypeRef},
@@ -78,7 +79,10 @@ impl CQualType {
                     // no struct with this USR, see if there's a typedef instead
                     Ok(format!("{}{const_}", td.name_external))
                 } else {
-                    Err(Error::RefNotFound(*usr))
+                    Err(Error::RefNotFound {
+                        usr: *usr,
+                        backtrace: Backtrace::new(),
+                    })
                 }
             }
             CTypeRef::Unknown(tk) => Ok(format!("UNKNOWN({}){const_}", tk.spelling())),
@@ -184,7 +188,7 @@ pub fn translate_qual_type(
     template_parms: &[TemplateParameterDecl],
     template_args: &[TemplateArgument],
     type_replacements: &TypeReplacements,
-) -> Result<CQualType, TranslateTypeError> {
+) -> Result<CQualType> {
     match &qual_type.type_ref {
         TypeRef::Builtin(tk) => Ok(CQualType {
             name: qual_type.name.clone(),
@@ -236,10 +240,16 @@ pub fn translate_qual_type(
             let parm_index = template_parms
                 .iter()
                 .position(|p| p.name() == parm_name)
-                .ok_or_else(|| TranslateTypeError::TemplateParmNotFound(parm_name.into()))?;
+                .ok_or_else(|| Error::TemplateParmNotFound {
+                    name: parm_name.into(),
+                    backtrace: Backtrace::new(),
+                })?;
 
             if parm_index >= template_args.len() {
-                Err(TranslateTypeError::TemplateArgNotFound(parm_name.into()))
+                Err(Error::TemplateArgNotFound {
+                    name: parm_name.into(),
+                    backtrace: Backtrace::new(),
+                })
             } else {
                 match &template_args[parm_index] {
                     TemplateArgument::Type(tty) => {
@@ -252,9 +262,10 @@ pub fn translate_qual_type(
                     TemplateArgument::Integral(_n) => {
                         todo!()
                     }
-                    _ => Err(TranslateTypeError::InvalidTemplateArgumentKind(
-                        parm_name.into(),
-                    )),
+                    _ => Err(Error::InvalidTemplateArgumentKind {
+                        name: parm_name.into(),
+                        backtrace: Backtrace::new(),
+                    }),
                 }
             }
         }

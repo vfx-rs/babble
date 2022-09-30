@@ -160,7 +160,7 @@ pub fn translate_class(
                     "Could not translate field {name} of class {}: {e}",
                     class.name()
                 );
-                return Err(Error::TranslateField { name, source: e });
+                return Err(Error::TranslateField { name, source: Box::new(e) });
             }
         };
 
@@ -309,7 +309,7 @@ pub fn translate_class_template(
                     "Could not translate field {name} of class {}: {e}",
                     class.name()
                 );
-                return Err(Error::TranslateField { name, source: e });
+                return Err(Error::TranslateField { name, source: Box::new(e) });
             }
         };
 

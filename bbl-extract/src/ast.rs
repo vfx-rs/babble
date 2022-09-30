@@ -498,6 +498,9 @@ impl AST {
         self.enums.get(&usr.into())
     }
 
+    pub fn enums(&self) -> &UstrIndexMap<Enum, EnumId> {
+        &self.enums
+    }
 
     pub fn get_class_template_specialization(
         &self,
