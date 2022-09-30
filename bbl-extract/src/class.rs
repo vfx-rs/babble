@@ -508,6 +508,50 @@ impl ClassDecl {
         }
     }
 
+    pub fn find_methods(&self, ast: &AST, signature: &str) -> Result<(Vec<MethodId>, Vec<&Method>)> {
+        let mut matches = Vec::new();
+
+        for (method_id, method) in self.methods.iter().enumerate() {
+            if method
+                .signature(ast, &self.template_parameters, None)
+                .contains(signature)
+            {
+                matches.push((method_id, method));
+            }
+        }
+
+        match matches.len() {
+            0 => {
+                let mut distances = Vec::with_capacity(self.methods.len());
+                for method in self.methods.iter() {
+                    let sig = method.signature(ast, &self.template_parameters, None);
+                    let dist = levenshtein::levenshtein(&sig, signature);
+                    distances.push((dist, sig));
+                }
+
+                distances.sort_by(|a, b| a.0.cmp(&b.0));
+
+                error!(
+                    "Could not find method matching signature: \"{}\"",
+                    signature
+                );
+                error!("Did you mean one of:");
+                for (_, sug) in distances.iter().take(3) {
+                    error!("  {sug}");
+                }
+
+                Err(Error::MethodNotFound)
+            }
+            _ => {
+                Ok(
+                    matches.into_iter().map(|m| {
+                        (MethodId::new(m.0), m.1)
+                    }).unzip()
+                )
+            }
+        }
+    }
+
     pub fn get_method(&self, id: MethodId) -> &Method {
         &self.methods[id.get()]
     }
@@ -564,7 +608,6 @@ pub fn extract_class_decl(
     already_visited: &mut Vec<USR>,
     allow_list: &AllowList,
 ) -> Result<USR> {
-    println!("EXTRACT");
     let class_name = class_decl.spelling();
     // Check for std:: types we're going to extract manually here
     if class_decl.display_name().starts_with("basic_string<") {
@@ -638,9 +681,9 @@ pub fn extract_class_decl(
 
 
         if let Ok(access) = member.cxx_access_specifier() {
-            if access != AccessSpecifier::Public {
-                continue;
-            }
+            // if access != AccessSpecifier::Public {
+            //     continue;
+            // }
         } else {
             warn!("Failed to get access specifier for member {}", member.display_name());
             continue;
@@ -728,25 +771,26 @@ pub fn extract_class_decl(
             CursorKind::FieldDecl => {
                 if let Ok(access) = member.cxx_access_specifier() {
                     if access == AccessSpecifier::Public {
-                        let field = extract_field(
-                            member,
-                            &template_parameters,
-                            already_visited,
-                            ast,
-                            tu,
-                            allow_list,
-                        )
-                        .map_err(|e| {
-                            ExtractClassError::FailedToExtractField {
-                                class: class_decl.display_name(),
-                                name: member.display_name(),
-                                source: Box::new(e),
-                            }
-                        })?;
-                        fields.push(field);
                     } else {
                         has_private_fields = true;
                     }
+                    debug!("    field {}", member.display_name());
+                    let field = extract_field(
+                        member,
+                        &template_parameters,
+                        already_visited,
+                        ast,
+                        tu,
+                        allow_list,
+                    )
+                    .map_err(|e| {
+                        ExtractClassError::FailedToExtractField {
+                            class: class_decl.display_name(),
+                            name: member.display_name(),
+                            source: Box::new(e),
+                        }
+                    })?;
+                    fields.push(field);
                 } else {
                     return Err(Error::FailedToGetAccessSpecifierFor(member.display_name()));
                 }
@@ -1024,8 +1068,9 @@ mod tests {
             format!("{ast:?}"),
             indoc!(
                 r#"
-        ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
-        Field b: float
+                ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+                Field a: int
+                Field b: float
  
     "#
             )
@@ -1193,6 +1238,7 @@ mod tests {
                 Namespace c:@S@Base Base None
                 Namespace c:@S@Class Class None
                 ClassDecl c:@S@Base Base rename=None OpaquePtr is_pod=false ignore=false rof=[public ctor ] template_parameters=[] specializations=[] namespaces=[]
+                Field a: int
                 Field b: float
                 Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@Base# Base rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
                 Method Constructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@Base#I#f# Base rename=Some("ctor") ignore=false return=void args=[a: int, b: float] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
@@ -1253,7 +1299,8 @@ mod tests {
                 r#"
                 Namespace c:@S@Base Base None
                 Namespace c:@S@Class Class None
-                ClassDecl c:@S@Base Base rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+                ClassDecl c:@S@Base Base rename=None OpaquePtr is_pod=false ignore=false rof=[private ctor private copy_ctor private move_ctor ] template_parameters=[] specializations=[] namespaces=[]
+                Field a: int
                 Field b: float
                 Method Method const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@base_do_thing# base_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
 

@@ -197,12 +197,10 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
         } => {
             write_expr(body, receiver, depth)?;
             write!(body, "->{function}")?;
-            
+
             if !template_arguments.is_empty() {
                 write!(body, "<")?;
-                for arg in template_arguments {
-                    write_expr(body, arg, depth)?;
-                }
+                write_argument_list(body, template_arguments, depth)?;
                 write!(body, ">")?;
             }
 
@@ -210,11 +208,7 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
             if !arguments.is_empty() {
                 writeln!(body)?;
             }
-            for arg in arguments {
-                write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
-                write_expr(body, arg, depth + 1)?;
-                writeln!(body)?;
-            }
+            write_argument_list(body, arguments, depth)?;
             if arguments.is_empty() {
                 write!(body, ")")?;
             } else {
@@ -232,9 +226,7 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
 
             if !template_arguments.is_empty() {
                 write!(body, "<")?;
-                for arg in template_arguments {
-                    write_expr(body, arg, depth)?;
-                }
+                write_argument_list(body, template_arguments, depth)?;
                 write!(body, ">")?;
             }
 
@@ -242,11 +234,7 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
             if !arguments.is_empty() {
                 writeln!(body)?;
             }
-            for arg in arguments {
-                write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
-                write_expr(body, arg, depth + 1)?;
-                writeln!(body)?;
-            }
+            write_argument_list(body, arguments, depth)?;
             if arguments.is_empty() {
                 write!(body, ")")?;
             } else {
@@ -261,9 +249,7 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
             write!(body, "{function}")?;
             if !template_arguments.is_empty() {
                 write!(body, "<")?;
-                for arg in template_arguments {
-                    write_expr(body, arg, depth)?;
-                }
+                write_argument_list(body, template_arguments, depth)?;
                 write!(body, ">")?;
             }
 
@@ -271,11 +257,7 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
             if !arguments.is_empty() {
                 writeln!(body)?;
             }
-            for arg in arguments {
-                write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
-                write_expr(body, arg, depth + 1)?;
-                writeln!(body)?;
-            }
+            write_argument_list(body, arguments, depth)?;
             if arguments.is_empty() {
                 write!(body, ")")?;
             } else {
@@ -290,9 +272,7 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
             write_expr(body, receiver, depth)?;
             if !template_arguments.is_empty() {
                 write!(body, "<")?;
-                for arg in template_arguments {
-                    write_expr(body, arg, depth)?;
-                }
+                write_argument_list(body, template_arguments, depth)?;
                 write!(body, ">")?;
             }
 
@@ -300,11 +280,7 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
             if !arguments.is_empty() {
                 writeln!(body)?;
             }
-            for arg in arguments {
-                write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
-                write_expr(body, arg, depth + 1)?;
-                writeln!(body)?;
-            }
+            write_argument_list(body, arguments, depth)?;
             if arguments.is_empty() {
                 write!(body, ")")?;
             } else {
@@ -372,6 +348,22 @@ fn write_expr(body: &mut String, expr: &Expr, depth: usize) -> Result<()> {
         _ => (),
     }
 
+    Ok(())
+}
+
+fn write_argument_list(body: &mut String, arguments: &[Expr], depth: usize) -> Result<()> {
+    if !arguments.is_empty() {
+        for arg in arguments.iter().take(arguments.len() - 1) {
+            write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
+            write_expr(body, arg, depth + 1)?;
+            writeln!(body, ",")?;
+        }
+        if let Some(arg) = arguments.last() {
+            write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
+            write_expr(body, arg, depth + 1)?;
+            writeln!(body)?;
+        }
+    }
     Ok(())
 }
 

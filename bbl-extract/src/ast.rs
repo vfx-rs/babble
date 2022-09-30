@@ -421,6 +421,17 @@ impl AST {
         class.find_method(self, signature).map(|t| t.0)
     }
 
+    /// Find all methods on the class with id `class_id` that match on the name and return their ids, which can then be
+    /// used to get a reference to the actual [`Method`]
+    ///
+    /// # Returns
+    /// * [`MethodId`] if a [`Method`] with name `name` exists
+    /// * [`Error::MethodNotFound`] if no [`Method`] with name `name` exists
+    pub fn find_methods(&self, class_id: ClassId, signature: &str) -> Result<(Vec<MethodId>, Vec<&Method>)> {
+        let class = self.classes.index(class_id);
+        class.find_methods(self, signature)
+    }
+
     /// Add a specialization for the template [`Method`] with id `method_id` on the [`ClassDecl`] with id `class_id`.
     ///
     /// The arguments in `args` are applied to the method template in the order in which they are given, which is assumed

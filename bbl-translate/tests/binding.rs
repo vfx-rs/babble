@@ -495,7 +495,7 @@ public:
             CFunction Test_Class_copy_ctor Test_Class_copy_ctor([result: c:@N@Test@S@Class**, rhs: c:@N@Test@S@Class const* const])  -> Int
             CFunction Test_Class_move_ctor Test_Class_move_ctor([result: c:@N@Test@S@Class**, rhs: c:@N@Test@S@Class const*])  -> Int
             CFunction Test_Class_dtor Test_Class_dtor([this_: c:@N@Test@S@Class*])  -> Int
-            CFunction Test_Class_ctor_float Test_Class_ctor_float([result: c:@N@Test@S@Class**, arg: Float*])  -> Int
+            CFunction Test_Class_ctor_float Test_Class_ctor_float([result: c:@N@Test@S@Class**, arg: Float const*])  -> Int
         "#
     ));
 
