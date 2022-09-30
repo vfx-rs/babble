@@ -125,8 +125,8 @@ mod tests {
                 Namespace c:@E@Numbered@First First None
                 Namespace c:@E@Numbered@Third Third None
                 Function c:@F@take_enum#$@E@Numbered#$@E@Unnumbered# take_enum rename=None ignore=false return=void args=[n: Numbered, u: Unnumbered] noexcept=None template_parameters=[] specializations=[] namespaces=[]
-                Enum Numbered c:@E@Numbered [First=1 Second=2 Third=3 ]
-                Enum Unnumbered c:@E@Unnumbered []
+                Enum Numbered c:@E@Numbered [First=1 Second=2 Third=3 ] namespaces=[]
+                Enum Unnumbered c:@E@Unnumbered [] namespaces=[]
     "#
             )
         );
