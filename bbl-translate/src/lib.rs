@@ -71,6 +71,10 @@ impl CAST {
         self.typedefs.get(&usr.into())
     }
 
+    pub fn get_enum(&self, usr: USR) -> Option<&CEnum> {
+        self.enums.get(&usr.into())
+    }
+
     pub fn pretty_print(&self, depth: usize) -> Result<()> {
         for inc in self.includes.iter() {
             println!("{}", inc.get_statement());

@@ -10,10 +10,10 @@ use crate::{build_namespace_prefix, error::Error};
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct CEnum {
-    name_external: String,
-    name_internal: String,
-    usr: USR,
-    variants: Vec<(String, i64)>,
+    pub name_external: String,
+    pub name_internal: String,
+    pub usr: USR,
+    pub variants: Vec<(String, i64)>,
 }
 
 impl std::fmt::Debug for CEnum {

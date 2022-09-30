@@ -581,6 +581,49 @@ fn build_take_std_string() -> Result<(), Error> {
     })
 }
 
+
+#[test]
+fn write_enum() -> Result<(), Error> {
+    init_log();
+
+    let mut ast = parse_string_and_extract_ast(
+        indoc!(
+            r#"
+            namespace Test_1_0 {
+            enum class Numbered {
+                First = 1,
+                Second,
+                Third = 3,
+            };
+
+            enum class Unnumbered {
+                First,
+                Second,
+                Third,
+            };
+
+            void take_enum(Numbered n, Unnumbered u);
+            }
+        "#
+        ),
+        &cli_args()?,
+        true,
+        None,
+        &AllowList::default(),
+    )?;
+
+    let ns = ast.find_namespace("Test_1_0")?;
+    ast.rename_namespace(ns, "Test");
+
+    let c_ast = translate_cpp_ast_to_c(&ast)?;
+    
+    let (c_header, c_source) = gen_c("test", &c_ast)?;
+    println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+
+    Ok(())
+}
+
+
 #[tracing::instrument]
 fn fun_b(arg: &str) {}
 

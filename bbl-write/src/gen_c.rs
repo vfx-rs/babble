@@ -5,7 +5,7 @@ use bbl_translate::{
     cstruct::CStruct,
     ctype::{CQualType, CTypeRef},
     ctypedef::CTypedef,
-    CAST,
+    CAST, cenum::CEnum,
 };
 
 use crate::error::{Error, TypeError};
@@ -41,6 +41,15 @@ pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
     for st in c_ast.structs.iter() {
         let decl = generate_struct_forward_declaration(st)?;
         header = format!("{header}{decl}\n")
+    }
+
+    writeln!(&mut header)?;
+
+    // Generate the declaration for each enum
+    header = format!("{header}/* Enum declarations */\n");
+    for enm in c_ast.enums.iter() {
+        let decl = generate_enum_declaration(enm)?;
+        header = format!("{header}{decl}\n\n")
     }
 
     writeln!(&mut header)?;
@@ -414,7 +423,9 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<St
                 format!("{}{const_}", st.format(use_public_names))
             } else if let Some(td) = c_ast.get_typedef(*usr) {
                 // no struct with this USR, see if there's a typedef instead
-                format!("{}{const_}", td.name_external.clone())
+                format!("{}{const_}", td.name_external)
+            } else if let Some(enm) = c_ast.get_enum(*usr) {
+                format!("{}{const_}", enm.name_external)
             } else {
                 unimplemented!("no struct or typedef for {usr}")
             }
@@ -449,6 +460,25 @@ fn generate_typedef(td: &CTypedef, c_ast: &CAST) -> Result<String> {
         gen_c_type(&td.underlying_type, c_ast, true)?,
         td.name_external
     ))
+}
+
+#[instrument(level = "trace")]
+fn generate_enum_declaration(enm: &CEnum) -> Result<String> {
+    let mut result = format!("enum {} {{\n", enm.name_internal);
+
+    if !enm.variants.is_empty() {
+        for var in enm.variants.iter().take(enm.variants.len()-1) {
+                result = format!("{result}    {} = {},\n", var.0, var.1);
+        }
+        let var = enm.variants.last().unwrap();
+        result = format!("{result}    {} = {}\n", var.0, var.1);
+    }
+
+
+    result = format!("{result}}};\n");
+    result = format!("{result}typedef {} {};", enm.name_internal, enm.name_external);
+
+    Ok(result)
 }
 
 /// Generate the declaration for a valuetype struct
