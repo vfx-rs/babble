@@ -408,6 +408,53 @@ public:
 }
 
 #[test]
+fn bind_method_template_ret() -> Result<(), Error> {
+    common::init_log();
+
+    let mut ast = parse_string_and_extract_ast(
+        r#"
+namespace Test {
+class Class {
+public:
+    template <typename T>
+    const T* method_template(const T&);
+};
+}
+        "#,
+        &cli_args()?,
+        true,
+        None,
+        &AllowList::default(),
+    )?;
+
+    let class = ast.find_class("Class")?;
+    let method = ast.find_method(class, "method_template")?;
+    ast.specialize_method(
+        class,
+        method,
+        "method_float",
+        vec![TemplateArgument::Type(QualType::float())],
+    )?;
+
+    let c_ast = translate_cpp_ast_to_c(&ast)?;
+
+    println!("{c_ast:?}");
+
+
+    assert_eq!(
+        format!("{c_ast:?}"),
+        indoc!(
+            r#"
+            CStruct c:@N@Test@S@Class Test_Class Test_Class ValueType fields=[]
+            CFunction Test_Class_method_float Test_Class_method_float([this_: c:@N@Test@S@Class*, result: Float const**, arg: Float const*])  -> Int
+            "#
+        )
+    );
+
+    Ok(())
+}
+
+#[test]
 fn bind_templated_ctor() -> Result<(), Error> {
     common::init_log();
 

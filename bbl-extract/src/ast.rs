@@ -437,6 +437,10 @@ impl AST {
             .specialize_method(method_id, name, args)
     }
 
+    pub fn method_name(&self, class_id: ClassId, method_id: MethodId) -> &str {
+        self.classes[class_id].methods()[method_id.0].name()
+    }
+
     /// Rename a method when it is translated
     ///
     /// This can be used to disambiguate overrides

@@ -243,7 +243,11 @@ pub fn translate_qual_type(
             } else {
                 match &template_args[parm_index] {
                     TemplateArgument::Type(tty) => {
-                        translate_qual_type(tty, template_parms, template_args, type_replacements)
+                        let mut tty = tty.clone();
+                        if qual_type.is_const {
+                            tty.is_const = true;
+                        }
+                        translate_qual_type(&tty, template_parms, template_args, type_replacements)
                     }
                     TemplateArgument::Integral(_n) => {
                         todo!()
