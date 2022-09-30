@@ -21,10 +21,11 @@ use clang_sys::{
     clang_getCursorExceptionSpecificationType, clang_getCursorKind, clang_getCursorLocation,
     clang_getCursorPrettyPrinted, clang_getCursorPrintingPolicy, clang_getCursorReferenced,
     clang_getCursorResultType, clang_getCursorSemanticParent, clang_getCursorSpelling,
-    clang_getCursorType, clang_getCursorUSR, clang_getNullCursor,
-    clang_getSpecializedCursorTemplate, clang_getTypedefDeclUnderlyingType,
-    clang_isCursorDefinition, clang_isInvalid, clang_visitChildren, CXChildVisitResult,
-    CXChildVisit_Break, CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor,
+    clang_getCursorType, clang_getCursorUSR, clang_getEnumConstantDeclValue,
+    clang_getEnumDeclIntegerType, clang_getNullCursor, clang_getSpecializedCursorTemplate,
+    clang_getTypedefDeclUnderlyingType, clang_isCursorDefinition, clang_isInvalid,
+    clang_visitChildren, CXChildVisitResult, CXChildVisit_Break, CXChildVisit_Continue,
+    CXChildVisit_Recurse, CXClientData, CXCursor, clang_getEnumConstantDeclUnsignedValue,
 };
 use std::{
     convert::TryFrom,
@@ -365,6 +366,42 @@ impl Cursor {
 
     pub fn pretty_printed(&self, policy: PrintingPolicy) -> String {
         unsafe { clang_getCursorPrettyPrinted(self.inner, policy.inner).to_string() }
+    }
+
+    pub fn enum_decl_integer_type(&self) -> Result<Type> {
+        unsafe { to_type(clang_getEnumDeclIntegerType(self.inner)) }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct CurEnumConstant(Cursor);
+
+impl Deref for CurEnumConstant {
+    type Target = Cursor;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryFrom<Cursor> for CurEnumConstant {
+    type Error = Error;
+    fn try_from(c: Cursor) -> Result<Self, Self::Error> {
+        if c.kind() == CursorKind::EnumConstantDecl {
+            Ok(CurEnumConstant(c))
+        } else {
+            Err(Error::InvalidCursor)
+        }
+    }
+}
+
+impl CurEnumConstant {
+    pub fn value(&self) -> i64 {
+        unsafe { clang_getEnumConstantDeclValue(self.inner) }
+    }
+
+    pub fn unsigned_value(&self) -> u64 {
+        unsafe { clang_getEnumConstantDeclUnsignedValue(self.inner) }
     }
 }
 

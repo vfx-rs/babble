@@ -12,7 +12,7 @@ use crate::{
     class::{extract_class_decl, specialize_template_parameter, ClassBindKind},
     error::Error,
     templates::{TemplateArgument, TemplateParameterDecl},
-    typedef::extract_typedef_decl, AllowList,
+    typedef::extract_typedef_decl, AllowList, enm::extract_enum,
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -379,6 +379,9 @@ pub fn extract_type(
                 extract_class_decl(c_decl.try_into()?, tu, ast, already_visited, allow_list)?
             }
             CursorKind::TypeRef => unimplemented!("Should extract class here?"),
+            CursorKind::EnumDecl => {
+                extract_enum(c_decl, ast, already_visited, tu)?
+            }
             _ => unimplemented!("Unhandled type decl {:?}", c_decl),
         };
 

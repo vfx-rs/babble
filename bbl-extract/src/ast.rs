@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
-use bbl_clang::cursor::{CurClassTemplate, CurStructDecl, CurTypedef, Cursor};
+use bbl_clang::cursor::{CurClassTemplate, CurStructDecl, CurTypedef, Cursor, CurEnumConstant};
 use bbl_clang::template_argument::TemplateArgumentKind;
 use bbl_clang::ty::Type;
 use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::TranslationUnit};
@@ -13,6 +13,7 @@ use ustr::{Ustr, UstrMap};
 use crate::AllowList;
 use crate::class::extract_class_decl;
 use crate::class::{ClassBindKind, ClassDecl, MethodSpecializationId};
+use crate::enm::{Enum, extract_enum};
 use crate::function::{extract_function, Function, Method};
 use crate::index_map::{IndexMapKey, UstrIndexMap};
 use crate::namespace::{self, extract_namespace, Namespace};
@@ -34,6 +35,7 @@ pub struct AST {
         UstrIndexMap<FunctionTemplateSpecialization, FunctionTemplateSpecializationId>,
     pub(crate) namespaces: UstrIndexMap<Namespace, NamespaceId>,
     pub(crate) type_aliases: UstrIndexMap<Typedef, TypeAliasId>,
+    pub(crate) enums: UstrIndexMap<Enum, EnumId>,
     pub(crate) includes: Vec<Include>,
 }
 
@@ -57,6 +59,10 @@ impl Debug for AST {
 
         for type_alias in self.type_aliases.iter() {
             writeln!(f, "{type_alias:?}")?;
+        }
+
+        for enm in self.enums.iter() {
+            writeln!(f, "{enm:?}")?;
         }
 
         for cts in self.class_template_specializations().iter() {
@@ -132,6 +138,7 @@ impl AST {
             function_template_specializations: UstrIndexMap::new(),
             namespaces: UstrIndexMap::new(),
             type_aliases: UstrIndexMap::new(),
+            enums: UstrIndexMap::new(),
             includes: Vec::new(),
         }
     }
@@ -483,6 +490,15 @@ impl AST {
         self.classes.get(&usr.into())
     }
 
+    pub fn insert_enum(&mut self, enm: Enum) {
+        self.enums.insert(enm.usr().into(), enm);
+    }
+
+    pub fn get_enum(&self, usr: USR) -> Option<&Enum> {
+        self.enums.get(&usr.into())
+    }
+
+
     pub fn get_class_template_specialization(
         &self,
         usr: USR,
@@ -671,6 +687,9 @@ pub fn extract_ast(
                 already_visited.push(c.usr());
 
                 return Ok(());
+            }
+            CursorKind::EnumDecl => {
+                let _ = extract_enum(c, ast, already_visited, tu)?;
             }
             _ => (),
         }
@@ -1129,6 +1148,21 @@ impl ClassId {
 }
 
 impl IndexMapKey for ClassId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct EnumId(usize);
+
+impl EnumId {
+    pub fn new(id: usize) -> EnumId {
+        EnumId(id)
+    }
+}
+
+impl IndexMapKey for EnumId {
     fn get(&self) -> usize {
         self.0
     }
