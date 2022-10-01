@@ -139,6 +139,7 @@ dependencies = [
 name = "bbl-extract"
 version = "0.1.0"
 dependencies = [
+ "backtrace",
  "bbl-clang",
  "clap",
  "colored",

@@ -218,7 +218,7 @@ public:
     let method = ast.find_method(class, "foo()");
     assert!(matches!(
         method,
-        Err(bbl_extract::error::Error::MethodNotFound)
+        Err(bbl_extract::error::Error::MethodNotFound{..})
     ));
 
     println!("{ast:?}");
@@ -253,7 +253,7 @@ public:
     let method = ast.find_method(class, "method");
     assert!(matches!(
         method,
-        Err(bbl_extract::error::Error::MultipleMatches)
+        Err(bbl_extract::error::Error::MultipleMatches{..})
     ));
 
     println!("{ast:?}");
@@ -626,6 +626,68 @@ fn translate_enum() -> Result<(), Error> {
 
     Ok(())
 }
+
+
+#[test]
+fn translate_vector() -> Result<(), Error> {
+    common::init_log();
+
+    let mut ast = parse_string_and_extract_ast(
+        indoc!(
+            r#"
+            #include <vector>
+
+            namespace Test_1_0 {
+            class Class {
+                float c;
+            public:
+            };
+
+            typedef std::vector<Class> ClassVector;
+            }
+            "#
+        ),
+        &cli_args()?,
+        true,
+        None,
+        &AllowList::new(vec![
+            "^Test_1_0".to_string(),
+        ]),
+    )?;
+
+    let ns = ast.find_namespace("Test_1_0")?;
+    ast.rename_namespace(ns, "Test");
+
+    let c_ast = translate_cpp_ast_to_c(&ast)?;
+    println!("{c_ast:?}");
+
+    assert_eq!(
+        format!("{c_ast:?}"),
+        indoc!(
+            r#"
+            CStruct c:@N@Test_1_0@S@Class Test_1_0_Class Test_Class OpaquePtr fields=[c: Float]
+            CStruct c:@N@std@ST>2#T#T@vector std_vector_Test_1_0_Class_ std_vector_Test_1_0_Class_ OpaquePtr fields=[]
+            CTypedef Test_1_0_ClassVector Test_ClassVector c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_
+            CFunction Test_1_0_Class_ctor Test_Class_ctor([result: c:@N@Test_1_0@S@Class**])  -> Int
+            CFunction Test_1_0_Class_copy_ctor Test_Class_copy_ctor([result: c:@N@Test_1_0@S@Class**, rhs: c:@N@Test_1_0@S@Class const* const])  -> Int
+            CFunction Test_1_0_Class_move_ctor Test_Class_move_ctor([result: c:@N@Test_1_0@S@Class**, rhs: c:@N@Test_1_0@S@Class const*])  -> Int
+            CFunction Test_1_0_Class_dtor Test_Class_dtor([this_: c:@N@Test_1_0@S@Class*])  -> Int
+            CFunction std_vector_Test_1_0_Class__ctor std_vector_Test_1_0_Class__ctor([result: c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_**])  -> Int
+            CFunction std_vector_Test_1_0_Class__from_begin_and_end std_vector_Test_1_0_Class__from_begin_and_end([result: c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_**, begin: c:@N@Test_1_0@S@Class const*, end: c:@N@Test_1_0@S@Class const*])  -> Int
+            CFunction std_vector_Test_1_0_Class__data std_vector_Test_1_0_Class__data([this_: c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_ const*, result: c:@N@Test_1_0@S@Class const**])  -> Int
+            CFunction std_vector_Test_1_0_Class__data_mut std_vector_Test_1_0_Class__data_mut([this_: c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_*, result: c:@N@Test_1_0@S@Class**])  -> Int
+            CFunction std_vector_Test_1_0_Class__size std_vector_Test_1_0_Class__size([this_: c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_ const*, result: ULongLong*])  -> Int
+            CFunction std_vector_Test_1_0_Class__copy_ctor std_vector_Test_1_0_Class__copy_ctor([result: c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_**, rhs: c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_ const* const])  -> Int
+            CFunction std_vector_Test_1_0_Class__move_ctor std_vector_Test_1_0_Class__move_ctor([result: c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_**, rhs: c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_ const*])  -> Int
+            CFunction std_vector_Test_1_0_Class__dtor std_vector_Test_1_0_Class__dtor([this_: c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_*])  -> Int
+            Include { name: "vector", bracket: "<" }
+            "#
+        )
+    );
+
+    Ok(())
+}
+
 
 struct SourceIter<'a> {
     current: Option<&'a (dyn std::error::Error + 'static)>,

@@ -1,3 +1,4 @@
+use backtrace::Backtrace;
 use bbl_clang::{
     cursor::{Cursor, USR},
     cursor_kind::CursorKind,
@@ -10,9 +11,11 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use crate::{
     ast::AST,
     class::{extract_class_decl, specialize_template_parameter, ClassBindKind},
+    enm::extract_enum,
     error::Error,
     templates::{TemplateArgument, TemplateParameterDecl},
-    typedef::extract_typedef_decl, AllowList, enm::extract_enum,
+    typedef::extract_typedef_decl,
+    AllowList,
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -45,9 +48,10 @@ impl TypeRef {
         let result = match self {
             Builtin(_) => true,
             Ref(usr) => {
-                let class = ast
-                    .get_class(*usr)
-                    .ok_or(Error::ClassOrNamespaceNotFound(*usr))?;
+                let class = ast.get_class(*usr).ok_or(Error::ClassOrNamespaceNotFound {
+                    usr: *usr,
+                    backtrace: Backtrace::new(),
+                })?;
                 *class.bind_kind() == ClassBindKind::ValueType
             }
             Pointer(p) => p.type_ref.is_valuetype(ast)?,
@@ -71,7 +75,10 @@ impl TypeRef {
                 } else if let Some(td) = ast.get_type_alias(*usr) {
                     todo!()
                 } else {
-                    Err(Error::ClassNotFound(usr.to_string()))
+                    Err(Error::ClassNotFound {
+                        name: usr.to_string(),
+                        backtrace: Backtrace::new(),
+                    })
                 }
             }
             Pointer(p) => p.type_ref.get_bind_kind(ast),
@@ -129,6 +136,14 @@ impl QualType {
         }
     }
 
+    pub fn builtin(kind: TypeKind, is_const: bool) -> Self {
+        QualType {
+            name: kind.spelling(),
+            is_const,
+            type_ref: TypeRef::Builtin(kind),
+        }
+    }
+
     pub fn void() -> Self {
         QualType {
             name: "void".into(),
@@ -161,6 +176,14 @@ impl QualType {
         }
     }
 
+    pub fn template_parameter(name: &str, parm: &str, is_const: bool) -> QualType {
+        QualType {
+            name: name.to_string(),
+            is_const,
+            type_ref: TypeRef::TemplateTypeParameter(parm.to_string()),
+        }
+    }
+
     pub fn type_ref(name: &str, is_const: bool, usr: USR) -> QualType {
         QualType {
             name: name.to_string(),
@@ -187,7 +210,10 @@ impl QualType {
             | TypeRef::RValueReference(_) => Ok(true),
             TypeRef::Ref(usr) => Ok(matches!(
                 ast.get_class(usr)
-                    .ok_or_else(|| Error::ClassNotFound(usr.as_str().to_string()))?
+                    .ok_or_else(|| Error::ClassNotFound {
+                        name: usr.as_str().to_string(),
+                        backtrace: Backtrace::new()
+                    })?
                     .bind_kind(),
                 ClassBindKind::ValueType
             )),
@@ -199,15 +225,21 @@ impl QualType {
         match &self.type_ref {
             TypeRef::TemplateNonTypeParameter(_) | TypeRef::TemplateTypeParameter(_) => true,
             TypeRef::Builtin(_) | TypeRef::Ref(_) | TypeRef::Unknown(_) => false,
-            TypeRef::Pointer(p) | TypeRef::LValueReference(p) | TypeRef::RValueReference(p) => p.is_template(),
+            TypeRef::Pointer(p) | TypeRef::LValueReference(p) | TypeRef::RValueReference(p) => {
+                p.is_template()
+            }
         }
     }
 
     pub fn template_parameter_name(&self) -> Option<&str> {
         match &self.type_ref {
-            TypeRef::TemplateNonTypeParameter(name) | TypeRef::TemplateTypeParameter(name) => Some(name.as_str()),
+            TypeRef::TemplateNonTypeParameter(name) | TypeRef::TemplateTypeParameter(name) => {
+                Some(name.as_str())
+            }
             TypeRef::Builtin(_) | TypeRef::Ref(_) | TypeRef::Unknown(_) => None,
-            TypeRef::Pointer(p) | TypeRef::LValueReference(p) | TypeRef::RValueReference(p) => p.template_parameter_name(),
+            TypeRef::Pointer(p) | TypeRef::LValueReference(p) | TypeRef::RValueReference(p) => {
+                p.template_parameter_name()
+            }
         }
     }
 
@@ -375,13 +407,11 @@ pub fn extract_type(
             CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
                 extract_typedef_decl(c_decl.try_into()?, already_visited, ast, tu, allow_list)?
             }
-            CursorKind::ClassDecl => {
+            CursorKind::ClassDecl | CursorKind::StructDecl => {
                 extract_class_decl(c_decl.try_into()?, tu, ast, already_visited, allow_list)?
             }
             CursorKind::TypeRef => unimplemented!("Should extract class here?"),
-            CursorKind::EnumDecl => {
-                extract_enum(c_decl, ast, already_visited, tu)?
-            }
+            CursorKind::EnumDecl => extract_enum(c_decl, ast, already_visited, tu)?,
             _ => unimplemented!("Unhandled type decl {:?}", c_decl),
         };
 
@@ -394,7 +424,14 @@ pub fn extract_type(
         match ty.kind() {
             TypeKind::Pointer => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(pointee, template_parameters, already_visited, ast, tu, allow_list)?;
+                let ty_ref = extract_type(
+                    pointee,
+                    template_parameters,
+                    already_visited,
+                    ast,
+                    tu,
+                    allow_list,
+                )?;
                 Ok(QualType {
                     name,
                     is_const,
@@ -403,7 +440,14 @@ pub fn extract_type(
             }
             TypeKind::LValueReference => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(pointee, template_parameters, already_visited, ast, tu, allow_list)?;
+                let ty_ref = extract_type(
+                    pointee,
+                    template_parameters,
+                    already_visited,
+                    ast,
+                    tu,
+                    allow_list,
+                )?;
                 Ok(QualType {
                     name,
                     is_const,
@@ -412,7 +456,14 @@ pub fn extract_type(
             }
             TypeKind::RValueReference => {
                 let pointee = ty.pointee_type()?;
-                let ty_ref = extract_type(pointee, template_parameters, already_visited, ast, tu, allow_list)?;
+                let ty_ref = extract_type(
+                    pointee,
+                    template_parameters,
+                    already_visited,
+                    ast,
+                    tu,
+                    allow_list,
+                )?;
                 Ok(QualType {
                     name,
                     is_const,
@@ -431,7 +482,10 @@ pub fn extract_type(
                         "Got unexposed for {name} with no matching template parmaeter in {:?}",
                         template_parameters
                     );
-                    Err(Error::NoMatchingTemplateParameter(name))
+                    Err(Error::NoMatchingTemplateParameter {
+                        name,
+                        backtrace: Backtrace::new(),
+                    })
                 }
             }
             _ => {

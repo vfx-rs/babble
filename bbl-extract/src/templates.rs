@@ -1,17 +1,19 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_snake_case)]
 
+use backtrace::{self, Backtrace};
 use bbl_clang::{
     cursor::{CurClassDecl, CurClassTemplate, USR},
     template_argument::TemplateArgumentKind,
     translation_unit::TranslationUnit,
 };
-use tracing::log::{trace, debug};
+use tracing::log::{debug, trace};
 
 use crate::{
     ast::{get_namespaces_for_decl, get_qualified_name, AST},
     class::{extract_class_decl, ClassBindKind},
-    qualtype::{extract_type, QualType}, AllowList,
+    qualtype::{extract_type, QualType},
+    AllowList,
 };
 
 use super::error::Error;
@@ -36,12 +38,16 @@ pub fn extract_class_template_specialization(
         already_visited.push(c_class_decl.usr());
     }
 
-    let template_arguments = extract_template_args(c_class_decl, already_visited, ast, tu, allow_list)?;
+    let template_arguments =
+        extract_template_args(c_class_decl, already_visited, ast, tu, allow_list)?;
     let namespaces = get_namespaces_for_decl(c_class_decl.into(), tu, ast, already_visited)?;
 
     let specialized_decl: CurClassTemplate = c_class_decl
         .specialized_template()
-        .map_err(|_| Error::ClassDeclIsNotSpecialization(c_class_decl.usr()))?
+        .map_err(|_| Error::ClassDeclIsNotSpecialization {
+            usr: c_class_decl.usr(),
+            backtrace: Backtrace::new(),
+        })?
         .try_into()?;
     debug!("extract_class_template_specialization: got specialized decl {specialized_decl:?}");
 
@@ -82,6 +88,7 @@ pub fn extract_template_args(
         return Err(Error::TooFewTemplateArguments {
             usr: c_class_decl.usr(),
             num: num_template_args,
+            backtrace: Backtrace::new(),
         });
     }
 
@@ -152,7 +159,10 @@ impl ClassTemplateSpecialization {
     pub fn bind_kind(&self, ast: &AST) -> Result<ClassBindKind> {
         ast.get_class(self.specialized_decl)
             .map(|class| *class.bind_kind())
-            .ok_or(Error::ClassNotFound(self.specialized_decl.to_string()))
+            .ok_or(Error::ClassNotFound {
+                name: self.specialized_decl.to_string(),
+                backtrace: Backtrace::new(),
+            })
     }
 
     pub fn pretty_print(&self, depth: usize, ast: &AST) {

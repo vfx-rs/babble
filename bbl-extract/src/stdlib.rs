@@ -1,18 +1,27 @@
 use bbl_clang::{
-    cursor::{Cursor, USR},
+    access_specifier::AccessSpecifier,
+    cursor::{CurClassDecl, Cursor, USR},
     exception::ExceptionSpecificationKind,
-    ty::TypeKind, access_specifier::AccessSpecifier,
+    translation_unit::TranslationUnit,
+    ty::TypeKind,
 };
 
 use crate::{
-    ast::AST,
+    ast::{get_namespaces_for_decl, AST},
     class::{ClassDecl, MethodState, RuleOfFive},
     function::{Argument, Const, PureVirtual, Static, Virtual},
-    function::{Method, MethodKind, Deleted},
+    function::{Deleted, Method, MethodKind},
     namespace,
-    qualtype::{QualType, TypeRef},
-    templates::TemplateParameterDecl,
+    qualtype::{extract_type, QualType, TypeRef},
+    templates::{
+        extract_class_template_specialization, ClassTemplateSpecialization, TemplateArgument,
+        TemplateParameterDecl,
+    },
+    AllowList,
 };
+
+use super::error::Error;
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
     let u_std = ast
@@ -162,4 +171,176 @@ pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
             dtor: MethodState::Defined(AccessSpecifier::Public),
         },
     )
+}
+
+pub fn create_std_vector(
+    c: CurClassDecl,
+    ast: &mut AST,
+    already_visited: &mut Vec<USR>,
+    tu: &TranslationUnit,
+    allow_list: &AllowList,
+) -> Result<USR> {
+    let c_tmpl = c.specialized_template().unwrap();
+    let usr_tmpl = create_std_vector_tmpl(c_tmpl, ast, tu, already_visited)?;
+
+    let name = regex::Regex::new("(?:[^a-zA-Z0-9])+")
+        .unwrap()
+        .replace_all(&c.display_name(), "_")
+        .to_string();
+
+    let namespaces = get_namespaces_for_decl(c.into(), tu, ast, already_visited)?;
+    let ty = c.template_argument_type(0)?;
+    let template_arguments = vec![TemplateArgument::Type(extract_type(
+        ty,
+        &[],
+        already_visited,
+        ast,
+        tu,
+        allow_list,
+    )?)];
+
+    let cts = ClassTemplateSpecialization {
+        specialized_decl: usr_tmpl,
+        name,
+        usr: c.usr(),
+        namespaces,
+        template_arguments,
+    };
+
+    let id = ast.insert_class_template_specialization(cts);
+    let cd = ast.get_class_mut(usr_tmpl).unwrap();
+    cd.specializations.push(id);
+
+    Ok(c.usr())
+}
+
+fn create_std_vector_tmpl(
+    c_tmpl: Cursor,
+    ast: &mut AST,
+    tu: &TranslationUnit,
+    already_visited: &mut Vec<USR>,
+) -> Result<USR> {
+    // get the namespaces for std::vector<> as we might not have found them already
+    let namespaces = get_namespaces_for_decl(c_tmpl, tu, ast, already_visited)?;
+
+    let u_std = ast
+        .find_namespace("std")
+        .map(|id| ast.namespaces()[id].usr())
+        .unwrap();
+
+    let method_namespaces = vec![u_std, c_tmpl.usr()];
+
+    let methods = vec![
+        Method::new(
+            USR::new("BBL:vector_ctor_default"),
+            "vector".to_string(),
+            MethodKind::Constructor,
+            QualType::void(),
+            Vec::new(),
+            Some("ctor".to_string()),
+            method_namespaces.clone(),
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(false),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ),
+        Method::new(
+            USR::new("BBL:vector_ctor_pointers"),
+            "vector".to_string(),
+            MethodKind::Constructor,
+            QualType::void(),
+            vec![
+                Argument::new(
+                    "begin",
+                    QualType::pointer("const T *", QualType::template_parameter("T", "T", true)),
+                ),
+                Argument::new(
+                    "end",
+                    QualType::pointer("const T *", QualType::template_parameter("T", "T", true)),
+                ),
+            ],
+            Some("from_begin_and_end".to_string()),
+            method_namespaces.clone(),
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(false),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ),
+        Method::new(
+            USR::new("BBL:vector_data_const"),
+            "data".to_string(),
+            MethodKind::Method,
+            QualType::pointer("const T *", QualType::template_parameter("T", "T", true)),
+            vec![],
+            Some("data".to_string()),
+            method_namespaces.clone(),
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(true),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ),
+        Method::new(
+            USR::new("BBL:vector_data_mut"),
+            "data".to_string(),
+            MethodKind::Method,
+            QualType::pointer("T *", QualType::template_parameter("T", "T", false)),
+            vec![],
+            Some("data_mut".to_string()),
+            method_namespaces.clone(),
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(false),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ),
+        Method::new(
+            USR::new("BBL:vector_size"),
+            "size".to_string(),
+            MethodKind::Method,
+            QualType::builtin(TypeKind::ULongLong, false),
+            vec![],
+            None,
+            method_namespaces,
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(true),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ),
+    ];
+
+    let cd = ClassDecl::new(
+        c_tmpl.usr(),
+        "vector".to_string(),
+        Vec::new(),
+        methods,
+        vec![u_std],
+        vec![TemplateParameterDecl::typ("T", 0)],
+        false,
+        RuleOfFive {
+            ctor: MethodState::Defined(AccessSpecifier::Public),
+            copy_ctor: MethodState::Undefined,
+            move_ctor: MethodState::Undefined,
+            copy_assign: MethodState::Undefined,
+            move_assign: MethodState::Undefined,
+            dtor: MethodState::Undefined,
+        },
+    );
+
+    ast.insert_class(cd);
+
+    Ok(c_tmpl.usr())
 }

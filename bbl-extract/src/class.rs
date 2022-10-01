@@ -9,14 +9,14 @@ use log::*;
 use std::fmt::{Debug, Display};
 use tracing::instrument;
 use ustr::Ustr;
+use backtrace::Backtrace;
 
-use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST, ClassTemplateSpecializationId};
-use crate::error::{self, ExtractClassError};
+use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST, ClassTemplateSpecializationId, dump_cursor, dump_cursor_until};
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::index_map::IndexMapKey;
 use crate::{parse_string_and_extract_ast, AllowList};
 use crate::qualtype::extract_type;
-use crate::stdlib::create_std_string;
+use crate::stdlib::{create_std_string, create_std_vector};
 use crate::templates::{TemplateParameterDecl, TemplateArgument, extract_class_template_specialization};
 use crate::{function::Method, qualtype::QualType};
 use bbl_clang::cursor_kind::CursorKind;
@@ -490,7 +490,7 @@ impl ClassDecl {
                     error!("  {sug}");
                 }
 
-                Err(Error::MethodNotFound)
+                Err(Error::MethodNotFound{name: signature.to_string(), backtrace: Backtrace::new()})
             }
             1 => Ok((MethodId::new(matches[0].0), matches[0].1)),
             _ => {
@@ -503,7 +503,7 @@ impl ClassDecl {
                     );
                 }
 
-                Err(Error::MultipleMatches)
+                Err(Error::MultipleMatches{name: signature.to_string(), backtrace: Backtrace::new()})
             }
         }
     }
@@ -540,7 +540,7 @@ impl ClassDecl {
                     error!("  {sug}");
                 }
 
-                Err(Error::MethodNotFound)
+                Err(Error::MethodNotFound{name: signature.to_string(), backtrace: Backtrace::new()})
             }
             _ => {
                 Ok(
@@ -616,6 +616,8 @@ pub fn extract_class_decl(
         let usr = cd.usr();
         ast.insert_class(cd);
         return Ok(usr);
+    } else if class_decl.display_name().starts_with("vector<") {
+        return create_std_vector(class_decl, ast, already_visited, tu, allow_list);
     }
 
     if class_decl.specialized_template().is_ok() {
@@ -645,21 +647,33 @@ pub fn extract_class_decl(
     let mut base_constructors = Vec::new();
     for c_base in class_decl.children_of_kind(CursorKind::CXXBaseSpecifier, false) {
         if let Ok(c_base_decl) = c_base.referenced() {
-            let u_base = extract_class_decl(c_base_decl.try_into()?, tu, ast, already_visited, allow_list)?;
-            let access = c_base.cxx_access_specifier()?;
+            match c_base_decl.kind() {
+                CursorKind::ClassDecl | CursorKind::ClassTemplate => {
+                    let u_base = extract_class_decl(c_base_decl.try_into()?, tu, ast, already_visited, allow_list)?;
+                    let access = c_base.cxx_access_specifier()?;
 
-            if let Some(base) = ast.get_class_decl_recursive(u_base) {
-                for method in &base.methods {
-                    if method.is_any_constructor() {
-                        // we store constructors regardless of their access since we want to know about private constructors
-                        // in order to not generate implicit versions for them
-                        base_constructors.push(method.clone());
-                    } else if (!method.is_destructor() && access == AccessSpecifier::Public) {
-                        base_methods.push(method.clone());
+                    if let Some(base) = ast.get_class_decl_recursive(u_base) {
+                        for method in &base.methods {
+                            if method.is_any_constructor() {
+                                // we store constructors regardless of their access since we want to know about private constructors
+                                // in order to not generate implicit versions for them
+                                base_constructors.push(method.clone());
+                            } else if (!method.is_destructor() && access == AccessSpecifier::Public) {
+                                base_methods.push(method.clone());
+                            }
+                        }
+                    } else {
+                        panic!("Should have just inserted base {u_base} of class decl {} but it is not found.", class_decl.usr())
                     }
                 }
-            } else {
-                panic!("Should have just inserted base {u_base} of class decl {} but it is not found.", class_decl.usr())
+                CursorKind::TypeAliasTemplateDecl => {
+                    dump_cursor_until(class_decl.into(), tu, 2);
+                    unimplemented!("cannot handle base of TypeAliasTemplateDecl {c_base_decl:?}");
+                }
+                _ => {
+                    dump_cursor(class_decl.into(), tu);
+                    unimplemented!("cannot handle base {c_base_decl:?}");
+                }
             }
         }
     }
@@ -765,7 +779,7 @@ pub fn extract_class_decl(
                         _ => (),
                     }
                 } else {
-                    return Err(Error::FailedToGetAccessSpecifierFor(member.display_name()));
+                    return Err(Error::FailedToGetAccessSpecifierFor{name: member.display_name(), backtrace: Backtrace::new()});
                 }
             }
             CursorKind::FieldDecl => {
@@ -784,7 +798,7 @@ pub fn extract_class_decl(
                         allow_list,
                     )
                     .map_err(|e| {
-                        ExtractClassError::FailedToExtractField {
+                        Error::FailedToExtractField {
                             class: class_decl.display_name(),
                             name: member.display_name(),
                             source: Box::new(e),
@@ -792,7 +806,7 @@ pub fn extract_class_decl(
                     })?;
                     fields.push(field);
                 } else {
-                    return Err(Error::FailedToGetAccessSpecifierFor(member.display_name()));
+                    return Err(Error::FailedToGetAccessSpecifierFor{name: member.display_name(), backtrace: Backtrace::new()});
                 }
             }
             _ => {
@@ -1003,7 +1017,7 @@ mod tests {
     use bbl_clang::cli_args;
     use indoc::indoc;
 
-    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList};
+    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList, init_log};
 
     #[test]
     fn extract_pod() -> Result<(), Error> {
@@ -1316,6 +1330,64 @@ mod tests {
         let class_id = ast.find_class("Class")?;
         let class = &ast.classes()[class_id];
         assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
+
+        Ok(())
+    }
+
+
+    #[test]
+    fn extract_vector() -> Result<(), Error> {
+        init_log();
+
+        let mut ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
+                #include <vector>
+
+                namespace Test_1_0 {
+                class Class {
+                    float c;
+                public:
+                };
+
+                typedef std::vector<Class> ClassVector;
+                }
+                "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::new(vec![
+                "^Test_1_0".to_string(),
+            ]),
+        )?;
+
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
+
+        println!("{ast:?}");
+        assert_eq!(
+            format!("{ast:?}"),
+            indoc!(
+                r#"
+                Include { name: "vector", bracket: "<" }
+                Namespace c:@N@Test_1_0 Test_1_0 Some("Test")
+                Namespace c:@N@std std None
+                ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
+                Field c: float
+
+                ClassDecl c:@N@std@ST>2#T#T@vector vector rename=None OpaquePtr is_pod=false ignore=false rof=[public ctor ] template_parameters=[Type(T)] specializations=[ClassTemplateSpecializationId(0)] namespaces=[c:@N@std]
+                Method Constructor const=false virtual=false pure_virtual=false specializations=[] Function BBL:vector_ctor_default vector rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+                Method Constructor const=false virtual=false pure_virtual=false specializations=[] Function BBL:vector_ctor_pointers vector rename=Some("from_begin_and_end") ignore=false return=void args=[begin: const T *, end: const T *] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+                Method Method const=true virtual=false pure_virtual=false specializations=[] Function BBL:vector_data_const data rename=Some("data") ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+                Method Method const=false virtual=false pure_virtual=false specializations=[] Function BBL:vector_data_mut data rename=Some("data_mut") ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+                Method Method const=true virtual=false pure_virtual=false specializations=[] Function BBL:vector_size size rename=None ignore=false return=ULongLong args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+
+                TypeAlias ClassVector = std::vector<Class>
+                ClassTemplateSpecialization c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_ vector_Test_1_0_Class_ specialized_decl=c:@N@std@ST>2#T#T@vector template_arguments=[Test_1_0::Class] namespaces=[c:@N@std]
+                "#
+            )
+        );
 
         Ok(())
     }

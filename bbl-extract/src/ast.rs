@@ -1,24 +1,28 @@
+use backtrace::Backtrace;
 use std::convert::TryInto;
-use std::fmt::Debug;
+use std::fmt::{Debug, Write};
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
-use bbl_clang::cursor::{CurClassTemplate, CurStructDecl, CurTypedef, Cursor, CurEnumConstant};
+use bbl_clang::cursor::{CurClassTemplate, CurEnumConstant, CurStructDecl, CurTypedef, Cursor};
 use bbl_clang::template_argument::TemplateArgumentKind;
 use bbl_clang::ty::Type;
 use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::TranslationUnit};
 use tracing::{debug, error, info, instrument, trace, warn};
 use ustr::{Ustr, UstrMap};
 
-use crate::AllowList;
 use crate::class::extract_class_decl;
 use crate::class::{ClassBindKind, ClassDecl, MethodSpecializationId};
-use crate::enm::{Enum, extract_enum};
+use crate::enm::{extract_enum, Enum};
 use crate::function::{extract_function, Function, Method};
 use crate::index_map::{IndexMapKey, UstrIndexMap};
 use crate::namespace::{self, extract_namespace, Namespace};
-use crate::templates::{TemplateArgument, ClassTemplateSpecialization, extract_class_template_specialization, FunctionTemplateSpecialization};
+use crate::templates::{
+    extract_class_template_specialization, ClassTemplateSpecialization,
+    FunctionTemplateSpecialization, TemplateArgument,
+};
 use crate::typedef::{extract_typedef_decl, Typedef};
+use crate::AllowList;
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -193,11 +197,17 @@ impl AST {
                     .namespaces
                     .get_id(&namespace.usr().into())
                     .map(|i| NamespaceId(*i))
-                    .ok_or_else(|| Error::NamespaceNotFound(name.to_string()));
+                    .ok_or_else(|| Error::NamespaceNotFound {
+                        name: name.to_string(),
+                        backtrace: Backtrace::new(),
+                    });
             }
         }
 
-        Err(Error::NamespaceNotFound(name.to_string()))
+        Err(Error::NamespaceNotFound {
+            name: name.to_string(),
+            backtrace: Backtrace::new(),
+        })
     }
 
     /// Find a class by exact match on the name and return its id, which can then be used to get a reference to the
@@ -245,7 +255,10 @@ impl AST {
                     error!("  {sug}");
                 }
 
-                Err(Error::ClassNotFound(name.into()))
+                Err(Error::ClassNotFound {
+                    name: name.into(),
+                    backtrace: Backtrace::new(),
+                })
             }
             1 => Ok(ClassId::new(matches[0].0)),
             _ => {
@@ -255,7 +268,10 @@ impl AST {
                     error!("  {}", qname);
                 }
 
-                Err(Error::MultipleMatches)
+                Err(Error::MultipleMatches {
+                    name: name.to_string(),
+                    backtrace: Backtrace::new(),
+                })
             }
         }
     }
@@ -313,7 +329,10 @@ impl AST {
                 ClassBindKind::OpaqueBytes => todo!("Handle opaquebytes"),
             }
         } else {
-            Err(Error::ClassCannotBeValueType(class_decl.name().to_string()))
+            Err(Error::ClassCannotBeValueType {
+                name: class_decl.name().to_string(),
+                backtrace: Backtrace::new(),
+            })
         }
     }
 
@@ -352,7 +371,10 @@ impl AST {
                     error!("  {sug}");
                 }
 
-                Err(Error::FunctionNotFound(signature.into()))
+                Err(Error::FunctionNotFound {
+                    name: signature.into(),
+                    backtrace: Backtrace::new(),
+                })
             }
             1 => Ok(FunctionId(matches[0].0)),
             _ => {
@@ -362,7 +384,10 @@ impl AST {
                     error!("  {}", function.signature(self, &[], None));
                 }
 
-                Err(Error::MultipleMatches)
+                Err(Error::MultipleMatches {
+                    name: signature.to_string(),
+                    backtrace: Backtrace::new(),
+                })
             }
         }
     }
@@ -434,7 +459,11 @@ impl AST {
     /// # Returns
     /// * [`MethodId`] if a [`Method`] with name `name` exists
     /// * [`Error::MethodNotFound`] if no [`Method`] with name `name` exists
-    pub fn find_methods(&self, class_id: ClassId, signature: &str) -> Result<(Vec<MethodId>, Vec<&Method>)> {
+    pub fn find_methods(
+        &self,
+        class_id: ClassId,
+        signature: &str,
+    ) -> Result<(Vec<MethodId>, Vec<&Method>)> {
         let class = self.classes.index(class_id);
         class.find_methods(self, signature)
     }
@@ -477,9 +506,14 @@ impl AST {
         self.classes.insert(class.usr().into(), class);
     }
 
-    pub fn insert_class_template_specialization(&mut self, class: ClassTemplateSpecialization) {
-        self.class_template_specializations
-            .insert(class.usr().into(), class);
+    pub fn insert_class_template_specialization(
+        &mut self,
+        class: ClassTemplateSpecialization,
+    ) -> ClassTemplateSpecializationId {
+        ClassTemplateSpecializationId::new(
+            self.class_template_specializations
+                .insert(class.usr().into(), class),
+        )
     }
 
     pub fn get_type_alias(&self, usr: USR) -> Option<&Typedef> {
@@ -488,6 +522,10 @@ impl AST {
 
     pub fn get_class(&self, usr: USR) -> Option<&ClassDecl> {
         self.classes.get(&usr.into())
+    }
+
+    pub fn get_class_mut(&mut self, usr: USR) -> Option<&mut ClassDecl> {
+        self.classes.get_mut(&usr.into())
     }
 
     pub fn insert_enum(&mut self, enm: Enum) {
@@ -571,7 +609,10 @@ impl AST {
         } else if let Some(class) = self.classes.get(&usr.into()) {
             Ok((&class.name, class.rename.as_ref()))
         } else {
-            Err(Error::ClassOrNamespaceNotFound(usr))
+            Err(Error::ClassOrNamespaceNotFound {
+                usr,
+                backtrace: Backtrace::new(),
+            })
         }
     }
 }
@@ -584,7 +625,10 @@ pub fn get_qualified_name(decl: &str, namespaces: &[USR], ast: &AST) -> Result<S
         } else if let Some(class) = ast.get_class(*uns) {
             result = format!("{result}{}::", class.name());
         } else {
-            return Err(Error::ClassOrNamespaceNotFound(*uns));
+            return Err(Error::ClassOrNamespaceNotFound {
+                usr: *uns,
+                backtrace: Backtrace::new(),
+            });
         }
     }
 
@@ -595,10 +639,7 @@ pub fn get_qualified_name(decl: &str, namespaces: &[USR], ast: &AST) -> Result<S
 
 #[allow(clippy::too_many_arguments)]
 /// Main recursive function to walk the AST and extract the pieces we're interested in
-#[instrument(
-    skip(depth, max_depth, tu, namespaces, already_visited),
-    level = "trace"
-)]
+#[instrument(skip(depth, max_depth, tu, already_visited), level = "trace")]
 pub fn extract_ast(
     c: Cursor,
     depth: usize,
@@ -606,17 +647,20 @@ pub fn extract_ast(
     already_visited: &mut Vec<USR>,
     ast: &mut AST,
     tu: &TranslationUnit,
-    namespaces: Vec<USR>,
     allow_list: &AllowList,
 ) -> Result<()> {
-    let mut namespaces = namespaces;
-
     if depth > max_depth {
         return Ok(());
     }
-    
-    let namespaces = get_namespaces_for_decl(c, tu, ast, already_visited)?;
-    let decl_qualified_name = get_qualified_name(&c.display_name(), &namespaces, ast)?;
+
+    // build the qualified namespace as a string (not creating new Namespace entries) for checking against the allowlist
+    let namespace_names = get_namespace_names(c)?;
+    let mut decl_qualified_name = String::new();
+    for ns in namespace_names {
+        write!(decl_qualified_name, "{ns}::").unwrap();
+    }
+    write!(decl_qualified_name, "{}", c.display_name());
+
     if allow_list.allows(&decl_qualified_name) {
         match c.kind() {
             CursorKind::ClassDecl => {
@@ -662,30 +706,31 @@ pub fn extract_ast(
                 let usr = extract_namespace(c, depth, tu, ast);
                 let name = ast
                     .get_namespace(usr)
-                    .ok_or_else(|| Error::NamespaceNotFound(usr.to_string()))?
+                    .ok_or_else(|| Error::NamespaceNotFound {
+                        name: usr.to_string(),
+                        backtrace: Backtrace::new(),
+                    })?
                     .name();
 
                 // We bail out on std and will insert manual AST for the types we support because fuck dealing with that
                 // horror show
-                if name == "std" {
-                    let children = c.children_of_kind(CursorKind::Namespace, true);
-
-                    for child in children {
-                        extract_namespace(child, depth, tu, ast);
-                    }
-
+                if name == "std"
+                    || name == "__cxx11"
+                    || name == "__gnu_cxx"
+                    || name == "__debug"
+                    || name == "__cxxabiv1"
+                {
                     debug!("Found std namespace, bailing early");
                     return Ok(());
                 }
             }
             CursorKind::FunctionDecl | CursorKind::FunctionTemplate => {
-                let fun =
-                    extract_function(c, &[], already_visited, tu, ast, allow_list).map_err(|e| {
-                        Error::FailedToExtractFunction {
-                            name: c.display_name(),
-                            source: Box::new(e),
-                        }
-                    })?;
+                let fun = extract_function(c, &[], already_visited, tu, ast, allow_list).map_err(
+                    |e| Error::FailedToExtractFunction {
+                        name: c.display_name(),
+                        source: Box::new(e),
+                    },
+                )?;
                 ast.insert_function(fun);
                 already_visited.push(c.usr());
 
@@ -738,7 +783,6 @@ pub fn extract_ast(
             already_visited,
             ast,
             tu,
-            namespaces.clone(),
             allow_list,
         )?;
     }
@@ -749,6 +793,11 @@ pub fn extract_ast(
 pub fn dump_cursor(c: Cursor, tu: &TranslationUnit) {
     let mut av = Vec::new();
     dump(c, 0, 20, &mut av, tu, &[], None);
+}
+
+pub fn dump_cursor_until(c: Cursor, tu: &TranslationUnit, max_depth: usize) {
+    let mut av = Vec::new();
+    dump(c, 0, max_depth, &mut av, tu, &[], None);
 }
 
 fn get_template_args(c: Cursor) -> String {
@@ -1083,19 +1132,9 @@ pub fn extract_ast_from_namespace(
         }
     });
 
-    let namespaces = Vec::new();
     let mut already_visited = Vec::new();
     for cur in ns {
-        extract_ast(
-            cur,
-            0,
-            100,
-            &mut already_visited,
-            &mut ast,
-            tu,
-            namespaces.clone(),
-            allow_list,
-        )?;
+        extract_ast(cur, 0, 100, &mut already_visited, &mut ast, tu, allow_list)?;
     }
 
     Ok(ast)
@@ -1123,6 +1162,20 @@ pub fn walk_namespaces(
     Ok(())
 }
 
+pub fn walk_namespaces_for_names(
+    c: Result<Cursor, bbl_clang::error::Error>,
+    namespaces: &mut Vec<String>,
+) -> Result<()> {
+    if let Ok(c) = c {
+        if c.kind() != CursorKind::TranslationUnit {
+            namespaces.push(c.display_name());
+            walk_namespaces_for_names(c.semantic_parent(), namespaces);
+        }
+    }
+
+    Ok(())
+}
+
 pub fn get_namespaces_for_decl(
     c: Cursor,
     tu: &TranslationUnit,
@@ -1137,6 +1190,13 @@ pub fn get_namespaces_for_decl(
         ast,
         already_visited,
     );
+    namespaces.reverse();
+    Ok(namespaces)
+}
+
+pub fn get_namespace_names(c: Cursor) -> Result<Vec<String>> {
+    let mut namespaces = Vec::new();
+    walk_namespaces_for_names(c.semantic_parent(), &mut namespaces);
     namespaces.reverse();
     Ok(namespaces)
 }

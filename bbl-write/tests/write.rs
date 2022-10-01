@@ -623,6 +623,44 @@ fn write_enum() -> Result<(), Error> {
     Ok(())
 }
 
+#[test]
+fn write_vector() -> Result<(), Error> {
+    common::init_log();
+
+    let mut ast = parse_string_and_extract_ast(
+        indoc!(
+            r#"
+            #include <vector>
+
+            namespace Test_1_0 {
+            class Class {
+                float c;
+            public:
+            };
+
+            typedef std::vector<Class> ClassVector;
+            }
+            "#
+        ),
+        &cli_args()?,
+        true,
+        None,
+        &AllowList::new(vec![
+            "^Test_1_0".to_string(),
+        ]),
+    )?;
+
+    let ns = ast.find_namespace("Test_1_0")?;
+    ast.rename_namespace(ns, "Test");
+
+    let c_ast = translate_cpp_ast_to_c(&ast)?;
+
+    let (c_header, c_source) = gen_c("test", &c_ast)?;
+    println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+
+    Ok(())
+}
+
 
 #[tracing::instrument]
 fn fun_b(arg: &str) {}
