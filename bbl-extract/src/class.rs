@@ -1393,60 +1393,59 @@ mod tests {
         Ok(())
     }
 
-
     #[test]
-    fn extract_unique_ptr() -> Result<(), Error> {
-        init_log();
+    fn extract_unique_ptr() -> anyhow::Result<()> {
+        bbl_util::run_test(|| {
+            let mut ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                    #include <memory>
 
-        let mut ast = parse_string_and_extract_ast(
-            indoc!(
-                r#"
-                #include <memory>
+                    namespace Test_1_0 {
+                    class Class {
+                        float c;
+                    public:
+                    };
 
-                namespace Test_1_0 {
-                class Class {
-                    float c;
-                public:
-                };
+                    typedef std::unique_ptr<Class> ClassPtr;
+                    }
+                    "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::new(vec![
+                    "^Test_1_0".to_string(),
+                ]),
+            )?;
 
-                typedef std::unique_ptr<Class> ClassPtr;
-                }
-                "#
-            ),
-            &cli_args()?,
-            true,
-            None,
-            &AllowList::new(vec![
-                "^Test_1_0".to_string(),
-            ]),
-        )?;
+            let ns = ast.find_namespace("Test_1_0")?;
+            ast.rename_namespace(ns, "Test");
 
-        let ns = ast.find_namespace("Test_1_0")?;
-        ast.rename_namespace(ns, "Test");
+            println!("{ast:?}");
+            assert_eq!(
+                format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    Include { name: "memory", bracket: "<" }
+                    Namespace c:@N@Test_1_0 Test_1_0 Some("Test")
+                    Namespace c:@N@std std None
+                    ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
+                    Field c: float
 
-        println!("{ast:?}");
-        assert_eq!(
-            format!("{ast:?}"),
-            indoc!(
-                r#"
-                Include { name: "memory", bracket: "<" }
-                Namespace c:@N@Test_1_0 Test_1_0 Some("Test")
-                Namespace c:@N@std std None
-                ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
-                Field c: float
+                    ClassDecl c:@N@std@ST>2#T#T@unique_ptr unique_ptr rename=None OpaquePtr is_pod=false ignore=false rof=[public ctor ] template_parameters=[Type(T)] specializations=[ClassTemplateSpecializationId(0)] namespaces=[c:@N@std]
+                    Method Constructor const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_ctor_default unique_ptr rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
+                    Method Method const=true virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_const get rename=Some("get") ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
+                    Method Method const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_mut get rename=Some("get_mut") ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
 
-                ClassDecl c:@N@std@ST>2#T#T@unique_ptr unique_ptr rename=None OpaquePtr is_pod=false ignore=false rof=[public ctor ] template_parameters=[Type(T)] specializations=[ClassTemplateSpecializationId(0)] namespaces=[c:@N@std]
-                Method Constructor const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_ctor_default unique_ptr rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
-                Method Method const=true virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_const get rename=Some("get") ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
-                Method Method const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_mut get rename=Some("get_mut") ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
+                    TypeAlias ClassPtr = std::unique_ptr<Class>
+                    ClassTemplateSpecialization c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_ unique_ptr_Test_1_0_Class_ specialized_decl=c:@N@std@ST>2#T#T@unique_ptr template_arguments=[Test_1_0::Class] namespaces=[c:@N@std]
+                    "#
+                )
+            );
 
-                TypeAlias ClassPtr = std::unique_ptr<Class>
-                ClassTemplateSpecialization c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_ unique_ptr_Test_1_0_Class_ specialized_decl=c:@N@std@ST>2#T#T@unique_ptr template_arguments=[Test_1_0::Class] namespaces=[c:@N@std]
-                "#
-            )
-        );
-
-        Ok(())
+            Ok(())
+        })
     }
 
 }

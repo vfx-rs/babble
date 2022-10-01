@@ -7,5 +7,6 @@ members = [
     "bbl",
     "bbl-gen",
     "bbl-dumpast",
+    "bbl-util",
     "examples/*"
 ]

@@ -91,48 +91,46 @@ mod tests {
     use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList};
 
     #[test]
-    fn extract_enum() -> Result<(), Error> {
-        let ast = parse_string_and_extract_ast(
-            indoc!(
-                r#"
-                enum Numbered {
-                    First = 1,
-                    Second,
-                    Third = 3,
-                };
+    fn extract_enum() -> anyhow::Result<()> {
+        bbl_util::run_test(|| {
+            let ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                    enum Numbered {
+                        First = 1,
+                        Second,
+                        Third = 3,
+                    };
 
-                enum Unnumbered {
-                    First,
-                    Second,
-                    Third,
-                };
+                    enum class Unnumbered {
+                        First,
+                        Second,
+                        Third,
+                    };
 
-                void take_enum(Numbered n, Unnumbered u);
-            "#
-            ),
-            &cli_args()?,
-            true,
-            None,
-            &AllowList::default(),
-        )?;
+                    void take_enum(Numbered n, Unnumbered u);
+                "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::default(),
+            )?;
 
-        println!("{ast:?}");
-        assert_eq!(
-            format!("{ast:?}"),
-            indoc!(
-                r#"
-                Namespace c:@E@Numbered Numbered None
-                Namespace c:@E@Numbered@First First None
-                Namespace c:@E@Numbered@Third Third None
-                Function c:@F@take_enum#$@E@Numbered#$@E@Unnumbered# take_enum rename=None ignore=false return=void args=[n: Numbered, u: Unnumbered] noexcept=None template_parameters=[] specializations=[] namespaces=[]
-                Enum Numbered c:@E@Numbered [First=1 Second=2 Third=3 ] namespaces=[]
-                Enum Unnumbered c:@E@Unnumbered [] namespaces=[]
-    "#
-            )
-        );
+            println!("{ast:?}");
 
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    Function c:@F@take_enum#$@E@Numbered#$@E@Unnumbered# take_enum rename=None ignore=false return=void args=[n: Numbered, u: Unnumbered] noexcept=None template_parameters=[] specializations=[] namespaces=[]
+                    Enum Numbered c:@E@Numbered [First=1 Second=2 Third=3 ] namespaces=[]
+                    Enum Unnumbered c:@E@Unnumbered [First=0 Second=1 Third=2 ] namespaces=[]
+                    "#
+                ))?;
 
-        Ok(())
+            Ok(())
+        })
     }
 
 
