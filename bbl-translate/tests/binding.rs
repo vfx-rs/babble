@@ -688,6 +688,64 @@ fn translate_vector() -> Result<(), Error> {
     Ok(())
 }
 
+#[test]
+fn translate_unique_ptr() -> Result<(), Error> {
+    common::init_log();
+
+    let mut ast = parse_string_and_extract_ast(
+        indoc!(
+            r#"
+            #include <memory>
+
+            namespace Test_1_0 {
+            class Class {
+                float c;
+            public:
+            };
+
+            typedef std::unique_ptr<Class> ClassPtr;
+            }
+            "#
+        ),
+        &cli_args()?,
+        true,
+        None,
+        &AllowList::new(vec![
+            "^Test_1_0".to_string(),
+        ]),
+    )?;
+
+    let ns = ast.find_namespace("Test_1_0")?;
+    ast.rename_namespace(ns, "Test");
+
+    let c_ast = translate_cpp_ast_to_c(&ast)?;
+
+    println!("{c_ast:?}");
+    assert_eq!(
+        format!("{c_ast:?}"),
+        indoc!(
+            r#"
+            CStruct c:@N@Test_1_0@S@Class Test_1_0_Class Test_Class OpaquePtr fields=[c: Float]
+            CStruct c:@N@std@ST>2#T#T@unique_ptr std_unique_ptr_Test_1_0_Class_ std_unique_ptr_Test_1_0_Class_ OpaquePtr fields=[]
+            CTypedef Test_1_0_ClassPtr Test_ClassPtr c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_
+            CFunction Test_1_0_Class_ctor Test_Class_ctor([result: c:@N@Test_1_0@S@Class**])  -> Int
+            CFunction Test_1_0_Class_copy_ctor Test_Class_copy_ctor([result: c:@N@Test_1_0@S@Class**, rhs: c:@N@Test_1_0@S@Class const* const])  -> Int
+            CFunction Test_1_0_Class_move_ctor Test_Class_move_ctor([result: c:@N@Test_1_0@S@Class**, rhs: c:@N@Test_1_0@S@Class const*])  -> Int
+            CFunction Test_1_0_Class_dtor Test_Class_dtor([this_: c:@N@Test_1_0@S@Class*])  -> Int
+            CFunction std_unique_ptr_Test_1_0_Class__ctor std_unique_ptr_Test_1_0_Class__ctor([result: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_**])  -> Int
+            CFunction std_unique_ptr_Test_1_0_Class__get std_unique_ptr_Test_1_0_Class__get([this_: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_ const*, result: c:@N@Test_1_0@S@Class const**])  -> Int
+            CFunction std_unique_ptr_Test_1_0_Class__get_mut std_unique_ptr_Test_1_0_Class__get_mut([this_: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_*, result: c:@N@Test_1_0@S@Class**])  -> Int
+            CFunction std_unique_ptr_Test_1_0_Class__copy_ctor std_unique_ptr_Test_1_0_Class__copy_ctor([result: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_**, rhs: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_ const* const])  -> Int
+            CFunction std_unique_ptr_Test_1_0_Class__move_ctor std_unique_ptr_Test_1_0_Class__move_ctor([result: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_**, rhs: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_ const*])  -> Int
+            CFunction std_unique_ptr_Test_1_0_Class__dtor std_unique_ptr_Test_1_0_Class__dtor([this_: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_*])  -> Int
+            Include { name: "memory", bracket: "<" }
+            "#
+        )
+    );
+
+    Ok(())
+}
+
 
 struct SourceIter<'a> {
     current: Option<&'a (dyn std::error::Error + 'static)>,
