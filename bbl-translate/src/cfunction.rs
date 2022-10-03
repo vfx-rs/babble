@@ -5,7 +5,7 @@ use bbl_clang::{cursor::USR, ty::TypeKind};
 use bbl_extract::{
     ast::{ClassId, FunctionId, MethodId, AST},
     class::{ClassBindKind, ClassDecl, MethodSpecializationId},
-    function::{Argument, Function, Method, MethodKind},
+    function::{Argument, Function, FunctionProto, Method, MethodKind},
     index_map::{IndexMapKey, UstrIndexMap},
     qualtype::{QualType, TypeRef},
     templates::{TemplateArgument, TemplateParameterDecl},
@@ -16,7 +16,6 @@ use tracing::{error, instrument, trace};
 use crate::{
     build_namespace_prefix,
     ctype::{translate_qual_type, CQualType, CTypeRef, TypeReplacements},
-    error::TranslateTypeError,
     get_c_names, CAST,
 };
 
@@ -221,6 +220,38 @@ impl CFunction {
     }
 }
 
+pub struct CFunctionProto {
+    pub name: String,
+    pub usr: USR,
+    pub result: CQualType,
+    pub args: Vec<CQualType>,
+}
+
+impl std::fmt::Debug for CFunctionProto {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "CFunctionProto {} {} ({:?}*)({:?})",
+            self.name, self.usr, self.result, self.args
+        )
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct CFunctionProtoId(usize);
+
+impl CFunctionProtoId {
+    pub fn new(id: usize) -> CFunctionProtoId {
+        CFunctionProtoId(id)
+    }
+}
+
+impl IndexMapKey for CFunctionProtoId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
+
 #[instrument(skip(used_argument_names), level = "trace")]
 pub fn translate_arguments(
     arguments: &[Argument],
@@ -228,6 +259,7 @@ pub fn translate_arguments(
     template_args: &[TemplateArgument],
     used_argument_names: &mut HashSet<String>,
     type_replacements: &TypeReplacements,
+    ast: &AST,
 ) -> Result<(Vec<CArgument>, Vec<String>), Error> {
     trace!("Translating arguments {:?}", arguments);
     let mut result = Vec::new();
@@ -238,7 +270,7 @@ pub fn translate_arguments(
             used_template_parameters.push(parm.to_string());
         }
 
-        let qual_type = translate_qual_type(
+        let mut qual_type = translate_qual_type(
             arg.qual_type(),
             template_parms,
             template_args,
@@ -317,6 +349,7 @@ pub fn translate_function(
         template_args,
         &mut used_argument_names,
         type_replacements,
+        ast,
     )
     .map_err(|e| Error::TranslateFunction {
         name: function.name().to_string(),
@@ -403,8 +436,8 @@ pub fn translate_function(
     let mut arg_pass = Vec::new();
     for arg in &mut arguments {
         match arg.qual_type.type_ref() {
-            CTypeRef::Builtin(_) => {
-                // builtin pass by value
+            CTypeRef::Builtin(_) | CTypeRef::FunctionProto { .. } => {
+                // builtin and function pointers just pass by value
                 arg_pass.push(Expr::Token(arg.name.clone()))
             }
             CTypeRef::Pointer(_) => {
@@ -506,7 +539,7 @@ pub fn translate_function(
         let result_name = get_unique_argument_name("result", &mut used_argument_names);
 
         let (result_qt, result_expr) = match result.type_ref() {
-            CTypeRef::Builtin(_) => {
+            CTypeRef::Builtin(_) | CTypeRef::FunctionProto { .. } => {
                 // add a pointer to the result, then deref when assigning
                 let result_qt = CQualType {
                     name: format!("{}*", result.name()),
@@ -738,6 +771,7 @@ pub fn translate_method(
         template_args,
         &mut used_argument_names,
         type_replacements,
+        ast,
     )
     .map_err(|e| Error::TranslateFunction {
         name: format!("{}::{}", class.name(), method.name()),
@@ -824,7 +858,7 @@ pub fn translate_method(
     let mut arg_pass = Vec::new();
     for arg in &mut arguments {
         match arg.qual_type.type_ref() {
-            CTypeRef::Builtin(_) => {
+            CTypeRef::Builtin(_) | CTypeRef::FunctionProto { .. } => {
                 // builtin pass by value
                 arg_pass.push(Expr::Token(arg.name.clone()))
             }
@@ -927,7 +961,7 @@ pub fn translate_method(
         let result_name = get_unique_argument_name("result", &mut used_argument_names);
 
         let (result_qt, result_expr) = match result.type_ref() {
-            CTypeRef::Builtin(_) => {
+            CTypeRef::Builtin(_) | CTypeRef::FunctionProto { .. } => {
                 // add a pointer to the result, then deref when assigning
                 let result_qt = CQualType {
                     name: format!("{}*", result.name()),
@@ -1290,6 +1324,34 @@ pub fn translate_method(
     })
 }
 
+#[instrument(skip(function_protos), level = "trace")]
+pub fn translate_function_proto(
+    proto: &FunctionProto,
+    function_protos: &mut UstrIndexMap<CFunctionProto, CFunctionProtoId>,
+) -> Result<()> {
+    let name = proto.name().to_string();
+
+    let result = translate_qual_type(proto.result(), &[], &[], &TypeReplacements::default())?;
+
+    let args = proto
+        .args()
+        .iter()
+        .map(|a| translate_qual_type(a, &[], &[], &TypeReplacements::default()))
+        .collect::<Result<Vec<_>>>()?;
+
+    function_protos.insert(
+        proto.usr().into(),
+        CFunctionProto {
+            name,
+            usr: proto.usr(),
+            result,
+            args,
+        },
+    );
+
+    Ok(())
+}
+
 fn get_cpp_cast_expr(qt: &CQualType, ast: &AST) -> Result<String> {
     let result = match qt.type_ref() {
         CTypeRef::Builtin(tk) => Ok(builtin_spelling(tk)),
@@ -1353,7 +1415,7 @@ fn get_bind_kind(usr: USR, ast: &AST) -> Result<ClassBindKind> {
                 usr,
                 source: Box::new(e),
             })
-    } else if ast.get_enum(usr).is_some() {
+    } else if ast.get_enum(usr).is_some() || ast.get_function_proto(usr).is_some() {
         Ok(ClassBindKind::ValueType)
     } else {
         Err(Error::RefNotFound {

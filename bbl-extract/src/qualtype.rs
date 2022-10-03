@@ -1,6 +1,6 @@
 use backtrace::Backtrace;
 use bbl_clang::{
-    cursor::{Cursor, USR},
+    cursor::{CurTypedef, Cursor, USR},
     cursor_kind::CursorKind,
     translation_unit::TranslationUnit,
     ty::{Type, TypeKind},
@@ -28,6 +28,10 @@ pub enum TypeRef {
     RValueReference(Box<QualType>),
     TemplateTypeParameter(String),
     TemplateNonTypeParameter(String),
+    FunctionProto {
+        result: Box<QualType>,
+        args: Vec<QualType>,
+    },
     Unknown(TypeKind),
 }
 
@@ -72,6 +76,8 @@ impl TypeRef {
                     Ok(*class.bind_kind())
                 } else if let Some(cts) = ast.get_class_template_specialization(*usr) {
                     cts.bind_kind(ast)
+                } else if let Some(proto) = ast.get_function_proto(*usr) {
+                    Ok(ClassBindKind::ValueType)
                 } else if let Some(td) = ast.get_type_alias(*usr) {
                     todo!()
                 } else {
@@ -84,7 +90,30 @@ impl TypeRef {
             Pointer(p) => p.type_ref.get_bind_kind(ast),
             LValueReference(p) => p.type_ref.get_bind_kind(ast),
             RValueReference(p) => p.type_ref.get_bind_kind(ast),
+            FunctionProto { .. } => Ok(ClassBindKind::ValueType),
             _ => unreachable!(),
+        }
+    }
+
+    pub fn refers_to_std_function(&self, ast: &AST) -> bool {
+        match self {
+            TypeRef::Builtin(_)
+            | TypeRef::TemplateNonTypeParameter(_)
+            | TypeRef::TemplateTypeParameter(_)
+            | TypeRef::Unknown(_) => false,
+            TypeRef::LValueReference(p) | TypeRef::Pointer(p) | TypeRef::RValueReference(p) => {
+                p.type_ref.refers_to_std_function(ast)
+            }
+            TypeRef::Ref(usr) => {
+                if let Some(proto) = ast.get_function_proto(*usr) {
+                    proto.name().starts_with("function_")
+                } else if let Some(td) = ast.get_type_alias(*usr) {
+                    td.underlying_type().type_ref.refers_to_std_function(ast)
+                } else {
+                    false
+                }
+            }
+            TypeRef::FunctionProto { .. } => false,
         }
     }
 }
@@ -224,7 +253,10 @@ impl QualType {
     pub fn is_template(&self) -> bool {
         match &self.type_ref {
             TypeRef::TemplateNonTypeParameter(_) | TypeRef::TemplateTypeParameter(_) => true,
-            TypeRef::Builtin(_) | TypeRef::Ref(_) | TypeRef::Unknown(_) => false,
+            TypeRef::Builtin(_)
+            | TypeRef::Ref(_)
+            | TypeRef::Unknown(_)
+            | TypeRef::FunctionProto { .. } => false,
             TypeRef::Pointer(p) | TypeRef::LValueReference(p) | TypeRef::RValueReference(p) => {
                 p.is_template()
             }
@@ -236,7 +268,10 @@ impl QualType {
             TypeRef::TemplateNonTypeParameter(name) | TypeRef::TemplateTypeParameter(name) => {
                 Some(name.as_str())
             }
-            TypeRef::Builtin(_) | TypeRef::Ref(_) | TypeRef::Unknown(_) => None,
+            TypeRef::Builtin(_)
+            | TypeRef::Ref(_)
+            | TypeRef::Unknown(_)
+            | TypeRef::FunctionProto { .. } => None,
             TypeRef::Pointer(p) | TypeRef::LValueReference(p) | TypeRef::RValueReference(p) => {
                 p.template_parameter_name()
             }
@@ -286,6 +321,16 @@ impl QualType {
                 format!(
                     "{result}{}",
                     specialize_template_type(t, class_template_parameters, class_template_args)
+                )
+            }
+            TypeRef::FunctionProto { result, args } => {
+                format!(
+                    "{}(*)({})",
+                    result.format(ast, class_template_parameters, class_template_args),
+                    args.iter()
+                        .map(|a| a.format(ast, class_template_parameters, class_template_args))
+                        .collect::<Vec<String>>()
+                        .join(", ")
                 )
             }
             TypeRef::Unknown(tk) => {
@@ -361,6 +406,13 @@ impl Display for QualType {
             TypeRef::TemplateNonTypeParameter(t) => {
                 write!(f, "{}", t)
             }
+            TypeRef::FunctionProto { result, args } => {
+                write!(f, "{}(*)(", *result)?;
+                for a in args {
+                    write!(f, "{}, ", a)?;
+                }
+                write!(f, ")")
+            }
             TypeRef::Unknown(tk) => {
                 write!(f, "UNKNOWN({})", tk.spelling())
             }
@@ -402,24 +454,38 @@ pub fn extract_type(
             spelling = c_decl.spelling(),
             usr = c_decl.usr()
         );
-        // extract here if we need to
-        let u_ref = match c_decl.kind() {
-            CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
-                extract_typedef_decl(c_decl.try_into()?, already_visited, ast, tu, allow_list)?
-            }
-            CursorKind::ClassDecl | CursorKind::StructDecl => {
-                extract_class_decl(c_decl.try_into()?, tu, ast, already_visited, allow_list)?
-            }
-            CursorKind::TypeRef => unimplemented!("Should extract class here?"),
-            CursorKind::EnumDecl => extract_enum(c_decl, ast, already_visited, tu)?,
-            _ => unimplemented!("Unhandled type decl {:?}", c_decl),
-        };
 
-        Ok(QualType {
-            name,
-            is_const,
-            type_ref: TypeRef::Ref(u_ref),
-        })
+        // special-case extract std::function as its function prototype
+        if c_decl.display_name().starts_with("function<") {
+            let ty = c_decl.template_argument_type(0)?;
+            if ty.kind() != TypeKind::FunctionProto {
+                panic!(
+                    "Got type kind {:?} instead of FunctionProto for {c_decl:?}",
+                    ty.kind()
+                );
+            }
+
+            extract_std_function_as_pointer(ty, ast, already_visited, tu, allow_list)
+        } else {
+            // extract underlying decl here
+            let u_ref = match c_decl.kind() {
+                CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
+                    extract_typedef_decl(c_decl.try_into()?, already_visited, ast, tu, allow_list)?
+                }
+                CursorKind::ClassDecl | CursorKind::StructDecl => {
+                    extract_class_decl(c_decl.try_into()?, tu, ast, already_visited, allow_list)?
+                }
+                CursorKind::TypeRef => unimplemented!("Should extract class here?"),
+                CursorKind::EnumDecl => extract_enum(c_decl, ast, already_visited, tu)?,
+                _ => unimplemented!("Unhandled type decl {:?}", c_decl),
+            };
+
+            Ok(QualType {
+                name,
+                is_const,
+                type_ref: TypeRef::Ref(u_ref),
+            })
+        }
     } else {
         match ty.kind() {
             TypeKind::Pointer => {
@@ -440,6 +506,29 @@ pub fn extract_type(
             }
             TypeKind::LValueReference => {
                 let pointee = ty.pointee_type()?;
+                if let Ok(c_decl) = pointee.type_declaration() {
+                    if matches!(
+                        c_decl.kind(),
+                        CursorKind::TypeAliasDecl | CursorKind::TypedefDecl
+                    ) {
+                        let c_decl: CurTypedef = c_decl.try_into()?;
+                        let ty = c_decl.underlying_type()?;
+                        if ty.spelling().starts_with("std::function<") {
+                            // Force-extract the function as a function pointer here, lofting it out of the reference
+                            // as we want to promote a `std::function<> const&` to a value pass of a function pointer
+                            // and let C++ automatically construct the target std::function
+                            return extract_type(
+                                pointee,
+                                template_parameters,
+                                already_visited,
+                                ast,
+                                tu,
+                                allow_list,
+                            );
+                        }
+                    }
+                }
+
                 let ty_ref = extract_type(
                     pointee,
                     template_parameters,
@@ -488,10 +577,100 @@ pub fn extract_type(
                     })
                 }
             }
+            TypeKind::FunctionProto => {
+                extract_function_pointer(ty, ast, already_visited, tu, allow_list)
+            }
             _ => {
                 error!("Unhandled {:?}", ty);
+                error!("{:?}", backtrace::Backtrace::new());
                 Ok(QualType::unknown(ty.kind()))
             }
         }
     }
+}
+
+pub fn extract_function_pointer(
+    ty: Type,
+    ast: &mut AST,
+    already_visited: &mut Vec<USR>,
+    tu: &TranslationUnit,
+    allow_list: &AllowList,
+) -> Result<QualType> {
+    if ty.kind() != TypeKind::FunctionProto {
+        panic!(
+            "Got type kind {:?} instead of FunctionProto in extract_function_proto for {}",
+            ty.kind(),
+            ty.spelling(),
+        );
+    }
+
+    let name = ty.spelling();
+
+    let result = extract_type(ty.result_type()?, &[], already_visited, ast, tu, allow_list)?;
+    let num_args = ty.num_arg_types()?;
+    let mut args = Vec::new();
+    for i in 0..num_args {
+        args.push(extract_type(
+            ty.arg_type(i)?,
+            &[],
+            already_visited,
+            ast,
+            tu,
+            allow_list,
+        )?);
+    }
+
+    Ok(QualType {
+        name,
+        is_const: false,
+        type_ref: TypeRef::FunctionProto {
+            result: Box::new(result),
+            args,
+        },
+    })
+}
+
+
+/// Extract a std::function as a function pointer
+pub fn extract_std_function_as_pointer(
+    ty: Type,
+    ast: &mut AST,
+    already_visited: &mut Vec<USR>,
+    tu: &TranslationUnit,
+    allow_list: &AllowList,
+) -> Result<QualType> {
+    if ty.kind() != TypeKind::FunctionProto {
+        panic!(
+            "Got type kind {:?} instead of FunctionProto in extract_function_proto for {}",
+            ty.kind(),
+            ty.spelling(),
+        );
+    }
+
+    let name = ty.spelling();
+
+    let result = extract_type(ty.result_type()?, &[], already_visited, ast, tu, allow_list)?;
+    let num_args = ty.num_arg_types()?;
+    let mut args = Vec::new();
+    for i in 0..num_args {
+        args.push(extract_type(
+            ty.arg_type(i)?,
+            &[],
+            already_visited,
+            ast,
+            tu,
+            allow_list,
+        )?);
+    }
+
+    let proto = QualType {
+        name: name.clone(),
+        is_const: false,
+        type_ref: TypeRef::FunctionProto {
+            result: Box::new(result),
+            args,
+        },
+    };
+
+    Ok(QualType::pointer(&name, proto))
 }

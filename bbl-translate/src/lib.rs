@@ -9,7 +9,7 @@ use bbl_clang::cursor::USR;
 use bbl_extract::ast::Include;
 use bbl_extract::index_map::UstrIndexMap;
 use cenum::{CEnum, CEnumId, translate_enum};
-use cfunction::{translate_function, CFunction, CFunctionId};
+use cfunction::{translate_function, CFunction, CFunctionId, CFunctionProto, CFunctionProtoId, translate_function_proto};
 use cstruct::{translate_class, CStruct, CStructId};
 use ctype::TypeReplacements;
 use ctypedef::{
@@ -32,6 +32,7 @@ pub struct CAST {
     pub typedefs: UstrIndexMap<CTypedef, CTypedefId>,
     pub functions: UstrIndexMap<CFunction, CFunctionId>,
     pub enums: UstrIndexMap<CEnum, CEnumId>,
+    pub function_protos: UstrIndexMap<CFunctionProto, CFunctionProtoId>,
     pub includes: Vec<Include>,
 }
 
@@ -39,6 +40,10 @@ impl Debug for CAST {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for st in self.structs.iter() {
             writeln!(f, "{st:?}")?;
+        }
+
+        for proto in self.function_protos.iter() {
+            writeln!(f, "{proto:?}")?;
         }
 
         for td in self.typedefs.iter() {
@@ -73,6 +78,10 @@ impl CAST {
 
     pub fn get_enum(&self, usr: USR) -> Option<&CEnum> {
         self.enums.get(&usr.into())
+    }
+
+    pub fn get_function_proto(&self, usr: USR) -> Option<&CFunctionProto> {
+        self.function_protos.get(&usr.into())
     }
 
     pub fn pretty_print(&self, depth: usize) -> Result<()> {
@@ -159,6 +168,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
     let mut typedefs = UstrIndexMap::new();
     let mut functions = UstrIndexMap::new();
     let mut enums = UstrIndexMap::new();
+    let mut function_protos = UstrIndexMap::new();
 
     let mut used_names = HashSet::new();
 
@@ -234,11 +244,16 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
         translate_enum(ast, enm, &mut enums)?;
     }
 
+    for proto in ast.function_protos().iter() {
+        translate_function_proto(proto, &mut function_protos)?;
+    }
+
     Ok(CAST {
         structs,
         typedefs,
         functions,
         enums,
+        function_protos,
         includes: ast.includes().to_vec(),
     })
 }

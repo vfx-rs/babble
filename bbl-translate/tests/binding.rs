@@ -4,13 +4,15 @@ use std::path::Path;
 
 use bbl_clang::{cli_args, cli_args_with, virtual_file::configure_temp_cmake_project};
 use bbl_extract::templates::TemplateArgument;
-use bbl_extract::{AllowList, parse_file_and_extract_ast, parse_string_and_extract_ast, qualtype::QualType};
+use bbl_extract::{
+    parse_file_and_extract_ast, parse_string_and_extract_ast, qualtype::QualType, AllowList,
+};
 
 use bbl_translate::error::Error;
 
 use bbl_translate::translate_cpp_ast_to_c;
-use log::error;
 use indoc::indoc;
+use log::error;
 
 #[test]
 fn test_binding_rename() -> Result<(), Error> {
@@ -218,7 +220,7 @@ public:
     let method = ast.find_method(class, "foo()");
     assert!(matches!(
         method,
-        Err(bbl_extract::error::Error::MethodNotFound{..})
+        Err(bbl_extract::error::Error::MethodNotFound { .. })
     ));
 
     println!("{ast:?}");
@@ -253,7 +255,7 @@ public:
     let method = ast.find_method(class, "method");
     assert!(matches!(
         method,
-        Err(bbl_extract::error::Error::MultipleMatches{..})
+        Err(bbl_extract::error::Error::MultipleMatches { .. })
     ));
 
     println!("{ast:?}");
@@ -440,7 +442,6 @@ public:
 
     println!("{c_ast:?}");
 
-
     assert_eq!(
         format!("{c_ast:?}"),
         indoc!(
@@ -489,7 +490,8 @@ public:
     println!("{c_ast:?}");
     assert_eq!(
         format!("{c_ast:?}"),
-        indoc!(r#"
+        indoc!(
+            r#"
             CStruct c:@N@Test@S@Class Test_Class Test_Class OpaquePtr fields=[]
             CFunction Test_Class_ctor Test_Class_ctor([result: c:@N@Test@S@Class**])  -> Int
             CFunction Test_Class_copy_ctor Test_Class_copy_ctor([result: c:@N@Test@S@Class**, rhs: c:@N@Test@S@Class const* const])  -> Int
@@ -497,7 +499,8 @@ public:
             CFunction Test_Class_dtor Test_Class_dtor([this_: c:@N@Test@S@Class*])  -> Int
             CFunction Test_Class_ctor_float Test_Class_ctor_float([result: c:@N@Test@S@Class**, arg: Float const*])  -> Int
         "#
-    ));
+        )
+    );
 
     assert_eq!(c_ast.structs.len(), 1);
     assert_eq!(c_ast.functions.len(), 5);
@@ -528,8 +531,13 @@ public:
         None,
     )?;
 
-    let ast =
-        parse_file_and_extract_ast(&filename, &cli_args_with(&args)?, true, Some("Test"), &AllowList::default())?;
+    let ast = parse_file_and_extract_ast(
+        &filename,
+        &cli_args_with(&args)?,
+        true,
+        Some("Test"),
+        &AllowList::default(),
+    )?;
     println!("{ast:?}");
 
     Ok(())
@@ -627,7 +635,6 @@ fn translate_enum() -> Result<(), Error> {
     Ok(())
 }
 
-
 #[test]
 fn translate_vector() -> Result<(), Error> {
     common::init_log();
@@ -650,9 +657,7 @@ fn translate_vector() -> Result<(), Error> {
         &cli_args()?,
         true,
         None,
-        &AllowList::new(vec![
-            "^Test_1_0".to_string(),
-        ]),
+        &AllowList::new(vec!["^Test_1_0".to_string()]),
     )?;
 
     let ns = ast.find_namespace("Test_1_0")?;
@@ -710,9 +715,7 @@ fn translate_unique_ptr() -> Result<(), Error> {
         &cli_args()?,
         true,
         None,
-        &AllowList::new(vec![
-            "^Test_1_0".to_string(),
-        ]),
+        &AllowList::new(vec!["^Test_1_0".to_string()]),
     )?;
 
     let ns = ast.find_namespace("Test_1_0")?;
@@ -746,6 +749,46 @@ fn translate_unique_ptr() -> Result<(), Error> {
     Ok(())
 }
 
+#[test]
+fn translate_std_function() -> Result<(), bbl_util::Error> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
+            #include <functional>
+
+            namespace Test_1_0 {
+            using PropertyPredicateFunc = std::function<bool(const char* name)>;
+
+            void take_function(const PropertyPredicateFunc& predicate = {});
+            }
+            "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::new(vec!["^Test_1_0".to_string()]),
+        )?;
+
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
+
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+
+        println!("{c_ast:?}");
+        bbl_util::compare(
+            &format!("{c_ast:?}"),
+            indoc!(
+                r#"
+                CFunctionProto function_bool_const_char_ c:@N@std@S@function>#Fb(#*1C) (Bool*)([Char_S const*])
+                CTypedef Test_1_0_PropertyPredicateFunc Test_PropertyPredicateFunc c:@N@std@S@function>#Fb(#*1C)
+                CFunction Test_1_0_take_function Test_take_function([predicate: c:@N@Test_1_0@PropertyPredicateFunc const*])  -> Int
+                Include { name: "functional", bracket: "<" }
+            "#
+            )
+        )
+    })
+}
 
 struct SourceIter<'a> {
     current: Option<&'a (dyn std::error::Error + 'static)>,

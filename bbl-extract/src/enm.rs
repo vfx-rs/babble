@@ -1,10 +1,10 @@
-use bbl_clang::cursor::{Cursor, USR, CurEnumConstant};
+use bbl_clang::cursor::{CurEnumConstant, Cursor, USR};
 use bbl_clang::cursor_kind::CursorKind;
 use bbl_clang::translation_unit::TranslationUnit;
 use bbl_clang::ty::Type;
 use tracing::log::debug;
 
-use crate::ast::{AST, get_namespaces_for_decl, get_qualified_name};
+use crate::ast::{get_namespaces_for_decl, get_qualified_name, AST};
 use crate::error::Error;
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -52,7 +52,12 @@ impl Enum {
     }
 }
 
-pub fn extract_enum(c_enum: Cursor, ast: &mut AST, already_visited: &mut Vec<USR>, tu: &TranslationUnit) -> Result<USR> {
+pub fn extract_enum(
+    c_enum: Cursor,
+    ast: &mut AST,
+    already_visited: &mut Vec<USR>,
+    tu: &TranslationUnit,
+) -> Result<USR> {
     let usr = c_enum.usr();
     if already_visited.contains(&usr) {
         debug!("extract_enum_decl: already visited {}", usr);
@@ -91,7 +96,7 @@ mod tests {
     use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList};
 
     #[test]
-    fn extract_enum() -> anyhow::Result<()> {
+    fn extract_enum() -> bbl_util::Result<()> {
         bbl_util::run_test(|| {
             let ast = parse_string_and_extract_ast(
                 indoc!(
@@ -127,11 +132,8 @@ mod tests {
                     Enum Numbered c:@E@Numbered [First=1 Second=2 Third=3 ] namespaces=[]
                     Enum Unnumbered c:@E@Unnumbered [First=0 Second=1 Third=2 ] namespaces=[]
                     "#
-                ))?;
-
-            Ok(())
+                ),
+            )
         })
     }
-
-
 }

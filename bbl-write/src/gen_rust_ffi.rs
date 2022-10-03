@@ -4,12 +4,15 @@ use bbl_translate::{
     cfunction::CFunction,
     cstruct::CStruct,
     ctype::{CQualType, CTypeRef},
+    ctypedef::CTypedef,
     CAST,
 };
 
 use crate::error::Error;
 
 use std::{borrow::Cow, fmt::Write};
+
+use indoc::indoc;
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -27,18 +30,29 @@ pub fn write_rust_ffi_module(module_path: &str, c_ast: &CAST) -> Result<(), Erro
 pub fn write_rust_ffi(source: &mut String, c_ast: &CAST) -> Result<()> {
     writeln!(
         source,
-        r#"#![allow(non_snake_case)]
-#![allow(non_camel_case_types)]
-#![allow(non_upper_case_globals)]
-#![allow(unused_imports)]
-"#
+        indoc!(
+            r#"
+            #![allow(non_snake_case)]
+            #![allow(non_camel_case_types)]
+            #![allow(non_upper_case_globals)]
+            #![allow(unused_imports)]
+        "#
+        )
     )?;
 
+    // typedefs
+    for td in c_ast.typedefs.iter() {
+        write_typedef_external(source, td)?;
+    }
+    writeln!(source)?;
+
+    // structs
     for st in c_ast.structs.iter() {
         write_struct_external(source, st)?;
     }
-
     writeln!(source)?;
+
+    // functions
     for fun in c_ast.functions.iter() {
         write_function_external(source, fun)?;
         writeln!(source)?;
@@ -53,6 +67,13 @@ pub fn write_rust_ffi(source: &mut String, c_ast: &CAST) -> Result<()> {
     writeln!(source, "use std::os::raw::*;")?;
     writeln!(source)?;
 
+    // typedefs
+    for td in c_ast.typedefs.iter() {
+        write_typedef_internal(source, td, c_ast)?;
+    }
+    writeln!(source)?;
+
+    // struct definitions
     for st in c_ast.structs.iter() {
         write_struct_internal(source, st, c_ast)?;
     }
@@ -61,6 +82,8 @@ pub fn write_rust_ffi(source: &mut String, c_ast: &CAST) -> Result<()> {
     writeln!(source, "extern \"C\" {{")?;
 
     writeln!(source)?;
+
+    // function definitions
     for fun in c_ast.functions.iter() {
         write_function_internal(source, fun, c_ast)?;
         writeln!(source)?;
@@ -68,6 +91,45 @@ pub fn write_rust_ffi(source: &mut String, c_ast: &CAST) -> Result<()> {
 
     writeln!(source, "}} // extern C")?;
     writeln!(source, "}} // mod internal")?;
+
+    Ok(())
+}
+
+fn write_typedef_external(source: &mut String, td: &CTypedef) -> Result<()> {
+    if let CTypeRef::Pointer(p) = td.underlying_type.type_ref() {
+        if let CTypeRef::FunctionProto {..} = p.type_ref() {
+            write!(
+                source,
+                "pub use internal::{} as {};",
+                td.name_external, td.name_external
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn write_typedef_internal(source: &mut String, td: &CTypedef, c_ast: &CAST) -> Result<()> {
+    if let CTypeRef::Pointer(p) = td.underlying_type.type_ref() {
+        if let CTypeRef::FunctionProto { result, args } = p.type_ref() {
+            write!(source, "pub type {} = fn(", td.name_external)?;
+
+            let mut first = true;
+            for arg in args {
+                if !first {
+                    write!(source, ", ")?;
+                } else {
+                    first = false;
+                }
+
+                write_type(source, arg, c_ast)?;
+            }
+
+            write!(source, ") -> ")?;
+            write_type(source, result.as_ref(), c_ast)?;
+            write!(source, ";")?;
+        }
+    }
 
     Ok(())
 }
@@ -210,6 +272,9 @@ fn write_type(source: &mut String, qt: &CQualType, c_ast: &CAST) -> Result<()> {
             } else {
                 unimplemented!("no struct or typedef")
             }
+        }
+        CTypeRef::FunctionProto { result, args } => {
+            unimplemented!("Writing function prototype")
         }
         CTypeRef::Unknown(tk) => unimplemented!("unknown typekind in write_type: {tk}"),
     }

@@ -1,7 +1,7 @@
 use bbl_clang::cursor::{Cursor, USR};
 use bbl_clang::exception::ExceptionSpecificationKind;
 use bbl_clang::translation_unit::TranslationUnit;
-use bbl_clang::ty::TypeKind;
+use bbl_clang::ty::{TypeKind, Type};
 use log::*;
 use std::fmt::{Debug, Display};
 use tracing::instrument;
@@ -9,6 +9,7 @@ use tracing::instrument;
 use crate::AllowList;
 use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, FunctionTemplateSpecializationId};
 use crate::class::MethodSpecializationId;
+use crate::index_map::IndexMapKey;
 use crate::qualtype::{extract_type};
 use crate::templates::{TemplateParameterDecl, TemplateArgument};
 use crate::{ast::AST, qualtype::QualType};
@@ -16,6 +17,59 @@ use bbl_clang::cursor_kind::CursorKind;
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct FunctionProto {
+    name: String,
+    usr: USR,
+    result: QualType,
+    args: Vec<QualType>,
+    namespaces: Vec<USR>
+}
+
+impl FunctionProto {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn usr(&self) -> USR {
+        self.usr
+    }
+
+    pub fn result(&self) -> &QualType {
+        &self.result
+    }
+
+    pub fn args(&self) -> &[QualType] {
+        &self.args
+    }
+
+    pub fn new(name: String, usr: USR, result: QualType, args: Vec<QualType>, namespaces: Vec<USR>) -> Self {
+        FunctionProto { name, usr, result, args, namespaces }
+    }
+}
+
+impl std::fmt::Debug for FunctionProto {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "FunctionProto {} {} ({:?}*)({:?}) namespaces={:?}", self.name, self.usr, self.result, self.args, self.namespaces)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct FunctionProtoId(usize);
+
+impl FunctionProtoId {
+    pub fn new(id: usize) -> FunctionProtoId {
+        FunctionProtoId(id)
+    }
+}
+
+impl IndexMapKey for FunctionProtoId {
+    fn get(&self) -> usize {
+        self.0
+    }
+}
+
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Argument {

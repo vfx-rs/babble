@@ -3,7 +3,9 @@ mod common;
 use std::path::PathBuf;
 
 use bbl_clang::{cli_args, cli_args_with, virtual_file::configure_temp_cmake_project};
-use bbl_extract::{AllowList, class::ClassBindKind, parse_file_and_extract_ast, parse_string_and_extract_ast};
+use bbl_extract::{
+    class::ClassBindKind, parse_file_and_extract_ast, parse_string_and_extract_ast, AllowList,
+};
 use bbl_translate::translate_cpp_ast_to_c;
 use common::run_test;
 
@@ -525,8 +527,8 @@ fn write_take_std_string_fun() -> Result<(), Error> {
 }
 
 #[test]
-fn build_take_std_string() -> Result<(), Error> {
-    run_test(|| {
+fn build_take_std_string() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
         let contents = "#include <take_string.hpp>\n";
 
         let cmake_prefix_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -562,7 +564,7 @@ fn build_take_std_string() -> Result<(), Error> {
         c_ast.pretty_print(0)?;
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 7);
+        assert_eq!(c_ast.functions.len(), 8);
 
         let (c_header, c_source) = gen_c("test", &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
@@ -580,7 +582,6 @@ fn build_take_std_string() -> Result<(), Error> {
         Ok(())
     })
 }
-
 
 #[test]
 fn write_enum() -> Result<(), Error> {
@@ -616,7 +617,7 @@ fn write_enum() -> Result<(), Error> {
     ast.rename_namespace(ns, "Test");
 
     let c_ast = translate_cpp_ast_to_c(&ast)?;
-    
+
     let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
@@ -645,9 +646,7 @@ fn write_vector() -> Result<(), Error> {
         &cli_args()?,
         true,
         None,
-        &AllowList::new(vec![
-            "^Test_1_0".to_string(),
-        ]),
+        &AllowList::new(vec!["^Test_1_0".to_string()]),
     )?;
 
     let ns = ast.find_namespace("Test_1_0")?;
@@ -660,7 +659,6 @@ fn write_vector() -> Result<(), Error> {
 
     Ok(())
 }
-
 
 #[test]
 fn write_unique_ptr() -> Result<(), Error> {
@@ -684,9 +682,7 @@ fn write_unique_ptr() -> Result<(), Error> {
         &cli_args()?,
         true,
         None,
-        &AllowList::new(vec![
-            "^Test_1_0".to_string(),
-        ]),
+        &AllowList::new(vec!["^Test_1_0".to_string()]),
     )?;
 
     let ns = ast.find_namespace("Test_1_0")?;
@@ -700,7 +696,38 @@ fn write_unique_ptr() -> Result<(), Error> {
     Ok(())
 }
 
+#[test]
+fn write_std_function() -> Result<(), bbl_util::Error> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
+            #include <functional>
 
+            namespace Test_1_0 {
+            using PropertyPredicateFunc = std::function<bool(const char* name)>;
+
+            void take_function(const PropertyPredicateFunc& predicate = {});
+            }
+            "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::new(vec!["^Test_1_0".to_string()]),
+        )?;
+
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
+
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+
+        Ok(())
+    })
+}
 
 #[tracing::instrument]
 fn fun_b(arg: &str) {}

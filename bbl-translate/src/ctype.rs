@@ -1,5 +1,5 @@
 use std::{
-    fmt::Display,
+    fmt::{Write, Display},
     ops::{Deref, DerefMut},
 };
 
@@ -21,6 +21,10 @@ pub enum CTypeRef {
     Builtin(TypeKind),
     Ref(USR),
     Pointer(Box<CQualType>),
+    FunctionProto {
+        result: Box<CQualType>,
+        args: Vec<CQualType>,
+    },
     Unknown(TypeKind),
 }
 
@@ -47,6 +51,16 @@ impl CQualType {
 
     pub fn is_pointer(&self) -> bool {
         matches!(self.type_ref, CTypeRef::Pointer(_))
+    }
+
+    pub fn is_function_proto(&self, c_ast: &CAST) -> bool {
+        if let CTypeRef::Ref(usr) = self.type_ref {
+            c_ast.get_function_proto(usr).is_some()
+        } else if let CTypeRef::Pointer(ref pointee) = self.type_ref {
+            pointee.is_function_proto(c_ast)
+        } else {
+            false
+        }
     }
 
     pub fn cpp_type_ref(&self) -> &TypeRef {
@@ -84,6 +98,15 @@ impl CQualType {
                         backtrace: Backtrace::new(),
                     })
                 }
+            }
+            CTypeRef::FunctionProto { result, args } => {
+                let mut s = String::new();
+                write!(s, "{}(*)(", **result).unwrap();
+                for arg in args {
+                    write!(s, "{}, ", arg).unwrap();
+                }
+                write!(s, ")").unwrap();
+                Ok(s)
             }
             CTypeRef::Unknown(tk) => Ok(format!("UNKNOWN({}){const_}", tk.spelling())),
         }
@@ -125,6 +148,13 @@ impl Display for CQualType {
             CTypeRef::Ref(usr) => {
                 write!(f, "{}{const_}", usr)
             }
+            CTypeRef::FunctionProto { result, args } => {
+                write!(f, "{}(*)(", **result)?;
+                for arg in args {
+                    write!(f, "{}, ", arg)?
+                }
+                write!(f, ")")
+            }
             CTypeRef::Unknown(tk) => {
                 write!(f, "UNKNOWN({})", tk.spelling())
             }
@@ -143,6 +173,13 @@ impl std::fmt::Debug for CQualType {
             CTypeRef::Pointer(pointee) => write!(f, "{}*{const_}", *pointee),
             CTypeRef::Ref(usr) => {
                 write!(f, "{}{const_}", usr)
+            }
+            CTypeRef::FunctionProto { result, args } => {
+                write!(f, "{:?}(*)(", **result)?;
+                for arg in args {
+                    write!(f, "{:?}, ", arg)?
+                }
+                write!(f, ")")
             }
             CTypeRef::Unknown(tk) => {
                 write!(f, "UNKNOWN({})", tk.spelling())
@@ -268,6 +305,28 @@ pub fn translate_qual_type(
                     }),
                 }
             }
+        }
+        TypeRef::FunctionProto { result, args } => {
+            let c_result = translate_qual_type(
+                result.deref(),
+                template_parms,
+                template_args,
+                type_replacements,
+            )?;
+            let c_args = args
+                .iter()
+                .map(|a| translate_qual_type(a, template_parms, template_args, type_replacements))
+                .collect::<Result<Vec<CQualType>>>()?;
+
+            Ok(CQualType {
+                name: qual_type.name.clone(),
+                is_const: false,
+                type_ref: CTypeRef::FunctionProto {
+                    result: Box::new(c_result),
+                    args: c_args,
+                },
+                cpp_type_ref: qual_type.type_ref.clone(),
+            })
         }
         _ => {
             error!(

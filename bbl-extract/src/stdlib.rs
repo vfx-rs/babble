@@ -10,7 +10,7 @@ use crate::{
     ast::{get_namespaces_for_decl, AST},
     class::{ClassDecl, MethodState, RuleOfFive},
     function::{Argument, Const, PureVirtual, Static, Virtual},
-    function::{Deleted, Method, MethodKind},
+    function::{Deleted, FunctionProto, Method, MethodKind},
     namespace,
     qualtype::{extract_type, QualType, TypeRef},
     templates::{
@@ -474,4 +474,202 @@ fn create_std_unique_ptr_tmpl(
     ast.insert_class(cd);
 
     Ok(c_tmpl.usr())
+}
+
+pub fn create_std_function(
+    c: CurClassDecl,
+    ast: &mut AST,
+    already_visited: &mut Vec<USR>,
+    tu: &TranslationUnit,
+    allow_list: &AllowList,
+) -> Result<USR> {
+    // we'll just explicitly convert this to a function prototype here and not try and extract the underlying template
+    // as that requires handling parameter packs etc.
+    let name = regex::Regex::new("(?:[^a-zA-Z0-9])+")
+        .unwrap()
+        .replace_all(&c.display_name(), "_")
+        .to_string();
+
+    let namespaces = get_namespaces_for_decl(c.into(), tu, ast, already_visited)?;
+    let ty = c.template_argument_type(0)?;
+
+    if ty.kind() != TypeKind::FunctionProto {
+        panic!(
+            "Got type kind {:?} instead of FunctionProto for {c:?}",
+            ty.kind()
+        );
+    }
+
+    let result = extract_type(ty.result_type()?, &[], already_visited, ast, tu, allow_list)?;
+    let num_args = ty.num_arg_types()?;
+    let mut args = Vec::new();
+    for i in 0..num_args {
+        args.push(extract_type(
+            ty.arg_type(i)?,
+            &[],
+            already_visited,
+            ast,
+            tu,
+            allow_list,
+        )?);
+    }
+
+    ast.insert_function_proto(FunctionProto::new(name, c.usr(), result, args, namespaces));
+
+    Ok(c.usr())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::AllowList;
+    use crate::{error::Error, init_log, parse_string_and_extract_ast};
+    use bbl_clang::cli_args;
+    use indoc::indoc;
+
+    #[test]
+    fn extract_vector() -> Result<(), Error> {
+        init_log();
+
+        let mut ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
+                #include <vector>
+
+                namespace Test_1_0 {
+                class Class {
+                    float c;
+                public:
+                };
+
+                typedef std::vector<Class> ClassVector;
+                }
+                "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::new(vec!["^Test_1_0".to_string()]),
+        )?;
+
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
+
+        println!("{ast:?}");
+        assert_eq!(
+            format!("{ast:?}"),
+            indoc!(
+                r#"
+                Include { name: "vector", bracket: "<" }
+                Namespace c:@N@Test_1_0 Test_1_0 Some("Test")
+                Namespace c:@N@std std None
+                ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
+                Field c: float
+
+                ClassDecl c:@N@std@ST>2#T#T@vector vector rename=None OpaquePtr is_pod=false ignore=false rof=[public ctor ] template_parameters=[Type(T)] specializations=[ClassTemplateSpecializationId(0)] namespaces=[c:@N@std]
+                Method Constructor const=false virtual=false pure_virtual=false specializations=[] Function BBL:vector_ctor_default vector rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+                Method Constructor const=false virtual=false pure_virtual=false specializations=[] Function BBL:vector_ctor_pointers vector rename=Some("from_begin_and_end") ignore=false return=void args=[begin: const T *, end: const T *] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+                Method Method const=true virtual=false pure_virtual=false specializations=[] Function BBL:vector_data_const data rename=Some("data") ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+                Method Method const=false virtual=false pure_virtual=false specializations=[] Function BBL:vector_data_mut data rename=Some("data_mut") ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+                Method Method const=true virtual=false pure_virtual=false specializations=[] Function BBL:vector_size size rename=None ignore=false return=ULongLong args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+
+                TypeAlias ClassVector = std::vector<Class>
+                ClassTemplateSpecialization c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_ vector_Test_1_0_Class_ specialized_decl=c:@N@std@ST>2#T#T@vector template_arguments=[Test_1_0::Class] namespaces=[c:@N@std]
+                "#
+            )
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn extract_unique_ptr() -> bbl_util::Result<()> {
+        bbl_util::run_test(|| {
+            let mut ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                    #include <memory>
+
+                    namespace Test_1_0 {
+                    class Class {
+                        float c;
+                    public:
+                    };
+
+                    typedef std::unique_ptr<Class> ClassPtr;
+                    }
+                    "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::new(vec!["^Test_1_0".to_string()]),
+            )?;
+
+            let ns = ast.find_namespace("Test_1_0")?;
+            ast.rename_namespace(ns, "Test");
+
+            println!("{ast:?}");
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    Include { name: "memory", bracket: "<" }
+                    Namespace c:@N@Test_1_0 Test_1_0 Some("Test")
+                    Namespace c:@N@std std None
+                    ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
+                    Field c: float
+
+                    ClassDecl c:@N@std@ST>2#T#T@unique_ptr unique_ptr rename=None OpaquePtr is_pod=false ignore=false rof=[public ctor ] template_parameters=[Type(T)] specializations=[ClassTemplateSpecializationId(0)] namespaces=[c:@N@std]
+                    Method Constructor const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_ctor_default unique_ptr rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
+                    Method Method const=true virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_const get rename=Some("get") ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
+                    Method Method const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_mut get rename=Some("get_mut") ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
+
+                    TypeAlias ClassPtr = std::unique_ptr<Class>
+                    ClassTemplateSpecialization c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_ unique_ptr_Test_1_0_Class_ specialized_decl=c:@N@std@ST>2#T#T@unique_ptr template_arguments=[Test_1_0::Class] namespaces=[c:@N@std]
+                    "#
+                ),
+            )
+        })
+    }
+
+    #[test]
+    fn extract_std_function() -> bbl_util::Result<()> {
+        bbl_util::run_test(|| {
+            let mut ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                #include <functional>
+
+                namespace Test_1_0 {
+                using PropertyPredicateFunc = std::function<bool(const char* name)>;
+
+                void take_function(const PropertyPredicateFunc& predicate = {});
+                }
+                "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::new(vec!["^Test_1_0".to_string()]),
+            )?;
+
+            let ns = ast.find_namespace("Test_1_0")?;
+            ast.rename_namespace(ns, "Test");
+
+            println!("{ast:?}");
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                Include { name: "functional", bracket: "<" }
+                Namespace c:@N@Test_1_0 Test_1_0 Some("Test")
+                Namespace c:@N@std std None
+                FunctionProto function_bool_const_char_ c:@N@std@S@function>#Fb(#*1C) (bool*)([const char *]) namespaces=[c:@N@std]
+                Function c:@N@Test_1_0@F@take_function#&1$@N@std@S@function>#Fb(#*1C)# take_function rename=None ignore=false return=void args=[predicate: const PropertyPredicateFunc &] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
+                TypeAlias PropertyPredicateFunc = std::function<bool (const char *)>
+                "#
+                ),
+            )
+        })
+    }
 }

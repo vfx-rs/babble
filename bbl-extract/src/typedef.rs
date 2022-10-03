@@ -13,7 +13,7 @@ use crate::qualtype::{extract_type, QualType};
 use crate::stdlib::create_std_string;
 use crate::templates::{TemplateArgument, TemplateParameterDecl};
 use bbl_clang::cursor::{CurClassDecl, CurClassTemplate, CurTemplateRef, CurTypedef, Cursor, USR};
-use bbl_clang::ty::Type;
+use bbl_clang::ty::{Type, TypeKind};
 use std::fmt::Debug;
 
 use crate::error::Error;
@@ -86,6 +86,13 @@ pub fn extract_typedef_decl<'a>(
 
     let name = c_typedef.display_name();
     let namespaces = get_namespaces_for_decl(c_typedef.into(), tu, ast, already_visited)?;
+
+    println!("Extracting typedef {c_typedef:?} which is {:?}", c_typedef.underlying_type()?);
+    if let Ok(ty) = c_typedef.underlying_type() {
+        if ty.kind() == TypeKind::Pointer {
+            println!("IS A POINTER TO {:?}", ty.pointee_type()?);
+        }
+    }
 
     let underlying_type = extract_type(
         c_typedef.underlying_type()?,

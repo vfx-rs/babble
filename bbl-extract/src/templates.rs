@@ -10,7 +10,7 @@ use bbl_clang::{
 use tracing::log::{debug, trace};
 
 use crate::{
-    ast::{get_namespaces_for_decl, get_qualified_name, AST},
+    ast::{get_namespaces_for_decl, get_qualified_name, AST, dump_cursor, dump_cursor_until},
     class::{extract_class_decl, ClassBindKind},
     qualtype::{extract_type, QualType},
     AllowList,
@@ -48,7 +48,11 @@ pub fn extract_class_template_specialization(
             usr: c_class_decl.usr(),
             backtrace: Backtrace::new(),
         })?
-        .try_into()?;
+        .try_into()
+        .map_err(|e| {
+            dump_cursor_until(*c_class_decl, tu, 4);
+            e
+        })?;
     debug!("extract_class_template_specialization: got specialized decl {specialized_decl:?}");
 
     extract_class_decl(

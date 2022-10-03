@@ -1,17 +1,18 @@
 use bbl_clang::ty::TypeKind;
 use bbl_extract::{ast::AST, class::ClassBindKind};
 use bbl_translate::{
-    cfunction::{CFunction, Expr},
+    cenum::CEnum,
+    cfunction::{CFunction, CFunctionProto, Expr},
     cstruct::CStruct,
     ctype::{CQualType, CTypeRef},
     ctypedef::CTypedef,
-    CAST, cenum::CEnum,
+    CAST,
 };
 
 use crate::error::{Error, TypeError};
 use tracing::instrument;
 
-use std::fmt::Write;
+use std::{fmt::Write, ops::Deref};
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -155,7 +156,7 @@ fn gen_function_declaration(fun: &CFunction, c_ast: &CAST) -> Result<String, Err
 #[instrument(level = "trace", skip(ast, c_ast))]
 fn gen_cast(qual_type: &CQualType, ast: &AST, c_ast: &CAST) -> Result<Option<String>, TypeError> {
     match qual_type.type_ref() {
-        CTypeRef::Builtin(_) => Ok(None),
+        CTypeRef::Builtin(_) | CTypeRef::FunctionProto { .. } => Ok(None),
         CTypeRef::Pointer(pointee_qt) => {
             if let Some(s) = gen_cast(pointee_qt, ast, c_ast)? {
                 Ok(Some(format!("{s}*")))
@@ -426,6 +427,9 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<St
                 format!("{}{const_}", td.name_external)
             } else if let Some(enm) = c_ast.get_enum(*usr) {
                 format!("{}{const_}", enm.name_external)
+            } else if let Some(proto) = c_ast.get_function_proto(*usr) {
+                // we should never get here as we need to handle function pointers explicitly at the typedef level
+                unreachable!()
             } else {
                 unimplemented!("no struct or typedef for {usr}")
             }
@@ -433,8 +437,37 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<St
         CTypeRef::Pointer(pointee) => {
             format!("{}*{const_}", gen_c_type(pointee, c_ast, use_public_names)?)
         }
+        CTypeRef::FunctionProto { result, args } => {
+            format!(
+                "{}(*)({})",
+                gen_c_type(result.deref(), c_ast, use_public_names)?,
+                args.iter()
+                    .map(|a| gen_c_type(a, c_ast, use_public_names))
+                    .collect::<Result<Vec<String>>>()?
+                    .join(", ")
+            )
+        }
         _ => unimplemented!("Need to implement {qt:?}"),
     })
+}
+
+#[instrument(level = "trace")]
+fn generate_function_proto(
+    proto: &CFunctionProto,
+    c_ast: &CAST,
+    name: Option<&str>,
+) -> Result<String> {
+    Ok(format!(
+        "{}(*{})({})",
+        gen_c_type(&proto.result, c_ast, true)?,
+        if let Some(name) = name { name } else { "" },
+        proto
+            .args
+            .iter()
+            .map(|a| gen_c_type(a, c_ast, true))
+            .collect::<Result<Vec<String>>>()?
+            .join(", ")
+    ))
 }
 
 /// Generate a forwad declaration for this struct
@@ -455,6 +488,27 @@ fn generate_struct_declaration(st: &CStruct, c_ast: &CAST) -> Result<String> {
 
 #[instrument(level = "trace", skip(c_ast))]
 fn generate_typedef(td: &CTypedef, c_ast: &CAST) -> Result<String> {
+    if let CTypeRef::Ref(usr) = td.underlying_type.type_ref() {
+        if let Some(proto) = c_ast.get_function_proto(*usr) {
+            return Ok(format!(
+                "typedef {};",
+                generate_function_proto(proto, c_ast, Some(&td.name_external))?
+            ));
+        }
+    } else if let CTypeRef::Pointer(pointee) = td.underlying_type.type_ref() {
+        if let CTypeRef::FunctionProto { result, args } = pointee.type_ref() {
+            return Ok(format!(
+                "typedef {}(*{})({});",
+                gen_c_type(result.deref(), c_ast, true)?,
+                td.name_external,
+                args.iter()
+                    .map(|a| gen_c_type(a, c_ast, true))
+                    .collect::<Result<Vec<String>>>()?
+                    .join(", ")
+            ));
+        }
+    }
+
     Ok(format!(
         "typedef {} {};",
         gen_c_type(&td.underlying_type, c_ast, true)?,
@@ -467,16 +521,18 @@ fn generate_enum_declaration(enm: &CEnum) -> Result<String> {
     let mut result = format!("enum {} {{\n", enm.name_internal);
 
     if !enm.variants.is_empty() {
-        for var in enm.variants.iter().take(enm.variants.len()-1) {
-                result = format!("{result}    {} = {},\n", var.0, var.1);
+        for var in enm.variants.iter().take(enm.variants.len() - 1) {
+            result = format!("{result}    {} = {},\n", var.0, var.1);
         }
         let var = enm.variants.last().unwrap();
         result = format!("{result}    {} = {}\n", var.0, var.1);
     }
 
-
     result = format!("{result}}};\n");
-    result = format!("{result}typedef {} {};", enm.name_internal, enm.name_external);
+    result = format!(
+        "{result}typedef {} {};",
+        enm.name_internal, enm.name_external
+    );
 
     Ok(result)
 }

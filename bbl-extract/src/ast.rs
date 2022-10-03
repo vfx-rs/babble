@@ -14,7 +14,7 @@ use ustr::{Ustr, UstrMap};
 use crate::class::extract_class_decl;
 use crate::class::{ClassBindKind, ClassDecl, MethodSpecializationId};
 use crate::enm::{extract_enum, Enum};
-use crate::function::{extract_function, Function, Method};
+use crate::function::{extract_function, Function, FunctionProto, FunctionProtoId, Method};
 use crate::index_map::{IndexMapKey, UstrIndexMap};
 use crate::namespace::{self, extract_namespace, Namespace};
 use crate::templates::{
@@ -40,6 +40,7 @@ pub struct AST {
     pub(crate) namespaces: UstrIndexMap<Namespace, NamespaceId>,
     pub(crate) type_aliases: UstrIndexMap<Typedef, TypeAliasId>,
     pub(crate) enums: UstrIndexMap<Enum, EnumId>,
+    pub(crate) function_protos: UstrIndexMap<FunctionProto, FunctionProtoId>,
     pub(crate) includes: Vec<Include>,
 }
 
@@ -51,6 +52,10 @@ impl Debug for AST {
 
         for namespace in self.namespaces.iter() {
             writeln!(f, "{namespace:?}")?;
+        }
+
+        for proto in self.function_protos.iter() {
+            writeln!(f, "{proto:?}")?;
         }
 
         for class in self.classes.iter() {
@@ -143,6 +148,7 @@ impl AST {
             namespaces: UstrIndexMap::new(),
             type_aliases: UstrIndexMap::new(),
             enums: UstrIndexMap::new(),
+            function_protos: UstrIndexMap::new(),
             includes: Vec::new(),
         }
     }
@@ -177,6 +183,10 @@ impl AST {
     /// Get a reference to the map holding all the [`TypeAlias`]es extracted from the translation unit
     pub fn type_aliases(&self) -> &UstrIndexMap<Typedef, TypeAliasId> {
         &self.type_aliases
+    }
+
+    pub fn function_protos(&self) -> &UstrIndexMap<FunctionProto, FunctionProtoId> {
+        &self.function_protos
     }
 
     /// Get a reference to the map holding all the [`Namespace`]s extracted from the translation unit
@@ -516,6 +526,13 @@ impl AST {
         )
     }
 
+    pub fn insert_function_proto(&mut self, function_proto: FunctionProto) -> FunctionProtoId {
+        FunctionProtoId::new(
+            self.function_protos
+                .insert(function_proto.usr().into(), function_proto),
+        )
+    }
+
     pub fn get_type_alias(&self, usr: USR) -> Option<&Typedef> {
         self.type_aliases.get(&usr.into())
     }
@@ -538,6 +555,10 @@ impl AST {
 
     pub fn enums(&self) -> &UstrIndexMap<Enum, EnumId> {
         &self.enums
+    }
+
+    pub fn get_function_proto(&self, usr: USR) -> Option<&FunctionProto> {
+        self.function_protos.get(&usr.into())
     }
 
     pub fn get_class_template_specialization(
@@ -745,28 +766,6 @@ pub fn extract_ast(
 
     let indent = format!("{:width$}", "", width = depth * 2);
     trace!("{indent}{}: {} {}", c.kind(), c.display_name(), c.usr());
-
-    /*
-    if let Ok(cr) = c.referenced() {
-        if cr != c && !already_visited.contains(&cr.usr()) {
-            if !cr.usr().is_empty() {
-                already_visited.push(cr.usr());
-            }
-            extract_ast(
-                cr,
-                depth + 1,
-                max_depth,
-                already_visited,
-                ast,
-                tu,
-                namespaces.clone(),
-                allow_list,
-            )?;
-        } else {
-            trace!("{indent} already visited {cr:?}, skipping...");
-        }
-    }
-    */
 
     let children = c.children();
 

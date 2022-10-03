@@ -1,8 +1,40 @@
+use std::ops::Deref;
+
 use env_logger::fmt::Color;
 use log::Level;
 
-use anyhow::Result;
 use similar::{ChangeTag, TextDiff};
+
+pub enum Error {
+    Any(Box<dyn std::error::Error + 'static>),
+    Compare,
+}
+
+impl<E> From<E> for Error
+where
+    E: std::error::Error + 'static,
+{
+    fn from(e: E) -> Self {
+        Error::Any(Box::new(e))
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::fmt::Debug for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Any(e) => write!(f, "{e:?}"),
+            Error::Compare => write!(f, "Comparison failed"),
+        }
+    }
+}
+
+pub type Result<T, E=Error> = std::result::Result<T, E>;
 
 #[cfg(feature = "telemetry")]
 pub(crate) fn run_test<F>(closure: F) -> Result<(), Error>
@@ -47,9 +79,9 @@ where
 }
 
 #[cfg(not(feature = "telemetry"))]
-pub fn run_test<F>(closure: F) -> Result<()>
+pub fn run_test<F>(closure: F) -> Result<(), Error>
 where
-    F: FnOnce() -> Result<()>,
+    F: FnOnce() -> Result<(), Error>,
 {
     use tracing::error;
     /*
@@ -67,8 +99,11 @@ where
 
     res.map_err(|err| {
         error!("{err}");
-        for e in err.chain() {
-            error!("  because: {e}")
+
+        if let Error::Any(ref err) = err {
+            for e in source_iter(err.deref()) {
+                error!("  because: {e}")
+            }
         }
 
         err
@@ -103,7 +138,7 @@ fn init_log() {
         .try_init();
 }
 
-pub fn compare(left: &str, right: &str) -> Result<()> {
+pub fn compare(left: &str, right: &str) -> Result<(), Error> {
     use colored::*;
     let diff = TextDiff::from_lines(left, right);
 
@@ -128,6 +163,28 @@ pub fn compare(left: &str, right: &str) -> Result<()> {
         Ok(())
     } else {
         println!();
-        anyhow::bail!("output did not match")
+        Err(Error::Compare)
+    }
+}
+
+pub(crate) fn source_iter(
+    error: &(impl std::error::Error + ?Sized),
+) -> impl Iterator<Item = &(dyn std::error::Error + 'static)> {
+    SourceIter {
+        current: error.source(),
+    }
+}
+
+struct SourceIter<'a> {
+    current: Option<&'a (dyn std::error::Error + 'static)>,
+}
+
+impl<'a> Iterator for SourceIter<'a> {
+    type Item = &'a (dyn std::error::Error + 'static);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let current = self.current;
+        self.current = self.current.and_then(std::error::Error::source);
+        current
     }
 }

@@ -36,6 +36,7 @@ pub enum Error {
         stderr: String,
     },
     CompilationDatabaseError(CompilationDatabaseError),
+    TypeIsNotFunction,
 }
 
 impl std::fmt::Display for Error {
