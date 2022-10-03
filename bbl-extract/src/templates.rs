@@ -414,3 +414,47 @@ impl Debug for TemplateParameterDecl {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use bbl_clang::cli_args;
+    use indoc::indoc;
+
+    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList};
+
+    #[test]
+    fn extract_enable_if() -> bbl_util::Result<()> {
+        bbl_util::run_test(|| {
+            let ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                    #include <type_traits>
+
+                    enum X { value1 = true, value2 = true };
+
+                    template<class T>
+                    typename std::enable_if_t<T::value1, int>::type
+                    func(){return 0;}
+                "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::new(vec![r#"^func\(\)$"#.to_string()])
+            )?;
+
+            println!("{ast:?}");
+
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    Function c:@F@take_enum#$@E@Numbered#$@E@Unnumbered# take_enum rename=None ignore=false return=void args=[n: Numbered, u: Unnumbered] noexcept=None template_parameters=[] specializations=[] namespaces=[]
+                    Enum Numbered c:@E@Numbered [First=1 Second=2 Third=3 ] namespaces=[]
+                    Enum Unnumbered c:@E@Unnumbered [First=0 Second=1 Third=2 ] namespaces=[]
+                    "#
+                ),
+            )
+        })
+    }
+}

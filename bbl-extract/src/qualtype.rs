@@ -571,6 +571,7 @@ pub fn extract_type(
                         "Got unexposed for {name} with no matching template parmaeter in {:?}",
                         template_parameters
                     );
+                    println!("NARGS: {}", ty.num_template_arguments());
                     Err(Error::NoMatchingTemplateParameter {
                         name,
                         backtrace: Backtrace::new(),

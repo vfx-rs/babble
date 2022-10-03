@@ -5,7 +5,7 @@ use bbl_translate::{
     cstruct::CStruct,
     ctype::{CQualType, CTypeRef},
     ctypedef::CTypedef,
-    CAST,
+    CAST, cenum::CEnum,
 };
 
 use crate::error::Error;
@@ -46,6 +46,12 @@ pub fn write_rust_ffi(source: &mut String, c_ast: &CAST) -> Result<()> {
     }
     writeln!(source)?;
 
+    // enums
+    for enm in c_ast.enums.iter() {
+        write_enum_external(source, enm)?;
+    }
+    writeln!(source)?;
+
     // structs
     for st in c_ast.structs.iter() {
         write_struct_external(source, st)?;
@@ -73,6 +79,12 @@ pub fn write_rust_ffi(source: &mut String, c_ast: &CAST) -> Result<()> {
     }
     writeln!(source)?;
 
+    // enums
+    for enm in c_ast.enums.iter() {
+        write_enum_internal(source, enm)?;
+    }
+    writeln!(source)?;
+
     // struct definitions
     for st in c_ast.structs.iter() {
         write_struct_internal(source, st, c_ast)?;
@@ -91,6 +103,22 @@ pub fn write_rust_ffi(source: &mut String, c_ast: &CAST) -> Result<()> {
 
     writeln!(source, "}} // extern C")?;
     writeln!(source, "}} // mod internal")?;
+
+    Ok(())
+}
+
+fn write_enum_external(source: &mut String, enm: &CEnum) -> Result<()> {
+    writeln!(source, "pub use internal::{} as {};", enm.name_internal, enm.name_external)?;
+    Ok(())
+}
+
+fn write_enum_internal(source: &mut String, enm: &CEnum) -> Result<()> {
+    writeln!(source, "#[derive(Debug, Copy, Clone)]")?;
+    writeln!(source, "pub enum {} {{", enm.name_internal)?;
+    for var in &enm.variants {
+        writeln!(source, "    {} = {},", var.0, var.1)?;
+    }
+    writeln!(source, "}}")?;
 
     Ok(())
 }
@@ -269,8 +297,10 @@ fn write_type(source: &mut String, qt: &CQualType, c_ast: &CAST) -> Result<()> {
             } else if let Some(td) = c_ast.get_typedef(*usr) {
                 // no struct with this USR, see if there's a typedef instead
                 write!(source, "{}", td.name_external.clone())?;
+            } else if let Some(enm) = c_ast.get_enum(*usr) {
+                write!(source, "{}", enm.name_internal)?;
             } else {
-                unimplemented!("no struct or typedef")
+                unimplemented!("no struct or typedef {usr}")
             }
         }
         CTypeRef::FunctionProto { result, args } => {
