@@ -780,9 +780,8 @@ fn translate_std_function() -> Result<(), bbl_util::Error> {
             &format!("{c_ast:?}"),
             indoc!(
                 r#"
-                CFunctionProto function_bool_const_char_ c:@N@std@S@function>#Fb(#*1C) (Bool*)([Char_S const*])
-                CTypedef Test_1_0_PropertyPredicateFunc Test_PropertyPredicateFunc c:@N@std@S@function>#Fb(#*1C)
-                CFunction Test_1_0_take_function Test_take_function([predicate: c:@N@Test_1_0@PropertyPredicateFunc const*])  -> Int
+                CTypedef Test_1_0_PropertyPredicateFunc Test_PropertyPredicateFunc Bool(*)(Char_S const*, )*
+                CFunction Test_1_0_take_function Test_take_function([predicate: c:@N@Test_1_0@PropertyPredicateFunc const])  -> Int
                 Include { name: "functional", bracket: "<" }
             "#
             )

@@ -422,6 +422,7 @@ mod tests {
 
     use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList};
 
+    /*
     #[test]
     fn extract_enable_if() -> bbl_util::Result<()> {
         bbl_util::run_test(|| {
@@ -457,4 +458,5 @@ mod tests {
             )
         })
     }
+    */
 }

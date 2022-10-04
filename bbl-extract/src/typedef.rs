@@ -116,15 +116,14 @@ pub fn extract_typedef_decl<'a>(
 #[cfg(test)]
 mod tests {
     use bbl_clang::cli_args;
-    use env_logger::fmt::Color;
     use indoc::indoc;
     use log::Level;
 
-    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList, init_log};
+    use crate::{class::ClassBindKind, parse_string_and_extract_ast, AllowList};
 
     #[test]
-    fn extract_typealias_typedef() -> Result<(), Error> {
-        run_test(|| {
+    fn extract_typealias_typedef() -> bbl_util::Result<()> {
+        bbl_util::run_test(|| {
             let ast = parse_string_and_extract_ast(
                 indoc!(
                     r#"
@@ -154,8 +153,8 @@ mod tests {
             )?;
 
             println!("{ast:?}");
-            assert_eq!(
-                format!("{ast:?}"),
+            bbl_util::compare(
+                &format!("{ast:?}"),
                 indoc!(
                     r#"
                     Namespace c:@ST>2#T#NI@shared_ptr shared_ptr<T, N> None
@@ -174,19 +173,17 @@ mod tests {
                     TypeAlias BPtr = shared_ptr<B>
                     TypeAlias APtr2 = APtr
                     TypeAlias BPtr2 = BPtr
-                    ClassTemplateSpecialization c:@S@shared_ptr>#$@S@A#VI4 shared_ptr_A_4_ specialized_decl=c:@ST>2#T#NI@shared_ptr template_arguments=[A, 4] namespaces=[]
-                    ClassTemplateSpecialization c:@S@shared_ptr>#$@S@B#VI4 shared_ptr_B_4_ specialized_decl=c:@ST>2#T#NI@shared_ptr template_arguments=[B, 4] namespaces=[]
+                    ClassTemplateSpecialization c:@S@shared_ptr>#$@S@A#VI4 shared_ptr<A, 4> specialized_decl=c:@ST>2#T#NI@shared_ptr template_arguments=[A, 4] namespaces=[]
+                    ClassTemplateSpecialization c:@S@shared_ptr>#$@S@B#VI4 shared_ptr<B, 4> specialized_decl=c:@ST>2#T#NI@shared_ptr template_arguments=[B, 4] namespaces=[]
                 "#
                 )
-            );
-
-            Ok(())
+            )
         })
     }
 
     #[test]
-    fn extract_pod_typedef() -> Result<(), Error> {
-        run_test(|| {
+    fn extract_pod_typedef() -> bbl_util::Result<()> {
+        bbl_util::run_test(|| {
             let ast = parse_string_and_extract_ast(
                 indoc!(
                     r#"
@@ -206,8 +203,8 @@ mod tests {
             )?;
 
             println!("{ast:?}");
-            assert_eq!(
-                format!("{ast:?}"),
+            bbl_util::compare(
+                &format!("{ast:?}"),
                 indoc!(
                     r#"
                     ClassDecl c:@S@Class_ Class_ rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
@@ -217,59 +214,7 @@ mod tests {
                     TypeAlias Class = Class_ const
                     "#
                 )
-            );
-
-            Ok(())
+            )
         })
-    }
-
-    pub(crate) fn run_test<F>(closure: F) -> Result<(), Error>
-    where
-        F: FnOnce() -> Result<(), Error>,
-    {
-        use tracing::error;
-        use tracing::level_filters::LevelFilter;
-        /*
-        use tracing_subscriber::fmt::format::FmtSpan;
-        tracing_subscriber::fmt()
-            .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
-            .with_max_level(LevelFilter::TRACE)
-            .init();
-        */
-
-        init_log();
-
-        let res = closure();
-
-        res.map_err(|err| {
-            error!("{err}");
-            for e in source_iter(&err) {
-                error!("  because: {e}")
-            }
-
-            err
-        })
-    }
-
-    pub(crate) fn source_iter(
-        error: &impl std::error::Error,
-    ) -> impl Iterator<Item = &(dyn std::error::Error + 'static)> {
-        SourceIter {
-            current: error.source(),
-        }
-    }
-
-    struct SourceIter<'a> {
-        current: Option<&'a (dyn std::error::Error + 'static)>,
-    }
-
-    impl<'a> Iterator for SourceIter<'a> {
-        type Item = &'a (dyn std::error::Error + 'static);
-
-        fn next(&mut self) -> Option<Self::Item> {
-            let current = self.current;
-            self.current = self.current.and_then(std::error::Error::source);
-            current
-        }
     }
 }
