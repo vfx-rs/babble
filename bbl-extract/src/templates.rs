@@ -63,15 +63,15 @@ pub fn extract_class_template_specialization(
         allow_list,
     )?;
 
-    let name = regex::Regex::new("(?:[^a-zA-Z0-9])+")
-        .unwrap()
-        .replace_all(&c_class_decl.display_name(), "_")
-        .to_string();
+    // let name = regex::Regex::new("(?:[^a-zA-Z0-9])+")
+    //     .unwrap()
+    //     .replace_all(&c_class_decl.display_name(), "_")
+    //     .to_string();
 
     ast.insert_class_template_specialization(ClassTemplateSpecialization {
         specialized_decl: specialized_decl.usr(),
         usr: c_class_decl.usr(),
-        name,
+        name: c_class_decl.display_name(),
         template_arguments,
         namespaces,
     });
