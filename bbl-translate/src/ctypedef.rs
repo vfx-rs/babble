@@ -14,7 +14,7 @@ use crate::{
     cfunction::{translate_function, CFunction, CFunctionId},
     cstruct::{translate_class_template, CStruct, CStructId},
     ctype::{translate_qual_type, CQualType, TypeReplacements},
-    error::Error,
+    error::Error, sanitize_name,
 };
 
 #[instrument(level = "trace", skip(ast, functions, used_names))]
@@ -94,6 +94,9 @@ pub fn translate_typedef(
     let td_c_name_external = format!("{ns_prefix_external}{}", td.name());
     let td_c_name_internal = format!("{ns_prefix_internal}{}", td.name());
 
+    let td_c_name_external = sanitize_name(&td_c_name_external);
+    let td_c_name_internal = sanitize_name(&td_c_name_internal);
+
     let type_replacements = TypeReplacements::default();
     let underlying_type = translate_qual_type(td.underlying_type(), &[], &[], &type_replacements)
         .map_err(|e| Error::FailedToTranslateTypedef {
@@ -104,8 +107,8 @@ pub fn translate_typedef(
     typedefs.insert(
         td.usr().into(),
         CTypedef {
-            name_external: td_c_name_external,
-            name_internal: td_c_name_internal,
+            name_external: td_c_name_external.to_string(),
+            name_internal: td_c_name_internal.to_string(),
             usr: td.usr(),
             underlying_type,
         },
