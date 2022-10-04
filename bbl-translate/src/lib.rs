@@ -25,7 +25,7 @@ use bbl_extract::{
     ast::{ClassId, FunctionId, AST},
 };
 use tracing::{debug, warn};
-use std::fmt::Debug;
+use std::{fmt::Debug, borrow::Cow};
 
 pub struct CAST {
     pub structs: UstrIndexMap<CStruct, CStructId>,
@@ -276,4 +276,10 @@ pub fn build_namespace_prefix(ast: &AST, namespaces: &[USR]) -> Result<(String, 
     }
 
     Ok((ns_prefix_public, ns_prefix_private))
+}
+
+fn sanitize_name(name: &str) -> Cow<str> {
+    regex::Regex::new("(?:[^a-zA-Z0-9])+")
+        .unwrap()
+        .replace_all(name, "_")
 }

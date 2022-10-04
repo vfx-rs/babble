@@ -17,7 +17,7 @@ use crate::{
     cfunction::{translate_method, CFunction, CFunctionId, CFunctionSource},
     ctype::{translate_qual_type, CQualType, TypeReplacements},
     error::Error,
-    get_c_names, CAST,
+    get_c_names, CAST, sanitize_name,
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -136,9 +136,13 @@ pub fn translate_class(
     // build the namespace prefix
     let (ns_prefix_public, ns_prefix_private) = build_namespace_prefix(ast, class.namespaces())?;
 
+    let st_name = sanitize_name(class.name());
+    let ns_prefix_public = sanitize_name(&ns_prefix_public);
+    let ns_prefix_private = sanitize_name(&ns_prefix_private);
+
     // get unique, prefixed names for the struct
     let (st_c_name_public, st_c_name_private) = get_c_names(
-        class.name(),
+        &st_name,
         &ns_prefix_public,
         &ns_prefix_private,
         used_names,
@@ -283,9 +287,13 @@ pub fn translate_class_template(
     // build the namespace prefix
     let (ns_prefix_public, ns_prefix_private) = build_namespace_prefix(ast, cts.namespaces())?;
 
+    let st_name = sanitize_name(cts.name());
+    let ns_prefix_public = sanitize_name(&ns_prefix_public);
+    let ns_prefix_private = sanitize_name(&ns_prefix_private);
+
     // get unique, prefixed names for the struct
     let (st_c_name_public, st_c_name_private) = get_c_names(
-        cts.name(),
+        &st_name,
         &ns_prefix_public,
         &ns_prefix_private,
         used_names,

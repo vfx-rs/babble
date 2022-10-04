@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, borrow::Cow};
 
 use backtrace::Backtrace;
 use bbl_clang::{cursor::USR, ty::TypeKind};
@@ -16,7 +16,7 @@ use tracing::{error, instrument, trace};
 use crate::{
     build_namespace_prefix,
     ctype::{translate_qual_type, CQualType, CTypeRef, TypeReplacements},
-    get_c_names, CAST,
+    get_c_names, CAST, sanitize_name,
 };
 
 use crate::error::Error;
@@ -690,9 +690,10 @@ pub fn translate_function(
     } else {
         function.name()
     };
+    let fn_name = sanitize_name(fn_name);
 
     let (fn_name_public, fn_name_private) =
-        get_c_names(fn_name, &ns_prefix_public, &ns_prefix_private, used_names);
+        get_c_names(&fn_name, &ns_prefix_public, &ns_prefix_private, used_names);
 
     functions.insert(
         function.usr().into(),
@@ -1305,9 +1306,10 @@ pub fn translate_method(
     } else {
         method.name()
     };
+    let fn_name = sanitize_name(fn_name);
 
     let (fn_name_public, fn_name_private) =
-        get_c_names(fn_name, st_prefix_public, st_prefix_private, used_names);
+        get_c_names(&fn_name, st_prefix_public, st_prefix_private, used_names);
 
     Ok(CFunction {
         name_internal: fn_name_private,

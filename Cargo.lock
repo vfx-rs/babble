@@ -181,6 +181,7 @@ dependencies = [
  "indoc",
  "levenshtein",
  "log",
+ "regex",
  "thiserror",
  "tracing",
  "ustr",
