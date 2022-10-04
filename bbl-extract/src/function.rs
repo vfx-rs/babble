@@ -338,8 +338,9 @@ impl Debug for Method {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Method {:?} const={} virtual={} pure_virtual={} specializations={:?} {:?}",
+            "Method {:?} deleted={} const={} virtual={} pure_virtual={} specializations={:?} {:?}",
             self.kind,
+            self.is_deleted,
             self.is_const,
             self.is_virtual,
             self.is_pure_virtual,
@@ -978,88 +979,92 @@ mod tests {
     use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList};
 
     #[test]
-    fn extract_static_method() -> Result<(), Error> {
+    fn extract_static_method() -> bbl_util::Result<()> {
         // test that a POD extracts as a valuetype
-        let ast = parse_string_and_extract_ast(
-            indoc!(
-                r#"
-            class Class {
-            public:
-                int a;
-                float b;
+        bbl_util::run_test(||{
+            let ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                class Class {
+                public:
+                    int a;
+                    float b;
 
-                static float static_method(float b);
-            };
-        "#
-            ),
-            &cli_args()?,
-            true,
-            None,
-            &AllowList::default(),
-        )?;
+                    static float static_method(float b);
+                };
+            "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::default(),
+            )?;
 
-        println!("{ast:?}");
-        assert_eq!(
-            format!("{ast:?}"),
-            indoc!(
-                r#"
-                Namespace c:@S@Class Class None
-                ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
-                Field a: int
-                Field b: float
-                Method StaticMethod const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#f#S static_method rename=None ignore=false return=float args=[b: float] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+            println!("{ast:?}");
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    Namespace c:@S@Class Class None
+                    ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+                    Field a: int
+                    Field b: float
+                    Method StaticMethod deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#f#S static_method rename=None ignore=false return=float args=[b: float] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
 
-                "#
-            )
-        );
+                    "#
+                )
+            )?;
 
-        let class_id = ast.find_class("Class")?;
-        let class = &ast.classes()[class_id];
-        assert!(matches!(class.bind_kind(), ClassBindKind::ValueType));
+            let class_id = ast.find_class("Class")?;
+            let class = &ast.classes()[class_id];
+            assert!(matches!(class.bind_kind(), ClassBindKind::ValueType));
 
-        Ok(())
+            Ok(())
+        })
     }
 
     #[test]
-    fn extract_static_method_taking_class() -> Result<(), Error> {
+    fn extract_static_method_taking_class() -> bbl_util::Result<()> {
         // test that a POD extracts as a valuetype
-        let ast = parse_string_and_extract_ast(
-            indoc!(
-                r#"
-            class Class {
-            public:
-                int a;
-                float b;
+        bbl_util::run_test(|| {
+            let ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                class Class {
+                public:
+                    int a;
+                    float b;
 
-                static float static_method(Class c);
-            };
-        "#
-            ),
-            &cli_args()?,
-            true,
-            None,
-            &AllowList::default(),
-        )?;
+                    static float static_method(Class c);
+                };
+            "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::default(),
+            )?;
 
-        println!("{ast:?}");
-        assert_eq!(
-            format!("{ast:?}"),
-            indoc!(
-                r#"
-                Namespace c:@S@Class Class None
-                ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
-                Field a: int
-                Field b: float
-                Method StaticMethod const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#$@S@Class#S static_method rename=None ignore=false return=float args=[c: Class] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+            println!("{ast:?}");
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    Namespace c:@S@Class Class None
+                    ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+                    Field a: int
+                    Field b: float
+                    Method StaticMethod deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#$@S@Class#S static_method rename=None ignore=false return=float args=[c: Class] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
 
-                "#
-            )
-        );
+                    "#
+                )
+            )?;
 
-        let class_id = ast.find_class("Class")?;
-        let class = &ast.classes()[class_id];
-        assert!(matches!(class.bind_kind(), ClassBindKind::ValueType));
+            let class_id = ast.find_class("Class")?;
+            let class = &ast.classes()[class_id];
+            assert!(matches!(class.bind_kind(), ClassBindKind::ValueType));
 
-        Ok(())
+            Ok(())
+        })
     }
 }

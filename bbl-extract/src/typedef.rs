@@ -87,13 +87,6 @@ pub fn extract_typedef_decl<'a>(
     let name = c_typedef.display_name();
     let namespaces = get_namespaces_for_decl(c_typedef.into(), tu, ast, already_visited)?;
 
-    println!("Extracting typedef {c_typedef:?} which is {:?}", c_typedef.underlying_type()?);
-    if let Ok(ty) = c_typedef.underlying_type() {
-        if ty.kind() == TypeKind::Pointer {
-            println!("IS A POINTER TO {:?}", ty.pointee_type()?);
-        }
-    }
-
     let underlying_type = extract_type(
         c_typedef.underlying_type()?,
         &[],
@@ -160,8 +153,8 @@ mod tests {
                     Namespace c:@ST>2#T#NI@shared_ptr shared_ptr<T, N> None
                     ClassDecl c:@ST>2#T#NI@shared_ptr shared_ptr rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[Type(T), Int(N=4)] specializations=[] namespaces=[]
                     Field t: T *
-                    Method Method const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
-                    Method Method const=false virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get# get rename=None ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
+                    Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get# get rename=None ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
 
                     ClassDecl c:@S@A A rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
                     Field a: int

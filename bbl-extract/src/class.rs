@@ -608,7 +608,6 @@ pub fn extract_class_decl(
     already_visited: &mut Vec<USR>,
     allow_list: &AllowList,
 ) -> Result<USR> {
-    let class_name = class_decl.spelling();
     // Check for std:: types we're going to extract manually here
     if class_decl.display_name().starts_with("basic_string<") {
         debug!("Extracting basic_string {}", class_decl.usr());
@@ -635,6 +634,15 @@ pub fn extract_class_decl(
         already_visited.push(class_decl.usr());
     }
 
+    let cd = extract_class_decl_inner(class_decl, tu, ast, already_visited, allow_list, None)?;
+
+    debug!("extract_class_decl: inserting {}", class_decl.usr());
+    ast.insert_class(cd);
+
+    Ok(class_decl.usr())
+}
+
+fn extract_class_decl_inner(class_decl: CurClassDecl, tu: &TranslationUnit, ast: &mut AST, already_visited: &mut Vec<USR>, allow_list: &AllowList, qname_override: Option<&str>) -> Result<ClassDecl> {
     let namespaces = get_namespaces_for_decl(class_decl.into(), tu, ast, already_visited)?;
     let class_decl_qualified_name = get_qualified_name(&class_decl.display_name(), &namespaces, ast)?;
 
@@ -651,21 +659,20 @@ pub fn extract_class_decl(
         if let Ok(c_base_decl) = c_base.referenced() {
             match c_base_decl.kind() {
                 CursorKind::ClassDecl | CursorKind::ClassTemplate => {
-                    let u_base = extract_class_decl(c_base_decl.try_into()?, tu, ast, already_visited, allow_list)?;
+                    // we pass a class name override through when extracting the base class members. This will turn 
+                    // Base::method() into Class::method(). Thus the allow list will work as expected, and still allow
+                    // us to avoid adding the Base class to the AST while lofting up its members into Class
+                    let base = extract_class_decl_inner(c_base_decl.try_into()?, tu, ast, already_visited, allow_list, qname_override.or(Some(&class_decl_qualified_name)) )?;
                     let access = c_base.cxx_access_specifier()?;
 
-                    if let Some(base) = ast.get_class_decl_recursive(u_base) {
-                        for method in &base.methods {
-                            if method.is_any_constructor() {
-                                // we store constructors regardless of their access since we want to know about private constructors
-                                // in order to not generate implicit versions for them
-                                base_constructors.push(method.clone());
-                            } else if (!method.is_destructor() && access == AccessSpecifier::Public) {
-                                base_methods.push(method.clone());
-                            }
+                    for method in &base.methods {
+                        if method.is_any_constructor() {
+                            // we store constructors regardless of their access since we want to know about private constructors
+                            // in order to not generate implicit versions for them
+                            base_constructors.push(method.clone());
+                        } else if (!method.is_destructor() && access == AccessSpecifier::Public) {
+                            base_methods.push(method.clone());
                         }
-                    } else {
-                        panic!("Should have just inserted base {u_base} of class decl {} but it is not found.", class_decl.usr())
                     }
                 }
                 CursorKind::TypeAliasTemplateDecl => {
@@ -685,11 +692,18 @@ pub fn extract_class_decl(
     let mut template_parameters = Vec::new();
     let mut rule_of_five = RuleOfFive::default();
 
+    let class_name = class_decl.spelling();
     let members = class_decl.children();
     let mut index = 0;
     let mut has_private_fields = false;
     for member in members {
-        let member_qualified_name = format!("{}::{}", class_decl_qualified_name, member.display_name());
+        let member_qualified_name = if let Some(qname) = qname_override {
+            // allow the subclass to override the qualified name when extracting so we can pull stuff up in the allow list
+            format!("{}::{}", qname, member.display_name())
+        } else {
+            format!("{}::{}", class_decl_qualified_name, member.display_name())
+        };
+
         debug!("member {}", member_qualified_name);
         if !allow_list.allows(&member_qualified_name) {
             continue;
@@ -884,7 +898,6 @@ pub fn extract_class_decl(
         false
     };
 
-    debug!("extract_class_decl: inserting {}", class_decl.usr());
     let cd = ClassDecl::new(
         class_decl.usr(),
         class_decl.spelling(),
@@ -895,9 +908,8 @@ pub fn extract_class_decl(
         is_pod,
         rule_of_five,
     );
-    ast.insert_class(cd);
 
-    Ok(class_decl.usr())
+    Ok(cd)
 }
 
 fn get_method_state(method: Cursor, access: AccessSpecifier) -> MethodState {
@@ -1061,278 +1073,285 @@ mod tests {
     }
 
     #[test]
-    fn extract_non_pod() -> Result<(), Error> {
-        // test that adding a private field to a POD forces opaqueptr
-        let ast = parse_string_and_extract_ast(
-            indoc!(
-                r#"
-            class Class {
-                int a;
-            public:
-                float b;
-            };
+    fn extract_non_pod() -> bbl_util::Result<()> {
+        bbl_util::run_test(|| {
+            // test that adding a private field to a POD forces opaqueptr
+            let ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                class Class {
+                    int a;
+                public:
+                    float b;
+                };
+            "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::default(),
+            )?;
+
+            println!("{ast:?}");
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+                    Field a: int
+                    Field b: float
+    
         "#
-            ),
-            &cli_args()?,
-            true,
-            None,
-            &AllowList::default(),
-        )?;
+                )
+            )?;
 
-        println!("{ast:?}");
-        assert_eq!(
-            format!("{ast:?}"),
-            indoc!(
-                r#"
-                ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
-                Field a: int
-                Field b: float
- 
-    "#
-            )
-        );
+            let class_id = ast.find_class("Class")?;
+            let class = &ast.classes()[class_id];
+            assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
 
-        let class_id = ast.find_class("Class")?;
-        let class = &ast.classes()[class_id];
-        assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
-
-        Ok(())
+            Ok(())
+        })
     }
 
     #[test]
-    fn extract_non_pod2() -> Result<(), Error> {
+    fn extract_non_pod2() -> bbl_util::Result<()> {
+        bbl_util::run_test(|| {
+            // test that adding a constructor forces non-pod
+            let ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                class Class {
+                public:
+                    Class();
+                    float b;
+                };
+                }
+        
+            "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::default(),
+            )?;
+
+            println!("{ast:?}");
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    Namespace c:@S@Class Class None
+                    ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[public ctor ] template_parameters=[] specializations=[] namespaces=[]
+                    Field b: float
+                    Method DefaultConstructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@Class# Class rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+
+        "#
+                )
+            )?;
+
+            let class_id = ast.find_class("Class")?;
+            let class = &ast.classes()[class_id];
+            assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn extract_rof() -> bbl_util::Result<()> {
         // test that adding a constructor forces non-pod
-        let ast = parse_string_and_extract_ast(
-            indoc!(
-                r#"
-            class Class {
-            public:
-                Class();
-                float b;
-            };
-            }
-    
-        "#
-            ),
-            &cli_args()?,
-            true,
-            None,
-            &AllowList::default(),
-        )?;
+        bbl_util::run_test(||{
+            let ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                class NeedsImplicitAll {
+                public:
+                };
 
-        println!("{ast:?}");
-        assert_eq!(
-            format!("{ast:?}"),
-            indoc!(
-                r#"
-                Namespace c:@S@Class Class None
-                ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[public ctor ] template_parameters=[] specializations=[] namespaces=[]
-                Field b: float
-                Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@Class# Class rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+                class NeedsImplicitCopyCtor {
+                public:
+                    ~NeedsImplicitCopyCtor();
+                };
 
-    "#
-            )
-        );
+                class NeedsImplicitNone {
+                public:
+                    NeedsImplicitNone();
+                    NeedsImplicitNone(const NeedsImplicitNone&);
+                    ~NeedsImplicitNone();
+                };
 
-        let class_id = ast.find_class("Class")?;
-        let class = &ast.classes()[class_id];
-        assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
+            "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::default(),
+            )?;
 
-        Ok(())
+            println!("{ast:?}");
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    Namespace c:@S@NeedsImplicitCopyCtor NeedsImplicitCopyCtor None
+                    Namespace c:@S@NeedsImplicitNone NeedsImplicitNone None
+                    ClassDecl c:@S@NeedsImplicitAll NeedsImplicitAll rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+
+                    ClassDecl c:@S@NeedsImplicitCopyCtor NeedsImplicitCopyCtor rename=None OpaquePtr is_pod=false ignore=false rof=[public dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    Method Destructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitCopyCtor@F@~NeedsImplicitCopyCtor# ~NeedsImplicitCopyCtor rename=Some("dtor") ignore=false return=void args=[] noexcept=Unevaluated template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitCopyCtor]
+
+                    ClassDecl c:@S@NeedsImplicitNone NeedsImplicitNone rename=None OpaquePtr is_pod=false ignore=false rof=[public ctor public copy_ctor public dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    Method DefaultConstructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@NeedsImplicitNone# NeedsImplicitNone rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
+                    Method CopyConstructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@NeedsImplicitNone#&1$@S@NeedsImplicitNone# NeedsImplicitNone rename=Some("copy_ctor") ignore=false return=void args=[: const NeedsImplicitNone &] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
+                    Method Destructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@~NeedsImplicitNone# ~NeedsImplicitNone rename=Some("dtor") ignore=false return=void args=[] noexcept=Unevaluated template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
+
+                    "#
+                )
+            )?;
+
+            let class_id = ast.find_class("NeedsImplicitAll")?;
+            let class = &ast.classes()[class_id];
+            assert!(class.rule_of_five().needs_implicit_ctor());
+            assert!(class.rule_of_five().needs_implicit_copy_ctor());
+            assert!(class.rule_of_five().needs_implicit_move_ctor());
+            assert!(class.rule_of_five().needs_implicit_dtor());
+
+            let class_id = ast.find_class("NeedsImplicitCopyCtor")?;
+            let class = &ast.classes()[class_id];
+            assert!(class.rule_of_five().needs_implicit_ctor());
+            assert!(class.rule_of_five().needs_implicit_copy_ctor());
+            assert!(!class.rule_of_five().needs_implicit_move_ctor());
+            assert!(!class.rule_of_five().needs_implicit_dtor());
+
+            let class_id = ast.find_class("NeedsImplicitNone")?;
+            let class = &ast.classes()[class_id];
+            println!("{:?}", class.rule_of_five());
+            assert!(!class.rule_of_five().needs_implicit_ctor());
+            assert!(!class.rule_of_five().needs_implicit_copy_ctor());
+            assert!(!class.rule_of_five().needs_implicit_move_ctor());
+            assert!(!class.rule_of_five().needs_implicit_dtor());
+
+            Ok(())
+        })
     }
 
     #[test]
-    fn extract_rof() -> Result<(), Error> {
-        // test that adding a constructor forces non-pod
-        let ast = parse_string_and_extract_ast(
-            indoc!(
-                r#"
-            class NeedsImplicitAll {
-            public:
-            };
+    fn extract_inherited1() -> bbl_util::Result<()> {
+        bbl_util::run_test(|| {
+            let ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                    namespace detail {
+                        class Base {
+                            int a;
+                        public:
+                            float b;
+                            Base() = delete;
+                            Base(int a, float b);
+                            void base_do_thing();
+                            virtual void do_thing();
+                        };
+                    }
 
-            class NeedsImplicitCopyCtor {
-            public:
-                ~NeedsImplicitCopyCtor();
-            };
+                    class Class : public detail::Base {
+                    public:
+                        float c;
+                        void derived_do_thing();
+                        void do_thing() override;
+                    };
+            "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::new(vec![
+                    "^Class$".to_string(),
+                    "^Class.*$".to_string()
+                    ]),
+            )?;
 
-            class NeedsImplicitNone {
-            public:
-                NeedsImplicitNone();
-                NeedsImplicitNone(const NeedsImplicitNone&);
-                ~NeedsImplicitNone();
-            };
+            println!("{ast:?}");
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    Namespace c:@N@detail detail None
+                    Namespace c:@N@detail@S@Base Base None
+                    Namespace c:@S@Class Class None
+                    ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+                    Field c: float
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@derived_do_thing# derived_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+                    Method Method deleted=false const=false virtual=true pure_virtual=false specializations=[] Function c:@S@Class@F@do_thing# do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@N@detail@S@Base@F@base_do_thing# base_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@detail, c:@N@detail@S@Base]
+                    Method DefaultConstructor deleted=true const=false virtual=false pure_virtual=false specializations=[] Function c:@N@detail@S@Base@F@Base# Base rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@detail, c:@N@detail@S@Base]
+                    Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@N@detail@S@Base@F@Base#I#f# Base rename=Some("ctor") ignore=false return=void args=[a: int, b: float] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@detail, c:@N@detail@S@Base]
 
         "#
-            ),
-            &cli_args()?,
-            true,
-            None,
-            &AllowList::default(),
-        )?;
+                )
+            )?;
 
-        println!("{ast:?}");
-        assert_eq!(
-            format!("{ast:?}"),
-            indoc!(
-                r#"
-                Namespace c:@S@NeedsImplicitCopyCtor NeedsImplicitCopyCtor None
-                Namespace c:@S@NeedsImplicitNone NeedsImplicitNone None
-                ClassDecl c:@S@NeedsImplicitAll NeedsImplicitAll rename=None ValueType is_pod=true ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
-
-                ClassDecl c:@S@NeedsImplicitCopyCtor NeedsImplicitCopyCtor rename=None OpaquePtr is_pod=false ignore=false rof=[public dtor ] template_parameters=[] specializations=[] namespaces=[]
-                Method Destructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitCopyCtor@F@~NeedsImplicitCopyCtor# ~NeedsImplicitCopyCtor rename=Some("dtor") ignore=false return=void args=[] noexcept=Unevaluated template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitCopyCtor]
-
-                ClassDecl c:@S@NeedsImplicitNone NeedsImplicitNone rename=None OpaquePtr is_pod=false ignore=false rof=[public ctor public copy_ctor public dtor ] template_parameters=[] specializations=[] namespaces=[]
-                Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@NeedsImplicitNone# NeedsImplicitNone rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
-                Method CopyConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@NeedsImplicitNone#&1$@S@NeedsImplicitNone# NeedsImplicitNone rename=Some("copy_ctor") ignore=false return=void args=[: const NeedsImplicitNone &] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
-                Method Destructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@NeedsImplicitNone@F@~NeedsImplicitNone# ~NeedsImplicitNone rename=Some("dtor") ignore=false return=void args=[] noexcept=Unevaluated template_parameters=[] specializations=[] namespaces=[c:@S@NeedsImplicitNone]
-
-                "#
-            )
-        );
-
-        let class_id = ast.find_class("NeedsImplicitAll")?;
-        let class = &ast.classes()[class_id];
-        assert!(class.rule_of_five().needs_implicit_ctor());
-        assert!(class.rule_of_five().needs_implicit_copy_ctor());
-        assert!(class.rule_of_five().needs_implicit_move_ctor());
-        assert!(class.rule_of_five().needs_implicit_dtor());
-
-        let class_id = ast.find_class("NeedsImplicitCopyCtor")?;
-        let class = &ast.classes()[class_id];
-        assert!(class.rule_of_five().needs_implicit_ctor());
-        assert!(class.rule_of_five().needs_implicit_copy_ctor());
-        assert!(!class.rule_of_five().needs_implicit_move_ctor());
-        assert!(!class.rule_of_five().needs_implicit_dtor());
-
-        let class_id = ast.find_class("NeedsImplicitNone")?;
-        let class = &ast.classes()[class_id];
-        println!("{:?}", class.rule_of_five());
-        assert!(!class.rule_of_five().needs_implicit_ctor());
-        assert!(!class.rule_of_five().needs_implicit_copy_ctor());
-        assert!(!class.rule_of_five().needs_implicit_move_ctor());
-        assert!(!class.rule_of_five().needs_implicit_dtor());
-
-        Ok(())
+            let class_id = ast.find_class("Class")?;
+            let class = &ast.classes()[class_id];
+            assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
+            Ok(())
+        })
     }
 
     #[test]
-    fn extract_inherited() -> Result<(), Error> {
-        let ast = parse_string_and_extract_ast(
-            indoc!(
-                r#"
-            class Base {
-                int a;
-            public:
-                float b;
-                Base() = deleted;
-                Base(int a, float b);
-                void base_do_thing();
-            };
+    fn extract_inherited2() -> bbl_util::Result<()> {
+        bbl_util::run_test(|| {
+            let ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                class Base {
+                    int a;
+                    Base();
+                    Base(const Base&);
+                    Base(Base&&);
+                public:
+                    float b;
+                    void base_do_thing();
+                };
 
-            class Class : public Base {
-            public:
-                float c;
-                void derived_do_thing();
-            };
-            }
-    
+                class Class : public Base {
+                public:
+                    float c;
+                    void derived_do_thing();
+                };
+            "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::default(),
+            )?;
+
+            println!("{ast:?}");
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    Namespace c:@S@Base Base None
+                    Namespace c:@S@Class Class None
+                    ClassDecl c:@S@Base Base rename=None OpaquePtr is_pod=false ignore=false rof=[private ctor private copy_ctor private move_ctor ] template_parameters=[] specializations=[] namespaces=[]
+                    Field a: int
+                    Field b: float
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@base_do_thing# base_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
+
+                    ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
+                    Field c: float
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@derived_do_thing# derived_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@base_do_thing# base_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
+
         "#
-            ),
-            &cli_args()?,
-            true,
-            None,
-            &AllowList::default(),
-        )?;
+                )
+            )?;
 
-        println!("{ast:?}");
-        assert_eq!(
-            format!("{ast:?}"),
-            indoc!(
-                r#"
-                Namespace c:@S@Base Base None
-                Namespace c:@S@Class Class None
-                ClassDecl c:@S@Base Base rename=None OpaquePtr is_pod=false ignore=false rof=[public ctor ] template_parameters=[] specializations=[] namespaces=[]
-                Field a: int
-                Field b: float
-                Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@Base# Base rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
-                Method Constructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@Base#I#f# Base rename=Some("ctor") ignore=false return=void args=[a: int, b: float] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
-                Method Method const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@base_do_thing# base_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
+            let class_id = ast.find_class("Class")?;
+            let class = &ast.classes()[class_id];
+            assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
 
-                ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
-                Field c: float
-                Method Method const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@derived_do_thing# derived_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
-                Method Method const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@base_do_thing# base_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
-                Method DefaultConstructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@Base# Base rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
-                Method Constructor const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@Base#I#f# Base rename=Some("ctor") ignore=false return=void args=[a: int, b: float] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
-
-    "#
-            )
-        );
-
-        let class_id = ast.find_class("Class")?;
-        let class = &ast.classes()[class_id];
-        assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
-
-        Ok(())
-    }
-
-    #[test]
-    fn extract_inherited2() -> Result<(), Error> {
-        let ast = parse_string_and_extract_ast(
-            indoc!(
-                r#"
-            class Base {
-                int a;
-                Base();
-                Base(const Base&);
-                Base(Base&&);
-            public:
-                float b;
-                void base_do_thing();
-            };
-
-            class Class : public Base {
-            public:
-                float c;
-                void derived_do_thing();
-            };
-            }
-    
-        "#
-            ),
-            &cli_args()?,
-            true,
-            None,
-            &AllowList::default(),
-        )?;
-
-        println!("{ast:?}");
-        assert_eq!(
-            format!("{ast:?}"),
-            indoc!(
-                r#"
-                Namespace c:@S@Base Base None
-                Namespace c:@S@Class Class None
-                ClassDecl c:@S@Base Base rename=None OpaquePtr is_pod=false ignore=false rof=[private ctor private copy_ctor private move_ctor ] template_parameters=[] specializations=[] namespaces=[]
-                Field a: int
-                Field b: float
-                Method Method const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@base_do_thing# base_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
-
-                ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] template_parameters=[] specializations=[] namespaces=[]
-                Field c: float
-                Method Method const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@derived_do_thing# derived_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
-                Method Method const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@base_do_thing# base_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
-
-    "#
-            )
-        );
-
-        let class_id = ast.find_class("Class")?;
-        let class = &ast.classes()[class_id];
-        assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
-
-        Ok(())
+            Ok(())
+        })
     }
 }
