@@ -379,10 +379,6 @@ pub fn create_std_unique_ptr(
     let c_tmpl = c.specialized_template().unwrap();
     let usr_tmpl = create_std_unique_ptr_tmpl(c_tmpl, ast, tu, already_visited)?;
 
-    // let name = regex::Regex::new("(?:[^a-zA-Z0-9])+")
-    //     .unwrap()
-    //     .replace_all(&c.display_name(), "_")
-    //     .to_string();
     let name = c.display_name();
 
     let namespaces = get_namespaces_for_decl(c.into(), tu, ast, already_visited)?;
