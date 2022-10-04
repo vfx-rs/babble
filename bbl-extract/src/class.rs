@@ -612,10 +612,7 @@ pub fn extract_class_decl(
     // Check for std:: types we're going to extract manually here
     if class_decl.display_name().starts_with("basic_string<") {
         debug!("Extracting basic_string {}", class_decl.usr());
-        let cd = create_std_string(class_decl.into(), ast);
-        let usr = cd.usr();
-        ast.insert_class(cd);
-        return Ok(usr);
+        return create_std_string(class_decl.into(), ast, already_visited);
     } else if class_decl.display_name().starts_with("vector<") {
         return create_std_vector(class_decl, ast, already_visited, tu, allow_list);
     } else if class_decl.display_name().starts_with("unique_ptr<") {

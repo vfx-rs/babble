@@ -23,7 +23,13 @@ use crate::{
 use super::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
+pub fn create_std_string(class: Cursor, ast: &mut AST, already_visited: &mut Vec<USR>) -> Result<USR> {
+    if already_visited.contains(&class.usr()) {
+        return Ok(class.usr());
+    } else {
+        already_visited.push(class.usr());
+    }
+
     let u_std = ast
         .find_namespace("std")
         .map(|id| ast.namespaces()[id].usr())
@@ -153,7 +159,7 @@ pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
         ),
     ];
 
-    ClassDecl::new(
+    let cd = ClassDecl::new(
         class.usr(),
         "string".to_string(),
         Vec::new(),
@@ -170,7 +176,10 @@ pub fn create_std_string(class: Cursor, ast: &AST) -> ClassDecl {
             move_assign: MethodState::Undefined,
             dtor: MethodState::Defined(AccessSpecifier::Public),
         },
-    )
+    );
+
+    ast.insert_class(cd);
+    Ok(class.usr())
 }
 
 pub fn create_std_vector(
@@ -180,13 +189,16 @@ pub fn create_std_vector(
     tu: &TranslationUnit,
     allow_list: &AllowList,
 ) -> Result<USR> {
+    if already_visited.contains(&c.usr()) {
+        return Ok(c.usr());
+    } else {
+        already_visited.push(c.usr());
+    }
+
     let c_tmpl = c.specialized_template().unwrap();
     let usr_tmpl = create_std_vector_tmpl(c_tmpl, ast, tu, already_visited)?;
 
-    let name = regex::Regex::new("(?:[^a-zA-Z0-9])+")
-        .unwrap()
-        .replace_all(&c.display_name(), "_")
-        .to_string();
+    let name = c.display_name();
 
     let namespaces = get_namespaces_for_decl(c.into(), tu, ast, already_visited)?;
     let ty = c.template_argument_type(0)?;
@@ -220,6 +232,12 @@ fn create_std_vector_tmpl(
     tu: &TranslationUnit,
     already_visited: &mut Vec<USR>,
 ) -> Result<USR> {
+    if already_visited.contains(&c_tmpl.usr()) {
+        return Ok(c_tmpl.usr());
+    } else {
+        already_visited.push(c_tmpl.usr());
+    }
+
     // get the namespaces for std::vector<> as we might not have found them already
     let namespaces = get_namespaces_for_decl(c_tmpl, tu, ast, already_visited)?;
 
@@ -352,13 +370,20 @@ pub fn create_std_unique_ptr(
     tu: &TranslationUnit,
     allow_list: &AllowList,
 ) -> Result<USR> {
+    if already_visited.contains(&c.usr()) {
+        return Ok(c.usr());
+    } else {
+        already_visited.push(c.usr());
+    }
+
     let c_tmpl = c.specialized_template().unwrap();
     let usr_tmpl = create_std_unique_ptr_tmpl(c_tmpl, ast, tu, already_visited)?;
 
-    let name = regex::Regex::new("(?:[^a-zA-Z0-9])+")
-        .unwrap()
-        .replace_all(&c.display_name(), "_")
-        .to_string();
+    // let name = regex::Regex::new("(?:[^a-zA-Z0-9])+")
+    //     .unwrap()
+    //     .replace_all(&c.display_name(), "_")
+    //     .to_string();
+    let name = c.display_name();
 
     let namespaces = get_namespaces_for_decl(c.into(), tu, ast, already_visited)?;
     let ty = c.template_argument_type(0)?;
@@ -392,6 +417,12 @@ fn create_std_unique_ptr_tmpl(
     tu: &TranslationUnit,
     already_visited: &mut Vec<USR>,
 ) -> Result<USR> {
+    if already_visited.contains(&c_tmpl.usr()) {
+        return Ok(c_tmpl.usr());
+    } else {
+        already_visited.push(c_tmpl.usr());
+    }
+
     // get the namespaces for std::vector<> as we might not have found them already
     let namespaces = get_namespaces_for_decl(c_tmpl, tu, ast, already_visited)?;
 
@@ -483,6 +514,12 @@ pub fn create_std_function(
     tu: &TranslationUnit,
     allow_list: &AllowList,
 ) -> Result<USR> {
+    if already_visited.contains(&c.usr()) {
+        return Ok(c.usr());
+    } else {
+        already_visited.push(c.usr());
+    }
+
     // we'll just explicitly convert this to a function prototype here and not try and extract the underlying template
     // as that requires handling parameter packs etc.
     let name = regex::Regex::new("(?:[^a-zA-Z0-9])+")
