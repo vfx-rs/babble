@@ -73,6 +73,7 @@ pub enum Error {
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
     FailedToExtractResult {
+        name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
     FailedToExtractTemplateArgs {

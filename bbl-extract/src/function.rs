@@ -678,13 +678,14 @@ pub fn extract_function(
     let c_function = c_function.canonical()?;
 
     debug!(
-        "+ CXXMethod {} {}",
+        "+ function {} {} {:?}",
         c_function.display_name(),
         if c_function.cxx_method_is_const() {
             "const"
         } else {
             ""
-        }
+        },
+        extra_template_parameters,
     );
 
     // NOTE (AL) The only reliable way to get at return type and arguments appears to be to inspect the children directly.
@@ -734,6 +735,7 @@ pub fn extract_function(
         .map(|t| t.name().to_string())
         .chain(c_template_parameters.iter().map(|c| c.display_name()))
         .collect::<Vec<_>>();
+    debug!("string template parameters {string_template_parameters:?}");
 
     let mut skip = c_template_parameters.len();
 
@@ -742,7 +744,7 @@ pub fn extract_function(
 
     let result = 
         extract_type(
-            ty_result,
+            ty_result.clone(),
             &string_template_parameters,
             already_visited,
             ast,
@@ -750,6 +752,7 @@ pub fn extract_function(
             allow_list,
         )
         .map_err(|e| Error::FailedToExtractResult {
+            name: format!("{:?}", ty_result),
             source: Box::new(e),
         })?;
 
@@ -843,13 +846,14 @@ pub fn extract_method(
     let c_method = c_method.canonical()?;
 
     debug!(
-        "+ CXXMethod {} {}",
+        "+ CXXMethod {} {} {:?}",
         c_method.display_name(),
         if c_method.cxx_method_is_const() {
             "const"
         } else {
             ""
-        }
+        },
+        class_template_parameters,
     );
 
     let kind = if c_method.cxx_method_is_static() {

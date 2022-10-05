@@ -720,7 +720,7 @@ pub fn extract_ast(
                 return Ok(());
             }
             CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
-                extract_typedef_decl(c.try_into()?, already_visited, ast, tu, allow_list)?;
+                extract_typedef_decl(c.try_into()?, already_visited, ast, tu, allow_list, &[])?;
                 return Ok(());
             }
             CursorKind::Namespace => {

@@ -430,6 +430,7 @@ pub fn extract_type(
     tu: &TranslationUnit,
     allow_list: &AllowList,
 ) -> Result<QualType> {
+    debug!("extract_type {ty:?} {template_parameters:?}");
     let is_const = ty.is_const_qualified();
     let name = if is_const {
         if let Some(s) = ty.spelling().strip_prefix("const ") {
@@ -449,7 +450,7 @@ pub fn extract_type(
             type_ref: TypeRef::Builtin(ty.kind()),
         })
     } else if let Ok(c_decl) = ty.type_declaration() {
-        trace!(
+        debug!(
             "type {name} has decl {spelling} {usr}",
             spelling = c_decl.spelling(),
             usr = c_decl.usr()
@@ -470,9 +471,11 @@ pub fn extract_type(
             // extract underlying decl here
             let u_ref = match c_decl.kind() {
                 CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
-                    extract_typedef_decl(c_decl.try_into()?, already_visited, ast, tu, allow_list)?
+                    debug!("is typedef decl");
+                    extract_typedef_decl(c_decl.try_into()?, already_visited, ast, tu, allow_list, template_parameters)?
                 }
                 CursorKind::ClassDecl | CursorKind::StructDecl => {
+                    debug!("is class decl");
                     extract_class_decl(c_decl.try_into()?, tu, ast, already_visited, allow_list)?
                 }
                 CursorKind::TypeRef => unimplemented!("Should extract class here?"),

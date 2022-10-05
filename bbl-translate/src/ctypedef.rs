@@ -7,14 +7,15 @@ use bbl_extract::{
     typedef::Typedef,
 };
 use hashbrown::HashSet;
-use tracing::instrument;
+use tracing::{error, instrument};
 
 use crate::{
     build_namespace_prefix,
     cfunction::{translate_function, CFunction, CFunctionId},
     cstruct::{translate_class_template, CStruct, CStructId},
     ctype::{translate_qual_type, CQualType, TypeReplacements},
-    error::Error, sanitize_name,
+    error::Error,
+    sanitize_name,
 };
 
 #[instrument(level = "trace", skip(ast, functions, used_names))]
@@ -99,9 +100,12 @@ pub fn translate_typedef(
 
     let type_replacements = TypeReplacements::default();
     let underlying_type = translate_qual_type(td.underlying_type(), &[], &[], &type_replacements)
-        .map_err(|e| Error::FailedToTranslateTypedef {
-        usr: td.usr(),
-        source: Box::new(e),
+        .map_err(|e| {
+        error!("type failed {:?}", td.underlying_type());
+        Error::FailedToTranslateTypedef {
+            usr: td.usr(),
+            source: Box::new(e),
+        }
     })?;
 
     typedefs.insert(
@@ -113,6 +117,21 @@ pub fn translate_typedef(
             underlying_type,
         },
     );
+
+    // match translate_qual_type(td.underlying_type(), &[], &[], &type_replacements) {
+    //     Ok(underlying_type) => {
+    //         typedefs.insert(
+    //             td.usr().into(),
+    //             CTypedef {
+    //                 name_external: td_c_name_external.to_string(),
+    //                 name_internal: td_c_name_internal.to_string(),
+    //                 usr: td.usr(),
+    //                 underlying_type,
+    //             },
+    //         );
+    //     }
+    //     Err(e) => error!("Failed to translate typedef {}: {}", td.usr(), e),
+    // }
 
     Ok(())
 }

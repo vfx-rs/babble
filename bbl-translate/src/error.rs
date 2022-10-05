@@ -105,7 +105,7 @@ impl std::fmt::Display for Error {
                 write!(f, "Failed to get bind kind from usr {usr}")
             }
             Error::FailedToTranslateTypedef { usr, .. } => {
-                write!(f, "Failed to get translate typedef from usr {usr}")
+                write!(f, "Failed to translate typedef from usr {usr}")
             }
             Error::TemplateParmNotFound { name, .. } => {
                 write!(f, "Could not find template parameter {name}")

@@ -637,6 +637,10 @@ pub fn extract_class_decl(
     let cd = extract_class_decl_inner(class_decl, tu, ast, already_visited, allow_list, None)?;
 
     debug!("extract_class_decl: inserting {}", class_decl.usr());
+    if class_decl.kind() == CursorKind::ClassTemplate && cd.template_parameters.is_empty() {
+        error!("class {:?} is a ClassTemplate but has no template parameters. is def: {}", class_decl, class_decl.is_definition());
+    }
+
     ast.insert_class(cd);
 
     Ok(class_decl.usr())
@@ -658,7 +662,7 @@ fn extract_class_decl_inner(class_decl: CurClassDecl, tu: &TranslationUnit, ast:
     for c_base in class_decl.children_of_kind(CursorKind::CXXBaseSpecifier, false) {
         if let Ok(c_base_decl) = c_base.referenced() {
             match c_base_decl.kind() {
-                CursorKind::ClassDecl | CursorKind::ClassTemplate => {
+                CursorKind::ClassDecl | CursorKind::StructDecl | CursorKind::ClassTemplate => {
                     // we pass a class name override through when extracting the base class members. This will turn 
                     // Base::method() into Class::method(). Thus the allow list will work as expected, and still allow
                     // us to avoid adding the Base class to the AST while lofting up its members into Class
@@ -705,7 +709,9 @@ fn extract_class_decl_inner(class_decl: CurClassDecl, tu: &TranslationUnit, ast:
         };
 
         debug!("member {}", member_qualified_name);
-        if !allow_list.allows(&member_qualified_name) {
+        // always allow template parameters so we don't have to explicitly allow them
+        if !allow_list.allows(&member_qualified_name) && !matches!(member.kind(), CursorKind::TemplateTemplateParameter | CursorKind::TemplateTypeParameter | CursorKind::NonTypeTemplateParameter) {
+            debug!("  denied");
             continue;
         }
 
@@ -716,7 +722,7 @@ fn extract_class_decl_inner(class_decl: CurClassDecl, tu: &TranslationUnit, ast:
             // }
         } else {
             warn!("Failed to get access specifier for member {}", member.display_name());
-            continue;
+            // continue;
             // return Err(Error::FailedToGetAccessSpecifierFor(member.display_name()));
         }
         match member.kind() {

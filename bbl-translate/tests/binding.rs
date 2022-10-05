@@ -789,6 +789,52 @@ fn translate_std_function() -> Result<(), bbl_util::Error> {
     })
 }
 
+#[test]
+fn translate_nested_template() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
+                #include <memory>
+
+                namespace Test {
+                    template <class T>
+                    struct HandleTo {
+                        typedef std::unique_ptr<T> Handle;
+                    };
+
+                    class Class;
+                    typedef HandleTo<Class>::Handle ClassHandle;
+                    class Class {
+                    public:
+                        ClassHandle create();
+                    };
+
+                }
+            "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::new(vec![r#"^Test::.*$"#.to_string()])
+        )?;
+
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
+
+        bbl_util::compare(
+            &format!("{ast:?}"),
+            indoc!(
+                r#"
+                Function c:@F@take_enum#$@E@Numbered#$@E@Unnumbered# take_enum rename=None ignore=false return=void args=[n: Numbered, u: Unnumbered] noexcept=None template_parameters=[] specializations=[] namespaces=[]
+                Enum Numbered c:@E@Numbered [First=1 Second=2 Third=3 ] namespaces=[]
+                Enum Unnumbered c:@E@Unnumbered [First=0 Second=1 Third=2 ] namespaces=[]
+                "#
+            ),
+        )
+    })
+}
+
 struct SourceIter<'a> {
     current: Option<&'a (dyn std::error::Error + 'static)>,
 }

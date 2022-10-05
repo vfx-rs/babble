@@ -75,6 +75,7 @@ pub fn extract_typedef_decl<'a>(
     ast: &'a mut AST,
     tu: &TranslationUnit,
     allow_list: &AllowList,
+    extra_template_parameters: &[String],
 ) -> Result<USR> {
     let usr = c_typedef.usr();
     if already_visited.contains(&usr) {
@@ -89,7 +90,7 @@ pub fn extract_typedef_decl<'a>(
 
     let underlying_type = extract_type(
         c_typedef.underlying_type()?,
-        &[],
+        extra_template_parameters,
         already_visited,
         ast,
         tu,
