@@ -272,6 +272,7 @@ pub fn translate_arguments(
 
         let mut qual_type = translate_qual_type(
             arg.qual_type(),
+            ast,
             template_parms,
             template_args,
             type_replacements,
@@ -329,6 +330,7 @@ pub fn translate_function(
     // get the return type
     let result = translate_qual_type(
         function.result(),
+        ast,
         function.template_parameters(),
         template_args,
         type_replacements,
@@ -504,6 +506,9 @@ pub fn translate_function(
                     _ => todo!("Handle opaquebytes"),
                 }
             }
+            CTypeRef::Template(parm) => {
+                panic!("Unexpanded template parameter {parm} on {} {}", function.name(), arg.name)
+            }
             CTypeRef::Unknown(tk) => {
                 panic!("unknown type {tk} when converting argument {}", arg.name);
             }
@@ -632,6 +637,9 @@ pub fn translate_function(
                     }) as Box<dyn FnOnce(Expr) -> Expr>,
                 )
             }
+            CTypeRef::Template(parm) => {
+                panic!("Unexpanded template parameter {parm} on {} result", function.name())
+            }
             CTypeRef::Unknown(tk) => {
                 panic!("Unkown type {tk} while converting result")
             }
@@ -750,6 +758,7 @@ pub fn translate_method(
     // get the return type
     let result = translate_qual_type(
         method.result(),
+                ast,
         &template_parms,
         template_args,
         type_replacements,
@@ -927,6 +936,9 @@ pub fn translate_method(
                     _ => todo!("Handle opaquebytes"),
                 }
             }
+            CTypeRef::Template(parm) => {
+                panic!("Unexpanded template parameter {parm} on {}::{} arg {}", class.name(), method.name(), arg.name)
+            }
             CTypeRef::Unknown(tk) => {
                 panic!("unknown type {tk} when converting argument {}", arg.name);
             }
@@ -1054,6 +1066,9 @@ pub fn translate_method(
                         right: Box::new(Expr::Move(Box::new(call_expr))),
                     }) as Box<dyn FnOnce(Expr) -> Expr>,
                 )
+            }
+            CTypeRef::Template(parm) => {
+                panic!("Unexpanded template parameter {parm} on {}::{} result", class.name(), method.name())
             }
             CTypeRef::Unknown(tk) => {
                 panic!("Unkown type {tk} while converting result")
@@ -1329,16 +1344,17 @@ pub fn translate_method(
 #[instrument(skip(function_protos), level = "trace")]
 pub fn translate_function_proto(
     proto: &FunctionProto,
+    ast: &AST,
     function_protos: &mut UstrIndexMap<CFunctionProto, CFunctionProtoId>,
 ) -> Result<()> {
     let name = proto.name().to_string();
 
-    let result = translate_qual_type(proto.result(), &[], &[], &TypeReplacements::default())?;
+    let result = translate_qual_type(proto.result(), ast, &[], &[], &TypeReplacements::default())?;
 
     let args = proto
         .args()
         .iter()
-        .map(|a| translate_qual_type(a, &[], &[], &TypeReplacements::default()))
+        .map(|a| translate_qual_type(a, ast,  &[], &[], &TypeReplacements::default()))
         .collect::<Result<Vec<_>>>()?;
 
     function_protos.insert(

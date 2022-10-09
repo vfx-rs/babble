@@ -700,6 +700,7 @@ fn extract_class_decl_inner(class_decl: CurClassDecl, tu: &TranslationUnit, ast:
     let members = class_decl.children();
     let mut index = 0;
     let mut has_private_fields = false;
+
     for member in members {
         let member_qualified_name = if let Some(qname) = qname_override {
             // allow the subclass to override the qualified name when extracting so we can pull stuff up in the allow list

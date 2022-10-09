@@ -23,6 +23,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 pub enum TypeRef {
     Builtin(TypeKind),
     Ref(USR),
+    Typedef(USR),
     Pointer(Box<QualType>),
     LValueReference(Box<QualType>),
     RValueReference(Box<QualType>),
@@ -104,16 +105,36 @@ impl TypeRef {
             TypeRef::LValueReference(p) | TypeRef::Pointer(p) | TypeRef::RValueReference(p) => {
                 p.type_ref.refers_to_std_function(ast)
             }
-            TypeRef::Ref(usr) => {
-                if let Some(proto) = ast.get_function_proto(*usr) {
-                    proto.name().starts_with("function_")
-                } else if let Some(td) = ast.get_type_alias(*usr) {
+            TypeRef::Typedef(usr) => {
+                if let Some(td) = ast.get_type_alias(*usr) {
                     td.underlying_type().type_ref.refers_to_std_function(ast)
                 } else {
                     false
                 }
             }
+            TypeRef::Ref(usr) => {
+                if let Some(proto) = ast.get_function_proto(*usr) {
+                    proto.name().starts_with("function_")
+                } else {
+                    false
+                }
+            }
             TypeRef::FunctionProto { .. } => false,
+        }
+    }
+
+    pub fn is_template_typedef(&self, ast: &AST) -> bool {
+        match self {
+            TypeRef::TemplateTypeParameter(_) => true,
+            TypeRef::LValueReference(p) | TypeRef::RValueReference(p) | TypeRef::Pointer(p) => {
+                p.is_template_typedef(ast)
+            }
+            TypeRef::Typedef(usr) => ast
+                .get_type_alias(*usr)
+                .unwrap()
+                .underlying_type()
+                .is_template_typedef(ast),
+            _ => false,
         }
     }
 }
@@ -143,6 +164,10 @@ impl QualType {
             is_const: false,
             type_ref: TypeRef::Unknown(tk),
         }
+    }
+
+    pub fn is_template_typedef(&self, ast: &AST) -> bool {
+        self.type_ref.is_template_typedef(ast)
     }
 
     pub fn get_bind_kind(&self, ast: &AST) -> Result<ClassBindKind> {
@@ -250,18 +275,18 @@ impl QualType {
         }
     }
 
-    pub fn is_template(&self) -> bool {
-        match &self.type_ref {
-            TypeRef::TemplateNonTypeParameter(_) | TypeRef::TemplateTypeParameter(_) => true,
-            TypeRef::Builtin(_)
-            | TypeRef::Ref(_)
-            | TypeRef::Unknown(_)
-            | TypeRef::FunctionProto { .. } => false,
-            TypeRef::Pointer(p) | TypeRef::LValueReference(p) | TypeRef::RValueReference(p) => {
-                p.is_template()
-            }
-        }
-    }
+    // pub fn is_template(&self) -> bool {
+    //     match &self.type_ref {
+    //         TypeRef::TemplateNonTypeParameter(_) | TypeRef::TemplateTypeParameter(_) => true,
+    //         TypeRef::Builtin(_)
+    //         | TypeRef::Ref(_)
+    //         | TypeRef::Unknown(_)
+    //         | TypeRef::FunctionProto { .. } => false,
+    //         TypeRef::Pointer(p) | TypeRef::LValueReference(p) | TypeRef::RValueReference(p) => {
+    //             p.is_template()
+    //         }
+    //     }
+    // }
 
     pub fn template_parameter_name(&self) -> Option<&str> {
         match &self.type_ref {
@@ -270,6 +295,7 @@ impl QualType {
             }
             TypeRef::Builtin(_)
             | TypeRef::Ref(_)
+            | TypeRef::Typedef(_)
             | TypeRef::Unknown(_)
             | TypeRef::FunctionProto { .. } => None,
             TypeRef::Pointer(p) | TypeRef::LValueReference(p) | TypeRef::RValueReference(p) => {
@@ -314,6 +340,13 @@ impl QualType {
                 let name = ast
                     .get_class(*usr)
                     .map(|r| r.format(ast, class_template_args))
+                    .unwrap_or_else(|| usr.to_string());
+                format!("{result}{}", name)
+            }
+            TypeRef::Typedef(usr) => {
+                let name = ast
+                    .get_type_alias(*usr)
+                    .map(|r| "TYPEDEF".to_string())
                     .unwrap_or_else(|| usr.to_string());
                 format!("{result}{}", name)
             }
@@ -413,6 +446,9 @@ impl Display for QualType {
                 }
                 write!(f, ")")
             }
+            TypeRef::Typedef(usr) => {
+                write!(f, "Typedef({})", usr)
+            }
             TypeRef::Unknown(tk) => {
                 write!(f, "UNKNOWN({})", tk.spelling())
             }
@@ -469,25 +505,51 @@ pub fn extract_type(
             extract_std_function_as_pointer(ty, ast, already_visited, tu, allow_list)
         } else {
             // extract underlying decl here
-            let u_ref = match c_decl.kind() {
+            match c_decl.kind() {
                 CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
                     debug!("is typedef decl");
-                    extract_typedef_decl(c_decl.try_into()?, already_visited, ast, tu, allow_list, template_parameters)?
+                    let u_ref = extract_typedef_decl(
+                        c_decl.try_into()?,
+                        already_visited,
+                        ast,
+                        tu,
+                        allow_list,
+                        template_parameters,
+                    )?;
+
+                    Ok(QualType {
+                        name,
+                        is_const,
+                        type_ref: TypeRef::Typedef(u_ref),
+                    })
                 }
                 CursorKind::ClassDecl | CursorKind::StructDecl => {
                     debug!("is class decl");
-                    extract_class_decl(c_decl.try_into()?, tu, ast, already_visited, allow_list)?
+                    let u_ref = extract_class_decl(
+                        c_decl.try_into()?,
+                        tu,
+                        ast,
+                        already_visited,
+                        allow_list,
+                    )?;
+
+                    Ok(QualType {
+                        name,
+                        is_const,
+                        type_ref: TypeRef::Ref(u_ref),
+                    })
+                }
+                CursorKind::EnumDecl => {
+                    let u_ref = extract_enum(c_decl, ast, already_visited, tu)?;
+                    Ok(QualType {
+                        name,
+                        is_const,
+                        type_ref: TypeRef::Ref(u_ref),
+                    })
                 }
                 CursorKind::TypeRef => unimplemented!("Should extract class here?"),
-                CursorKind::EnumDecl => extract_enum(c_decl, ast, already_visited, tu)?,
                 _ => unimplemented!("Unhandled type decl {:?}", c_decl),
-            };
-
-            Ok(QualType {
-                name,
-                is_const,
-                type_ref: TypeRef::Ref(u_ref),
-            })
+            }
         }
     } else {
         match ty.kind() {
@@ -633,7 +695,6 @@ pub fn extract_function_pointer(
         },
     })
 }
-
 
 /// Extract a std::function as a function pointer
 pub fn extract_std_function_as_pointer(

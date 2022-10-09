@@ -17,7 +17,7 @@ use crate::{
     cfunction::{translate_method, CFunction, CFunctionId, CFunctionSource},
     ctype::{translate_qual_type, CQualType, TypeReplacements},
     error::Error,
-    get_c_names, CAST, sanitize_name,
+    get_c_names, sanitize_name, CAST,
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -141,12 +141,8 @@ pub fn translate_class(
     let ns_prefix_private = sanitize_name(&ns_prefix_private);
 
     // get unique, prefixed names for the struct
-    let (st_c_name_public, st_c_name_private) = get_c_names(
-        &st_name,
-        &ns_prefix_public,
-        &ns_prefix_private,
-        used_names,
-    );
+    let (st_c_name_public, st_c_name_private) =
+        get_c_names(&st_name, &ns_prefix_public, &ns_prefix_private, used_names);
 
     // translate the fields
     let mut fields = Vec::new();
@@ -154,6 +150,7 @@ pub fn translate_class(
         let name = field.name().to_string();
         let qual_type = match translate_qual_type(
             field.qual_type(),
+            ast,
             class.template_parameters(),
             template_args,
             type_replacements,
@@ -164,7 +161,10 @@ pub fn translate_class(
                     "Could not translate field {name} of class {}: {e}",
                     class.name()
                 );
-                return Err(Error::TranslateField { name, source: Box::new(e) });
+                return Err(Error::TranslateField {
+                    name,
+                    source: Box::new(e),
+                });
             }
         };
 
@@ -199,7 +199,8 @@ pub fn translate_class(
             // separately
             if !method.is_specialized() {
                 warn!(
-                    "method {} is templated but has no specializations and so will be ignored", method.signature(ast, class.template_parameters(), None)
+                    "method {} is templated but has no specializations and so will be ignored",
+                    method.signature(ast, class.template_parameters(), None)
                 );
             }
             continue;
@@ -256,7 +257,7 @@ pub fn translate_class(
             used_names,
             ast,
             type_replacements,
-            Some(spec_method.name())
+            Some(spec_method.name()),
         )?;
 
         functions.insert(method.usr().into(), c_function);
@@ -292,12 +293,8 @@ pub fn translate_class_template(
     let ns_prefix_private = sanitize_name(&ns_prefix_private);
 
     // get unique, prefixed names for the struct
-    let (st_c_name_public, st_c_name_private) = get_c_names(
-        &st_name,
-        &ns_prefix_public,
-        &ns_prefix_private,
-        used_names,
-    );
+    let (st_c_name_public, st_c_name_private) =
+        get_c_names(&st_name, &ns_prefix_public, &ns_prefix_private, used_names);
 
     trace!("got names {st_c_name_public}, {st_c_name_private}");
 
@@ -307,6 +304,7 @@ pub fn translate_class_template(
         let name = field.name().to_string();
         let qual_type = match translate_qual_type(
             field.qual_type(),
+            ast,
             class.template_parameters(),
             cts.template_arguments(),
             &type_replacements,
@@ -317,7 +315,10 @@ pub fn translate_class_template(
                     "Could not translate field {name} of class {}: {e}",
                     class.name()
                 );
-                return Err(Error::TranslateField { name, source: Box::new(e) });
+                return Err(Error::TranslateField {
+                    name,
+                    source: Box::new(e),
+                });
             }
         };
 
@@ -410,7 +411,7 @@ pub fn translate_class_template(
             used_names,
             ast,
             &type_replacements,
-            Some(spec_method.name())
+            Some(spec_method.name()),
         )?;
 
         functions.insert(method.usr().into(), c_function);

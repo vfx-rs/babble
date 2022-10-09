@@ -1,31 +1,32 @@
+pub mod cenum;
 pub mod cfunction;
 pub mod cstruct;
 pub mod ctype;
 pub mod ctypedef;
-pub mod cenum;
 pub mod error;
 
 use bbl_clang::cursor::USR;
 use bbl_extract::ast::Include;
 use bbl_extract::index_map::UstrIndexMap;
-use cenum::{CEnum, CEnumId, translate_enum};
-use cfunction::{translate_function, CFunction, CFunctionId, CFunctionProto, CFunctionProtoId, translate_function_proto};
+use cenum::{translate_enum, CEnum, CEnumId};
+use cfunction::{
+    translate_function, translate_function_proto, CFunction, CFunctionId, CFunctionProto,
+    CFunctionProtoId,
+};
 use cstruct::{translate_class, CStruct, CStructId};
 use ctype::TypeReplacements;
 use ctypedef::{
-    translate_class_template_specialization, translate_function_template_specialization, CTypedef,
-    CTypedefId, translate_typedef,
+    translate_class_template_specialization, translate_function_template_specialization,
+    translate_typedef, CTypedef, CTypedefId,
 };
 use hashbrown::HashSet;
 
 use error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-use bbl_extract::{
-    ast::{ClassId, FunctionId, AST},
-};
+use bbl_extract::ast::{ClassId, FunctionId, AST};
+use std::{borrow::Cow, fmt::Debug};
 use tracing::{debug, warn};
-use std::{fmt::Debug, borrow::Cow};
 
 pub struct CAST {
     pub structs: UstrIndexMap<CStruct, CStructId>,
@@ -61,7 +62,6 @@ impl Debug for CAST {
         for inc in self.includes.iter() {
             writeln!(f, "{inc:?}")?;
         }
-
 
         Ok(())
     }
@@ -245,7 +245,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
     }
 
     for proto in ast.function_protos().iter() {
-        translate_function_proto(proto, &mut function_protos)?;
+        translate_function_proto(proto, ast, &mut function_protos)?;
     }
 
     Ok(CAST {

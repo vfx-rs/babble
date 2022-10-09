@@ -15,7 +15,7 @@ use crate::{
     cstruct::{translate_class_template, CStruct, CStructId},
     ctype::{translate_qual_type, CQualType, TypeReplacements},
     error::Error,
-    sanitize_name,
+    sanitize_name, CAST,
 };
 
 #[instrument(level = "trace", skip(ast, functions, used_names))]
@@ -99,14 +99,16 @@ pub fn translate_typedef(
     let td_c_name_internal = sanitize_name(&td_c_name_internal);
 
     let type_replacements = TypeReplacements::default();
-    let underlying_type = translate_qual_type(td.underlying_type(), &[], &[], &type_replacements)
-        .map_err(|e| {
-        error!("type failed {:?}", td.underlying_type());
-        Error::FailedToTranslateTypedef {
-            usr: td.usr(),
-            source: Box::new(e),
-        }
-    })?;
+    let underlying_type =
+        translate_qual_type(td.underlying_type(), ast, &[], &[], &type_replacements).map_err(
+            |e| {
+                error!("type failed {:?}", td.underlying_type());
+                Error::FailedToTranslateTypedef {
+                    usr: td.usr(),
+                    source: Box::new(e),
+                }
+            },
+        )?;
 
     typedefs.insert(
         td.usr().into(),
@@ -142,6 +144,12 @@ pub struct CTypedef {
     pub usr: USR,
     /// The underlying type that this typedef refers to
     pub underlying_type: CQualType,
+}
+
+impl CTypedef {
+    pub fn is_template(&self, c_ast: &CAST) -> bool {
+        self.underlying_type.is_template(c_ast)
+    }
 }
 
 impl std::fmt::Debug for CTypedef {

@@ -823,12 +823,21 @@ fn translate_nested_template() -> bbl_util::Result<()> {
         println!("{c_ast:?}");
 
         bbl_util::compare(
-            &format!("{ast:?}"),
+            &format!("{c_ast:?}"),
             indoc!(
                 r#"
-                Function c:@F@take_enum#$@E@Numbered#$@E@Unnumbered# take_enum rename=None ignore=false return=void args=[n: Numbered, u: Unnumbered] noexcept=None template_parameters=[] specializations=[] namespaces=[]
-                Enum Numbered c:@E@Numbered [First=1 Second=2 Third=3 ] namespaces=[]
-                Enum Unnumbered c:@E@Unnumbered [First=0 Second=1 Third=2 ] namespaces=[]
+                    CStruct c:@N@Test@S@Class Test_Class Test_Class ValueType fields=[]
+                    CStruct c:@N@std@ST>2#T#T@unique_ptr std_unique_ptr_Test_Class_ std_unique_ptr_Test_Class_ OpaquePtr fields=[]
+                    CTypedef Test_HandleTo_Test_Class_Handle Test_HandleTo_Test_Class_Handle c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_
+                    CTypedef Test_ClassHandle Test_ClassHandle c:96a54560111dec54.cpp@N@Test@S@HandleTo>#$@N@Test@S@Class@T@Handle
+                    CFunction Test_Class_create Test_Class_create([this_: c:@N@Test@S@Class*, result: c:96a54560111dec54.cpp@N@Test@T@ClassHandle*])  -> Int
+                    CFunction std_unique_ptr_Test_Class__ctor std_unique_ptr_Test_Class__ctor([result: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_**])  -> Int
+                    CFunction std_unique_ptr_Test_Class__get std_unique_ptr_Test_Class__get([this_: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_ const*, result: c:@N@Test@S@Class const**])  -> Int
+                    CFunction std_unique_ptr_Test_Class__get_mut std_unique_ptr_Test_Class__get_mut([this_: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_*, result: c:@N@Test@S@Class**])  -> Int
+                    CFunction std_unique_ptr_Test_Class__copy_ctor std_unique_ptr_Test_Class__copy_ctor([result: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_**, rhs: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_ const* const])  -> Int
+                    CFunction std_unique_ptr_Test_Class__move_ctor std_unique_ptr_Test_Class__move_ctor([result: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_**, rhs: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_ const*])  -> Int
+                    CFunction std_unique_ptr_Test_Class__dtor std_unique_ptr_Test_Class__dtor([this_: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_*])  -> Int
+                    Include { name: "memory", bracket: "<" }
                 "#
             ),
         )

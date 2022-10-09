@@ -306,6 +306,9 @@ fn write_type(source: &mut String, qt: &CQualType, c_ast: &CAST) -> Result<()> {
         CTypeRef::FunctionProto { result, args } => {
             unimplemented!("Writing function prototype")
         }
+        CTypeRef::Template(parm) => {
+            panic!("Unexpanded template {parm}")
+        }
         CTypeRef::Unknown(tk) => unimplemented!("unknown typekind in write_type: {tk}"),
     }
 

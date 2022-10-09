@@ -473,7 +473,7 @@ fn create_std_unique_ptr_tmpl(
             QualType::pointer("T *", QualType::template_parameter("T", "T", false)),
             vec![],
             Some("get_mut".to_string()),
-            method_namespaces.clone(),
+            method_namespaces,
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),

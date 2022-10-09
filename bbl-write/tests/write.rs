@@ -769,6 +769,49 @@ fn write_nested_template() -> bbl_util::Result<()> {
     })
 }
 
+
+#[test]
+fn write_template_typedef_member() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
+                namespace Test {
+                    template <class T>
+                    struct Handle {
+                        typedef T Value;
+                        typedef T* Pointer;
+
+                        Pointer get1();
+                        Value* get2();
+                    };
+
+                    class Class;
+                    typedef Handle<Class> ClassHandle;
+                    class Class {
+                    public:
+                        ClassHandle create();
+                    };
+
+                }
+            "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::new(vec![r#"^Test::.*$"#.to_string()])
+        )?;
+
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
+
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+
+        Ok(())
+    })
+}
+
 #[tracing::instrument]
 fn fun_b(arg: &str) {}
 

@@ -67,6 +67,10 @@ pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
     // Generate typedefs
     header = format!("{header}/* Typedefs */\n");
     for td in c_ast.typedefs.iter() {
+        if td.is_template(c_ast) {
+            continue;
+        }
+
         let decl = generate_typedef(td, c_ast)?;
         header = format!("{header}{decl}\n")
     }
@@ -183,6 +187,9 @@ fn gen_cast(qual_type: &CQualType, ast: &AST, c_ast: &CAST) -> Result<Option<Str
             } else {
                 Err(TypeError::TypeRefNotFound(*usr))
             }
+        }
+        CTypeRef::Template(parm) => {
+            panic!("Unexpanded template {parm}")
         }
         CTypeRef::Unknown(tk) => Err(TypeError::UnknownType(*tk)),
     }

@@ -21,11 +21,11 @@ use clang_sys::{
     clang_getCursorExceptionSpecificationType, clang_getCursorKind, clang_getCursorLocation,
     clang_getCursorPrettyPrinted, clang_getCursorPrintingPolicy, clang_getCursorReferenced,
     clang_getCursorResultType, clang_getCursorSemanticParent, clang_getCursorSpelling,
-    clang_getCursorType, clang_getCursorUSR, clang_getEnumConstantDeclValue,
-    clang_getEnumDeclIntegerType, clang_getNullCursor, clang_getSpecializedCursorTemplate,
-    clang_getTypedefDeclUnderlyingType, clang_isCursorDefinition, clang_isInvalid,
-    clang_visitChildren, CXChildVisitResult, CXChildVisit_Break, CXChildVisit_Continue,
-    CXChildVisit_Recurse, CXClientData, CXCursor, clang_getEnumConstantDeclUnsignedValue,
+    clang_getCursorType, clang_getCursorUSR, clang_getEnumConstantDeclUnsignedValue,
+    clang_getEnumConstantDeclValue, clang_getEnumDeclIntegerType, clang_getNullCursor,
+    clang_getSpecializedCursorTemplate, clang_getTypedefDeclUnderlyingType,
+    clang_isCursorDefinition, clang_isInvalid, clang_visitChildren, CXChildVisitResult,
+    CXChildVisit_Break, CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor,
 };
 use std::{
     convert::TryFrom,

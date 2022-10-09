@@ -1,11 +1,12 @@
 use std::{
-    fmt::{Write, Display},
+    fmt::{Display, Write},
     ops::{Deref, DerefMut},
 };
 
 use backtrace::Backtrace;
 use bbl_clang::{cursor::USR, ty::TypeKind};
 use bbl_extract::{
+    ast::AST,
     qualtype::{QualType, TypeRef},
     templates::{TemplateArgument, TemplateParameterDecl},
 };
@@ -25,7 +26,27 @@ pub enum CTypeRef {
         result: Box<CQualType>,
         args: Vec<CQualType>,
     },
+    Template(String),
     Unknown(TypeKind),
+}
+
+impl CTypeRef {
+    pub fn is_template(&self, c_ast: &CAST) -> bool {
+        match self {
+            CTypeRef::Template(_) => true,
+            CTypeRef::Ref(usr) => {
+                if let Some(td) = c_ast.get_typedef(*usr) {
+                    td.is_template(c_ast)
+                } else {
+                    false
+                }
+            }
+            CTypeRef::Pointer(p) => {
+                p.is_template(c_ast)
+            }
+            _ => false
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -76,6 +97,10 @@ impl CQualType {
         }
     }
 
+    pub fn is_template(&self, c_ast: &CAST) -> bool {
+        self.type_ref.is_template(c_ast)
+    }
+
     #[instrument(level = "trace", skip(ast))]
     pub fn format(&self, ast: &CAST, use_public_names: bool) -> Result<String> {
         let const_ = if self.is_const { " const" } else { "" };
@@ -108,6 +133,7 @@ impl CQualType {
                 write!(s, ")").unwrap();
                 Ok(s)
             }
+            CTypeRef::Template(parm) => Ok(format!("{parm}{const_}")),
             CTypeRef::Unknown(tk) => Ok(format!("UNKNOWN({}){const_}", tk.spelling())),
         }
     }
@@ -155,6 +181,9 @@ impl Display for CQualType {
                 }
                 write!(f, ")")
             }
+            CTypeRef::Template(parm) => {
+                write!(f, "{parm}{const_}")
+            }
             CTypeRef::Unknown(tk) => {
                 write!(f, "UNKNOWN({})", tk.spelling())
             }
@@ -180,6 +209,9 @@ impl std::fmt::Debug for CQualType {
                     write!(f, "{:?}, ", arg)?
                 }
                 write!(f, ")")
+            }
+            CTypeRef::Template(parm) => {
+                write!(f, "{parm}{const_}")
             }
             CTypeRef::Unknown(tk) => {
                 write!(f, "UNKNOWN({})", tk.spelling())
@@ -222,6 +254,7 @@ impl TypeReplacements {
 #[instrument(level = "trace")]
 pub fn translate_qual_type(
     qual_type: &QualType,
+    ast: &AST,
     template_parms: &[TemplateParameterDecl],
     template_args: &[TemplateArgument],
     type_replacements: &TypeReplacements,
@@ -238,6 +271,7 @@ pub fn translate_qual_type(
             is_const: qual_type.is_const,
             type_ref: CTypeRef::Pointer(Box::new(translate_qual_type(
                 qt.as_ref(),
+                ast,
                 template_parms,
                 template_args,
                 type_replacements,
@@ -249,6 +283,7 @@ pub fn translate_qual_type(
             is_const: qual_type.is_const,
             type_ref: CTypeRef::Pointer(Box::new(translate_qual_type(
                 qt.as_ref(),
+                ast,
                 template_parms,
                 template_args,
                 type_replacements,
@@ -260,6 +295,7 @@ pub fn translate_qual_type(
             is_const: qual_type.is_const,
             type_ref: CTypeRef::Pointer(Box::new(translate_qual_type(
                 qt.as_ref(),
+                ast,
                 template_parms,
                 template_args,
                 type_replacements,
@@ -272,50 +308,48 @@ pub fn translate_qual_type(
             type_ref: CTypeRef::Ref(type_replacements.replace(*usr)),
             cpp_type_ref: qual_type.type_ref.clone(),
         }),
-        TypeRef::TemplateTypeParameter(parm_name) => {
-            // find the parameter with the given name in the params list, then get the matching arg here
-            let parm_index = template_parms
-                .iter()
-                .position(|p| p.name() == parm_name)
-                .ok_or_else(|| Error::TemplateParmNotFound {
-                    name: parm_name.into(),
-                    backtrace: Backtrace::new(),
-                })?;
-
-            if parm_index >= template_args.len() {
-                Err(Error::TemplateArgNotFound {
-                    name: parm_name.into(),
-                    backtrace: Backtrace::new(),
-                })
+        TypeRef::Typedef(usr) => {
+            let td = ast.get_type_alias(*usr).unwrap();
+            if td.underlying_type().is_template_typedef(ast) {
+                // expand the template now
+                translate_qual_type(
+                    td.underlying_type(),
+                    ast,
+                    template_parms,
+                    template_args,
+                    type_replacements,
+                )
             } else {
-                match &template_args[parm_index] {
-                    TemplateArgument::Type(tty) => {
-                        let mut tty = tty.clone();
-                        if qual_type.is_const {
-                            tty.is_const = true;
-                        }
-                        translate_qual_type(&tty, template_parms, template_args, type_replacements)
-                    }
-                    TemplateArgument::Integral(_n) => {
-                        todo!()
-                    }
-                    _ => Err(Error::InvalidTemplateArgumentKind {
-                        name: parm_name.into(),
-                        backtrace: Backtrace::new(),
-                    }),
-                }
+                // otherwise, just make a reference to the typedef as we'll use it directly
+                Ok(CQualType {
+                    name: qual_type.name.clone(),
+                    is_const: qual_type.is_const,
+                    type_ref: CTypeRef::Ref(type_replacements.replace(*usr)),
+                    cpp_type_ref: qual_type.type_ref.clone(),
+                })
             }
         }
+        TypeRef::TemplateTypeParameter(parm_name) => expand_template(
+            qual_type,
+            ast,
+            parm_name,
+            template_parms,
+            template_args,
+            type_replacements,
+        ),
         TypeRef::FunctionProto { result, args } => {
             let c_result = translate_qual_type(
                 result.deref(),
+                ast,
                 template_parms,
                 template_args,
                 type_replacements,
             )?;
             let c_args = args
                 .iter()
-                .map(|a| translate_qual_type(a, template_parms, template_args, type_replacements))
+                .map(|a| {
+                    translate_qual_type(a, ast, template_parms, template_args, type_replacements)
+                })
                 .collect::<Result<Vec<CQualType>>>()?;
 
             Ok(CQualType {
@@ -334,6 +368,48 @@ pub fn translate_qual_type(
                 qual_type.type_ref
             );
             todo!()
+        }
+    }
+}
+
+fn expand_template(
+    qual_type: &QualType,
+    ast: &AST,
+    parm_name: &str,
+    template_parms: &[TemplateParameterDecl],
+    template_args: &[TemplateArgument],
+    type_replacements: &TypeReplacements,
+) -> Result<CQualType> {
+    // find the parameter with the given name in the params list, then get the matching arg here
+    let parm_index = template_parms
+        .iter()
+        .position(|p| p.name() == parm_name)
+        .unwrap_or(std::usize::MAX);
+
+    if parm_index >= template_args.len() {
+        // Could not find a template arg matching this parameter, store the parameter for delayed application
+        Ok(CQualType {
+            name: qual_type.name.clone(),
+            is_const: qual_type.is_const,
+            type_ref: CTypeRef::Template(parm_name.to_string()),
+            cpp_type_ref: qual_type.type_ref.clone(),
+        })
+    } else {
+        match &template_args[parm_index] {
+            TemplateArgument::Type(tty) => {
+                let mut tty = tty.clone();
+                if qual_type.is_const {
+                    tty.is_const = true;
+                }
+                translate_qual_type(&tty, ast, template_parms, template_args, type_replacements)
+            }
+            TemplateArgument::Integral(_n) => {
+                todo!()
+            }
+            _ => Err(Error::InvalidTemplateArgumentKind {
+                name: parm_name.into(),
+                backtrace: Backtrace::new(),
+            }),
         }
     }
 }
