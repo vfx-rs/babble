@@ -145,7 +145,7 @@ fn write_typedef_external(source: &mut String, td: &CTypedef) -> Result<()> {
 fn write_typedef_internal(source: &mut String, td: &CTypedef, c_ast: &CAST) -> Result<()> {
     if let CTypeRef::Pointer(p) = td.underlying_type.type_ref() {
         if let CTypeRef::FunctionProto { result, args } = p.type_ref() {
-            write!(source, "pub type {} = fn(", td.name_external)?;
+            write!(source, "pub type {} = extern fn(", td.name_external)?;
 
             let mut first = true;
             for arg in args {
