@@ -497,7 +497,9 @@ fn generate_implicit_methods(class: &ClassDecl) -> Vec<Method> {
         ));
     }
 
-    if class.needs_implicit_dtor() {
+    // We only insert a destructor if the class is not a ValueType - if it needs a destructor it won't be a POD
+    // TODO(AL): revisit this - if we force a value type we should probably allow calling the destructor directly?
+    if class.needs_implicit_dtor() && *class.bind_kind() == ClassBindKind::OpaquePtr {
         let mut namespaces = class.namespaces().to_vec();
         namespaces.push(class.usr());
         implicit_methods.push(Method::new(

@@ -369,52 +369,58 @@ T function_template(T&& a, float*);
 }
 
 #[test]
-fn bind_method_template() -> Result<(), Error> {
-    common::init_log();
+fn translate_method_template() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
+    namespace Test {
+    class Class {
+    public:
+        template <typename T>
+        T method_template(T&& a, float*);
+    };
+    }
+            "#,
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+        )?;
 
-    let mut ast = parse_string_and_extract_ast(
-        r#"
-namespace Test {
-class Class {
-public:
-    template <typename T>
-    T method_template(T&& a, float*);
-};
-}
-        "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-    )?;
+        let class = ast.find_class("Class")?;
+        let method = ast.find_method(class, "method_template")?;
+        ast.specialize_method(
+            class,
+            method,
+            "method_float",
+            vec![TemplateArgument::Type(QualType::float())],
+        )?;
 
-    println!("{ast:?}");
-    let class = ast.find_class("Class")?;
-    let method = ast.find_method(class, "method_template")?;
-    ast.specialize_method(
-        class,
-        method,
-        "method_float",
-        vec![TemplateArgument::Type(QualType::float())],
-    )?;
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
 
-    println!("{ast:?}");
+        bbl_util::compare(
+            &format!("{c_ast:?}"),
+            indoc!(
+                r#"
+            CStruct c:@N@Test@S@Class Test_Class Test_Class ValueType fields=[]
+            CFunction Test_Class_ctor Test_Class_ctor([result: c:@N@Test@S@Class*])  -> Int
+            CFunction Test_Class_copy_ctor Test_Class_copy_ctor([result: c:@N@Test@S@Class*, rhs: c:@N@Test@S@Class const* const])  -> Int
+            CFunction Test_Class_move_ctor Test_Class_move_ctor([result: c:@N@Test@S@Class*, rhs: c:@N@Test@S@Class const*])  -> Int
+            CFunction Test_Class_method_float Test_Class_method_float([this_: c:@N@Test@S@Class*, result: Float*, a: Float*, arg: Float*])  -> Int
+        "#
+            ),
+        )?;
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0)?;
-
-    assert_eq!(c_ast.structs.len(), 1);
-    assert_eq!(c_ast.functions.len(), 1);
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn bind_method_template_ret() -> Result<(), Error> {
-    common::init_log();
-
-    let mut ast = parse_string_and_extract_ast(
-        r#"
+fn translate_method_template_ret() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
 namespace Test {
 class Class {
 public:
@@ -423,44 +429,47 @@ public:
 };
 }
         "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+        )?;
 
-    let class = ast.find_class("Class")?;
-    let method = ast.find_method(class, "method_template")?;
-    ast.specialize_method(
-        class,
-        method,
-        "method_float",
-        vec![TemplateArgument::Type(QualType::float())],
-    )?;
+        let class = ast.find_class("Class")?;
+        let method = ast.find_method(class, "method_template")?;
+        ast.specialize_method(
+            class,
+            method,
+            "method_float",
+            vec![TemplateArgument::Type(QualType::float())],
+        )?;
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
 
-    println!("{c_ast:?}");
+        println!("{c_ast:?}");
 
-    assert_eq!(
-        format!("{c_ast:?}"),
-        indoc!(
-            r#"
-            CStruct c:@N@Test@S@Class Test_Class Test_Class ValueType fields=[]
-            CFunction Test_Class_method_float Test_Class_method_float([this_: c:@N@Test@S@Class*, result: Float const**, arg: Float const*])  -> Int
-            "#
-        )
-    );
+        bbl_util::compare(
+            &format!("{c_ast:?}"),
+            indoc!(
+                r#"
+        CStruct c:@N@Test@S@Class Test_Class Test_Class ValueType fields=[]
+        CFunction Test_Class_ctor Test_Class_ctor([result: c:@N@Test@S@Class*])  -> Int
+        CFunction Test_Class_copy_ctor Test_Class_copy_ctor([result: c:@N@Test@S@Class*, rhs: c:@N@Test@S@Class const* const])  -> Int
+        CFunction Test_Class_move_ctor Test_Class_move_ctor([result: c:@N@Test@S@Class*, rhs: c:@N@Test@S@Class const*])  -> Int
+        CFunction Test_Class_method_float Test_Class_method_float([this_: c:@N@Test@S@Class*, result: Float const**, arg: Float const*])  -> Int
+    "#
+            ),
+        )?;
 
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn bind_templated_ctor() -> Result<(), Error> {
-    common::init_log();
-
-    let mut ast = parse_string_and_extract_ast(
-        r#"
+fn translate_templated_ctor() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
 namespace Test {
 class Class {
 public:
@@ -469,43 +478,36 @@ public:
 };
 }
         "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+        )?;
 
-    let class = ast.find_class("Class")?;
-    let method = ast.find_method(class, "Class(const T &)")?;
-    ast.specialize_method(
-        class,
-        method,
-        "ctor_float",
-        vec![TemplateArgument::Type(QualType::float())],
-    )?;
+        let class = ast.find_class("Class")?;
+        let method = ast.find_method(class, "Class(const T &)")?;
+        ast.specialize_method(
+            class,
+            method,
+            "ctor_float",
+            vec![TemplateArgument::Type(QualType::float())],
+        )?;
 
-    println!("{ast:?}");
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
+        bbl_util::compare(
+            &format!("{c_ast:?}"),
+            indoc!(
+                r#"
+        CStruct c:@N@Test@S@Class Test_Class Test_Class OpaquePtr fields=[]
+        CFunction Test_Class_dtor Test_Class_dtor([this_: c:@N@Test@S@Class*])  -> Int
+        CFunction Test_Class_ctor_float Test_Class_ctor_float([result: c:@N@Test@S@Class**, arg: Float const*])  -> Int
+    "#
+            ),
+        )?;
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
-    println!("{c_ast:?}");
-    assert_eq!(
-        format!("{c_ast:?}"),
-        indoc!(
-            r#"
-            CStruct c:@N@Test@S@Class Test_Class Test_Class OpaquePtr fields=[]
-            CFunction Test_Class_ctor Test_Class_ctor([result: c:@N@Test@S@Class**])  -> Int
-            CFunction Test_Class_copy_ctor Test_Class_copy_ctor([result: c:@N@Test@S@Class**, rhs: c:@N@Test@S@Class const* const])  -> Int
-            CFunction Test_Class_move_ctor Test_Class_move_ctor([result: c:@N@Test@S@Class**, rhs: c:@N@Test@S@Class const*])  -> Int
-            CFunction Test_Class_dtor Test_Class_dtor([this_: c:@N@Test@S@Class*])  -> Int
-            CFunction Test_Class_ctor_float Test_Class_ctor_float([result: c:@N@Test@S@Class**, arg: Float const*])  -> Int
-        "#
-        )
-    );
-
-    assert_eq!(c_ast.structs.len(), 1);
-    assert_eq!(c_ast.functions.len(), 5);
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
@@ -544,10 +546,8 @@ public:
 }
 
 #[test]
-fn take_std_string() -> Result<(), Error> {
-    common::init_log();
-
-    let clo = || -> Result<(), Error> {
+fn translate_take_std_string() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
         let ast = parse_string_and_extract_ast(
             r#"
 #include <string>
@@ -565,24 +565,27 @@ public:
             &AllowList::default(),
         )?;
 
-        println!("{ast:?}");
-
         let c_ast = translate_cpp_ast_to_c(&ast)?;
-        println!("{c_ast:?}");
 
-        assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 7);
+        println!("{c_ast:?}");
+        bbl_util::compare(&format!("{c_ast:?}"), indoc!(r#"
+            CStruct c:@N@std@N@__cxx11@S@basic_string>#C#$@N@std@S@char_traits>#C#$@N@std@S@allocator>#C std_string std_string OpaquePtr fields=[]
+            CStruct c:@N@Test@S@Class Test_Class Test_Class ValueType fields=[]
+            CTypedef std_string std_string c:@N@std@N@__cxx11@S@basic_string>#C#$@N@std@S@char_traits>#C#$@N@std@S@allocator>#C
+            CFunction std_string_ctor std_string_ctor([result: c:@N@std@N@__cxx11@S@basic_string>#C#$@N@std@S@char_traits>#C#$@N@std@S@allocator>#C**])  -> Int
+            CFunction std_string_from_char_ptr std_string_from_char_ptr([result: c:@N@std@N@__cxx11@S@basic_string>#C#$@N@std@S@char_traits>#C#$@N@std@S@allocator>#C**, char_ptr: Char_S const*])  -> Int
+            CFunction std_string_dtor std_string_dtor([this_: c:@N@std@N@__cxx11@S@basic_string>#C#$@N@std@S@char_traits>#C#$@N@std@S@allocator>#C*])  -> Int
+            CFunction std_string_copy_ctor std_string_copy_ctor([result: c:@N@std@N@__cxx11@S@basic_string>#C#$@N@std@S@char_traits>#C#$@N@std@S@allocator>#C**, other: c:@N@std@N@__cxx11@S@basic_string>#C#$@N@std@S@char_traits>#C#$@N@std@S@allocator>#C const* const])  -> Int
+            CFunction std_string_move_ctor std_string_move_ctor([result: c:@N@std@N@__cxx11@S@basic_string>#C#$@N@std@S@char_traits>#C#$@N@std@S@allocator>#C**, other: c:@N@std@N@__cxx11@S@basic_string>#C#$@N@std@S@char_traits>#C#$@N@std@S@allocator>#C*])  -> Int
+            CFunction std_string_c_str std_string_c_str([this_: c:@N@std@N@__cxx11@S@basic_string>#C#$@N@std@S@char_traits>#C#$@N@std@S@allocator>#C const*, result: Char_S const**])  -> Int
+            CFunction Test_Class_take_string Test_Class_take_string([this_: c:@N@Test@S@Class*, result: c:@N@std@T@string*, s: c:@N@std@T@string const*])  -> Int
+            CFunction Test_Class_ctor Test_Class_ctor([result: c:@N@Test@S@Class*])  -> Int
+            CFunction Test_Class_copy_ctor Test_Class_copy_ctor([result: c:@N@Test@S@Class*, rhs: c:@N@Test@S@Class const* const])  -> Int
+            CFunction Test_Class_move_ctor Test_Class_move_ctor([result: c:@N@Test@S@Class*, rhs: c:@N@Test@S@Class const*])  -> Int
+            Include { name: "string", bracket: "<" }
+        "#))?;
 
         Ok(())
-    };
-
-    clo().map_err(|err| {
-        error!("{err}");
-        for e in source_iter(&err) {
-            error!("  because: {e}")
-        }
-
-        err
     })
 }
 
@@ -636,12 +639,11 @@ fn translate_enum() -> Result<(), Error> {
 }
 
 #[test]
-fn translate_vector() -> Result<(), Error> {
-    common::init_log();
-
-    let mut ast = parse_string_and_extract_ast(
-        indoc!(
-            r#"
+fn translate_vector() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
             #include <vector>
 
             namespace Test_1_0 {
@@ -653,24 +655,24 @@ fn translate_vector() -> Result<(), Error> {
             typedef std::vector<Class> ClassVector;
             }
             "#
-        ),
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::new(vec!["^Test_1_0".to_string()]),
-    )?;
+            ),
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::new(vec!["^Test_1_0".to_string()]),
+        )?;
 
-    let ns = ast.find_namespace("Test_1_0")?;
-    ast.rename_namespace(ns, "Test");
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
-    println!("{c_ast:?}");
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
 
-    assert_eq!(
-        format!("{c_ast:?}"),
-        indoc!(
-            r#"
-            CStruct c:@N@Test_1_0@S@Class Test_1_0_Class Test_Class OpaquePtr fields=[c: Float]
+        bbl_util::compare(
+            &format!("{c_ast:?}"),
+            indoc!(
+                r#"
+            CStruct c:@N@Test_1_0@S@Class Test_1_0_Class Test_Class OpaquePtr fields=[]
             CStruct c:@N@std@ST>2#T#T@vector std_vector_Test_1_0_Class_ std_vector_Test_1_0_Class_ OpaquePtr fields=[]
             CTypedef Test_1_0_ClassVector Test_ClassVector c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_
             CFunction Test_1_0_Class_ctor Test_Class_ctor([result: c:@N@Test_1_0@S@Class**])  -> Int
@@ -687,19 +689,19 @@ fn translate_vector() -> Result<(), Error> {
             CFunction std_vector_Test_1_0_Class__dtor std_vector_Test_1_0_Class__dtor([this_: c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_*])  -> Int
             Include { name: "vector", bracket: "<" }
             "#
-        )
-    );
+            ),
+        )?;
 
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn translate_unique_ptr() -> Result<(), Error> {
-    common::init_log();
-
-    let mut ast = parse_string_and_extract_ast(
-        indoc!(
-            r#"
+fn translate_unique_ptr() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
             #include <memory>
 
             namespace Test_1_0 {
@@ -711,24 +713,21 @@ fn translate_unique_ptr() -> Result<(), Error> {
             typedef std::unique_ptr<Class> ClassPtr;
             }
             "#
-        ),
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::new(vec!["^Test_1_0".to_string()]),
-    )?;
+            ),
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::new(vec!["^Test_1_0".to_string()]),
+        )?;
 
-    let ns = ast.find_namespace("Test_1_0")?;
-    ast.rename_namespace(ns, "Test");
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
 
-    println!("{c_ast:?}");
-    assert_eq!(
-        format!("{c_ast:?}"),
-        indoc!(
-            r#"
-            CStruct c:@N@Test_1_0@S@Class Test_1_0_Class Test_Class OpaquePtr fields=[c: Float]
+        println!("{c_ast:?}");
+        bbl_util::compare(&format!("{c_ast:?}"), indoc!(r#"
+            CStruct c:@N@Test_1_0@S@Class Test_1_0_Class Test_Class OpaquePtr fields=[]
             CStruct c:@N@std@ST>2#T#T@unique_ptr std_unique_ptr_Test_1_0_Class_ std_unique_ptr_Test_1_0_Class_ OpaquePtr fields=[]
             CTypedef Test_1_0_ClassPtr Test_ClassPtr c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_
             CFunction Test_1_0_Class_ctor Test_Class_ctor([result: c:@N@Test_1_0@S@Class**])  -> Int
@@ -738,15 +737,12 @@ fn translate_unique_ptr() -> Result<(), Error> {
             CFunction std_unique_ptr_Test_1_0_Class__ctor std_unique_ptr_Test_1_0_Class__ctor([result: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_**])  -> Int
             CFunction std_unique_ptr_Test_1_0_Class__get std_unique_ptr_Test_1_0_Class__get([this_: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_ const*, result: c:@N@Test_1_0@S@Class const**])  -> Int
             CFunction std_unique_ptr_Test_1_0_Class__get_mut std_unique_ptr_Test_1_0_Class__get_mut([this_: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_*, result: c:@N@Test_1_0@S@Class**])  -> Int
-            CFunction std_unique_ptr_Test_1_0_Class__copy_ctor std_unique_ptr_Test_1_0_Class__copy_ctor([result: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_**, rhs: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_ const* const])  -> Int
-            CFunction std_unique_ptr_Test_1_0_Class__move_ctor std_unique_ptr_Test_1_0_Class__move_ctor([result: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_**, rhs: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_ const*])  -> Int
             CFunction std_unique_ptr_Test_1_0_Class__dtor std_unique_ptr_Test_1_0_Class__dtor([this_: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_*])  -> Int
             Include { name: "memory", bracket: "<" }
-            "#
-        )
-    );
+        "#))?;
 
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
@@ -784,7 +780,7 @@ fn translate_std_function() -> Result<(), bbl_util::Error> {
                 CFunction Test_1_0_take_function Test_take_function([predicate: c:@N@Test_1_0@PropertyPredicateFunc const])  -> Int
                 Include { name: "functional", bracket: "<" }
             "#
-            )
+            ),
         )
     })
 }
@@ -816,31 +812,27 @@ fn translate_nested_template() -> bbl_util::Result<()> {
             &cli_args()?,
             true,
             None,
-            &AllowList::new(vec![r#"^Test::.*$"#.to_string()])
+            &AllowList::new(vec![r#"^Test::.*$"#.to_string()]),
         )?;
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
-        bbl_util::compare(
-            &format!("{c_ast:?}"),
-            indoc!(
-                r#"
-                    CStruct c:@N@Test@S@Class Test_Class Test_Class ValueType fields=[]
-                    CStruct c:@N@std@ST>2#T#T@unique_ptr std_unique_ptr_Test_Class_ std_unique_ptr_Test_Class_ OpaquePtr fields=[]
-                    CTypedef Test_HandleTo_Test_Class_Handle Test_HandleTo_Test_Class_Handle c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_
-                    CTypedef Test_ClassHandle Test_ClassHandle c:96a54560111dec54.cpp@N@Test@S@HandleTo>#$@N@Test@S@Class@T@Handle
-                    CFunction Test_Class_create Test_Class_create([this_: c:@N@Test@S@Class*, result: c:96a54560111dec54.cpp@N@Test@T@ClassHandle*])  -> Int
-                    CFunction std_unique_ptr_Test_Class__ctor std_unique_ptr_Test_Class__ctor([result: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_**])  -> Int
-                    CFunction std_unique_ptr_Test_Class__get std_unique_ptr_Test_Class__get([this_: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_ const*, result: c:@N@Test@S@Class const**])  -> Int
-                    CFunction std_unique_ptr_Test_Class__get_mut std_unique_ptr_Test_Class__get_mut([this_: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_*, result: c:@N@Test@S@Class**])  -> Int
-                    CFunction std_unique_ptr_Test_Class__copy_ctor std_unique_ptr_Test_Class__copy_ctor([result: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_**, rhs: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_ const* const])  -> Int
-                    CFunction std_unique_ptr_Test_Class__move_ctor std_unique_ptr_Test_Class__move_ctor([result: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_**, rhs: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_ const*])  -> Int
-                    CFunction std_unique_ptr_Test_Class__dtor std_unique_ptr_Test_Class__dtor([this_: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_*])  -> Int
-                    Include { name: "memory", bracket: "<" }
-                "#
-            ),
-        )
+        bbl_util::compare(&format!("{c_ast:?}"), indoc!(r#"
+            CStruct c:@N@Test@S@Class Test_Class Test_Class ValueType fields=[]
+            CStruct c:@N@std@ST>2#T#T@unique_ptr std_unique_ptr_Test_Class_ std_unique_ptr_Test_Class_ OpaquePtr fields=[]
+            CTypedef Test_HandleTo_Test_Class_Handle Test_HandleTo_Test_Class_Handle c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_
+            CTypedef Test_ClassHandle Test_ClassHandle c:96a54560111dec54.cpp@N@Test@S@HandleTo>#$@N@Test@S@Class@T@Handle
+            CFunction Test_Class_create Test_Class_create([this_: c:@N@Test@S@Class*, result: c:96a54560111dec54.cpp@N@Test@T@ClassHandle*])  -> Int
+            CFunction Test_Class_ctor Test_Class_ctor([result: c:@N@Test@S@Class*])  -> Int
+            CFunction Test_Class_copy_ctor Test_Class_copy_ctor([result: c:@N@Test@S@Class*, rhs: c:@N@Test@S@Class const* const])  -> Int
+            CFunction Test_Class_move_ctor Test_Class_move_ctor([result: c:@N@Test@S@Class*, rhs: c:@N@Test@S@Class const*])  -> Int
+            CFunction std_unique_ptr_Test_Class__ctor std_unique_ptr_Test_Class__ctor([result: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_**])  -> Int
+            CFunction std_unique_ptr_Test_Class__get std_unique_ptr_Test_Class__get([this_: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_ const*, result: c:@N@Test@S@Class const**])  -> Int
+            CFunction std_unique_ptr_Test_Class__get_mut std_unique_ptr_Test_Class__get_mut([this_: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_*, result: c:@N@Test@S@Class**])  -> Int
+            CFunction std_unique_ptr_Test_Class__dtor std_unique_ptr_Test_Class__dtor([this_: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_*])  -> Int
+            Include { name: "memory", bracket: "<" }
+        "#))
     })
 }
 

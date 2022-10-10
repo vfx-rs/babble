@@ -25,7 +25,7 @@ use clang_sys::{
     clang_getEnumConstantDeclValue, clang_getEnumDeclIntegerType, clang_getNullCursor,
     clang_getSpecializedCursorTemplate, clang_getTypedefDeclUnderlyingType,
     clang_isCursorDefinition, clang_isInvalid, clang_visitChildren, CXChildVisitResult,
-    CXChildVisit_Break, CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor,
+    CXChildVisit_Break, CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor, clang_CXXRecord_needsImplicitDefaultConstructor, clang_CXXRecord_needsImplicitCopyAssignment, clang_CXXRecord_needsImplicitDestructor, clang_CXXRecord_needsImplicitMoveAssignment, clang_CXXRecord_needsImplicitMoveConstructor, clang_CXXRecord_needsImplicitCopyConstructor,
 };
 use std::{
     convert::TryFrom,
@@ -371,6 +371,30 @@ impl Cursor {
     pub fn enum_decl_integer_type(&self) -> Result<Type> {
         unsafe { to_type(clang_getEnumDeclIntegerType(self.inner)) }
     }
+
+    pub fn cxxrecord_needs_implicit_default_constructor(&self) -> bool {
+        unsafe { clang_CXXRecord_needsImplicitDefaultConstructor(self.inner) != 0 }
+    }
+
+    pub fn cxxrecord_needs_implicit_copy_constructor(&self) -> bool {
+        unsafe { clang_CXXRecord_needsImplicitCopyConstructor(self.inner) != 0 }
+    }
+
+    pub fn cxxrecord_needs_implicit_move_constructor(&self) -> bool {
+        unsafe { clang_CXXRecord_needsImplicitMoveConstructor(self.inner) != 0 }
+    }
+
+    pub fn cxxrecord_needs_implicit_copy_assignment(&self) -> bool {
+        unsafe { clang_CXXRecord_needsImplicitCopyAssignment(self.inner) != 0 }
+    }
+
+    pub fn cxxrecord_needs_implicit_move_assignment(&self) -> bool {
+        unsafe { clang_CXXRecord_needsImplicitMoveAssignment(self.inner) != 0 }
+    }
+
+    pub fn cxxrecord_needs_implicit_destructor(&self) -> bool {
+        unsafe { clang_CXXRecord_needsImplicitDestructor(self.inner) != 0 }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -514,7 +538,9 @@ impl Deref for CurClassTemplate {
 impl TryFrom<Cursor> for CurClassTemplate {
     type Error = Error;
     fn try_from(c: Cursor) -> Result<Self, Self::Error> {
-        if c.kind() == CursorKind::ClassTemplate {
+        if c.kind() == CursorKind::ClassTemplate
+            || c.kind() == CursorKind::ClassTemplatePartialSpecialization
+        {
             Ok(CurClassTemplate(c))
         } else {
             Err(Error::FailedToConvertCursorKind {

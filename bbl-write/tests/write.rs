@@ -42,7 +42,7 @@ public:
     c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 1);
-    assert_eq!(c_ast.functions.len(), 2);
+    assert_eq!(c_ast.functions.len(), 5);
 
     let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
@@ -82,7 +82,7 @@ public:
     c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 1);
-    assert_eq!(c_ast.functions.len(), 0);
+    assert_eq!(c_ast.functions.len(), 3);
 
     let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
@@ -121,7 +121,7 @@ void fun(Class c);
     c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 1);
-    assert_eq!(c_ast.functions.len(), 1);
+    assert_eq!(c_ast.functions.len(), 4);
 
     let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
@@ -198,7 +198,7 @@ public:
     c_ast.pretty_print(0)?;
 
     assert_eq!(c_ast.structs.len(), 2);
-    assert_eq!(c_ast.functions.len(), 0);
+    assert_eq!(c_ast.functions.len(), 6);
 
     let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
@@ -330,7 +330,7 @@ fn take_std_string_by_value() -> Result<(), Error> {
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 7);
+        assert_eq!(c_ast.functions.len(), 10);
 
         let (c_header, c_source) = gen_c("test", &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
@@ -374,7 +374,7 @@ fn write_take_std_string() -> Result<(), Error> {
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 16);
+        assert_eq!(c_ast.functions.len(), 14);
 
         let (c_header, c_source) = gen_c("test", &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
@@ -561,10 +561,10 @@ fn build_take_std_string() -> bbl_util::Result<()> {
         ast.rename_namespace(ns, "Test");
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;
-        c_ast.pretty_print(0)?;
+        println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 2);
-        assert_eq!(c_ast.functions.len(), 8);
+        assert_eq!(c_ast.functions.len(), 11);
 
         let (c_header, c_source) = gen_c("test", &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");

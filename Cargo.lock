@@ -255,7 +255,6 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "clang-sys"
 version = "1.4.0"
-source = "git+https://github.com/anderslanglands/clang-sys.git#4e4e8504dcc4518c42bc6f23d3f9a1b2e8de2cdb"
 dependencies = [
  "glob",
  "libc",
