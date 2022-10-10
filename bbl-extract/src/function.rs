@@ -1010,7 +1010,7 @@ mod tests {
                 indoc!(
                     r#"
                     Namespace c:@S@Class Class None
-                    ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
                     Field a: int
                     Field b: float
                     Method StaticMethod deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#f#S static_method rename=None ignore=false return=float args=[b: float] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
@@ -1055,7 +1055,7 @@ mod tests {
                 indoc!(
                     r#"
                     Namespace c:@S@Class Class None
-                    ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false rof=[] needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
                     Field a: int
                     Field b: float
                     Method StaticMethod deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#$@S@Class#S static_method rename=None ignore=false return=float args=[c: Class] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]

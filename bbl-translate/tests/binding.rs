@@ -12,7 +12,6 @@ use bbl_translate::error::Error;
 
 use bbl_translate::translate_cpp_ast_to_c;
 use indoc::indoc;
-use log::error;
 
 #[test]
 fn test_binding_rename() -> Result<(), Error> {
@@ -834,26 +833,4 @@ fn translate_nested_template() -> bbl_util::Result<()> {
             Include { name: "memory", bracket: "<" }
         "#))
     })
-}
-
-struct SourceIter<'a> {
-    current: Option<&'a (dyn std::error::Error + 'static)>,
-}
-
-impl<'a> Iterator for SourceIter<'a> {
-    type Item = &'a (dyn std::error::Error + 'static);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let current = self.current;
-        self.current = self.current.and_then(std::error::Error::source);
-        current
-    }
-}
-
-fn source_iter(
-    error: &impl std::error::Error,
-) -> impl Iterator<Item = &(dyn std::error::Error + 'static)> {
-    SourceIter {
-        current: error.source(),
-    }
 }

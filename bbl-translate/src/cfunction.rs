@@ -1,4 +1,4 @@
-use std::{fmt::Display, borrow::Cow};
+use std::fmt::Display;
 
 use backtrace::Backtrace;
 use bbl_clang::{cursor::USR, ty::TypeKind};
@@ -16,7 +16,7 @@ use tracing::{error, instrument, trace};
 use crate::{
     build_namespace_prefix,
     ctype::{translate_qual_type, CQualType, CTypeRef, TypeReplacements},
-    get_c_names, CAST, sanitize_name,
+    get_c_names, sanitize_name, CAST,
 };
 
 use crate::error::Error;
@@ -270,7 +270,7 @@ pub fn translate_arguments(
             used_template_parameters.push(parm.to_string());
         }
 
-        let mut qual_type = translate_qual_type(
+        let qual_type = translate_qual_type(
             arg.qual_type(),
             ast,
             template_parms,
@@ -507,7 +507,11 @@ pub fn translate_function(
                 }
             }
             CTypeRef::Template(parm) => {
-                panic!("Unexpanded template parameter {parm} on {} {}", function.name(), arg.name)
+                panic!(
+                    "Unexpanded template parameter {parm} on {} {}",
+                    function.name(),
+                    arg.name
+                )
             }
             CTypeRef::Unknown(tk) => {
                 panic!("unknown type {tk} when converting argument {}", arg.name);
@@ -638,7 +642,10 @@ pub fn translate_function(
                 )
             }
             CTypeRef::Template(parm) => {
-                panic!("Unexpanded template parameter {parm} on {} result", function.name())
+                panic!(
+                    "Unexpanded template parameter {parm} on {} result",
+                    function.name()
+                )
             }
             CTypeRef::Unknown(tk) => {
                 panic!("Unkown type {tk} while converting result")
@@ -758,7 +765,7 @@ pub fn translate_method(
     // get the return type
     let result = translate_qual_type(
         method.result(),
-                ast,
+        ast,
         &template_parms,
         template_args,
         type_replacements,
@@ -937,7 +944,12 @@ pub fn translate_method(
                 }
             }
             CTypeRef::Template(parm) => {
-                panic!("Unexpanded template parameter {parm} on {}::{} arg {}", class.name(), method.name(), arg.name)
+                panic!(
+                    "Unexpanded template parameter {parm} on {}::{} arg {}",
+                    class.name(),
+                    method.name(),
+                    arg.name
+                )
             }
             CTypeRef::Unknown(tk) => {
                 panic!("unknown type {tk} when converting argument {}", arg.name);
@@ -1068,7 +1080,11 @@ pub fn translate_method(
                 )
             }
             CTypeRef::Template(parm) => {
-                panic!("Unexpanded template parameter {parm} on {}::{} result", class.name(), method.name())
+                panic!(
+                    "Unexpanded template parameter {parm} on {}::{} result",
+                    class.name(),
+                    method.name()
+                )
             }
             CTypeRef::Unknown(tk) => {
                 panic!("Unkown type {tk} while converting result")
@@ -1354,7 +1370,7 @@ pub fn translate_function_proto(
     let args = proto
         .args()
         .iter()
-        .map(|a| translate_qual_type(a, ast,  &[], &[], &TypeReplacements::default()))
+        .map(|a| translate_qual_type(a, ast, &[], &[], &TypeReplacements::default()))
         .collect::<Result<Vec<_>>>()?;
 
     function_protos.insert(

@@ -12,7 +12,7 @@ use bbl_extract::{
 };
 use tracing::{error, instrument};
 
-use crate::error::{Error, TranslateTypeError};
+use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 use crate::CAST;
@@ -41,10 +41,8 @@ impl CTypeRef {
                     false
                 }
             }
-            CTypeRef::Pointer(p) => {
-                p.is_template(c_ast)
-            }
-            _ => false
+            CTypeRef::Pointer(p) => p.is_template(c_ast),
+            _ => false,
         }
     }
 }

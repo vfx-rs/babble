@@ -152,13 +152,13 @@ mod tests {
                 indoc!(
                     r#"
                     Namespace c:@ST>2#T#NI@shared_ptr shared_ptr<T, N> None
-                    ClassDecl c:@ST>2#T#NI@shared_ptr shared_ptr rename=None OpaquePtr is_pod=false ignore=false rof=[] needs=[] template_parameters=[Type(T), Int(N=4)] specializations=[] namespaces=[]
+                    ClassDecl c:@ST>2#T#NI@shared_ptr shared_ptr rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[Type(T), Int(N=4)] specializations=[] namespaces=[]
                     Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get# get rename=None ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
 
-                    ClassDecl c:@S@A A rename=None OpaquePtr is_pod=false ignore=false rof=[] needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@A A rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
 
-                    ClassDecl c:@S@B B rename=None OpaquePtr is_pod=false ignore=false rof=[] needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@B B rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
 
                     TypeAlias APtr = shared_ptr<A>
                     TypeAlias BPtr = shared_ptr<B>
@@ -198,7 +198,7 @@ mod tests {
                 &format!("{ast:?}"),
                 indoc!(
                     r#"
-                    ClassDecl c:@S@Class_ Class_ rename=None OpaquePtr is_pod=false ignore=false rof=[] needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@Class_ Class_ rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
 
                     Function c:@F@take_class#&1$@S@Class_# take_class rename=None ignore=false return=void args=[c: Class &] noexcept=None template_parameters=[] specializations=[] namespaces=[]
                     TypeAlias Class = Class_ const

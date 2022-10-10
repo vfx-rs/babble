@@ -434,7 +434,7 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<St
                 format!("{}{const_}", td.name_external)
             } else if let Some(enm) = c_ast.get_enum(*usr) {
                 format!("{}{const_}", enm.name_external)
-            } else if let Some(proto) = c_ast.get_function_proto(*usr) {
+            } else if let Some(_proto) = c_ast.get_function_proto(*usr) {
                 // we should never get here as we need to handle function pointers explicitly at the typedef level
                 unreachable!()
             } else {

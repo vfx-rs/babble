@@ -1,11 +1,12 @@
 use bbl_clang::ty::TypeKind;
 use bbl_extract::class::ClassBindKind;
 use bbl_translate::{
+    cenum::CEnum,
     cfunction::CFunction,
     cstruct::CStruct,
     ctype::{CQualType, CTypeRef},
     ctypedef::CTypedef,
-    CAST, cenum::CEnum,
+    CAST,
 };
 
 use crate::error::Error;
@@ -108,7 +109,11 @@ pub fn write_rust_ffi(source: &mut String, c_ast: &CAST) -> Result<()> {
 }
 
 fn write_enum_external(source: &mut String, enm: &CEnum) -> Result<()> {
-    writeln!(source, "pub use internal::{} as {};", enm.name_internal, enm.name_external)?;
+    writeln!(
+        source,
+        "pub use internal::{} as {};",
+        enm.name_internal, enm.name_external
+    )?;
     Ok(())
 }
 
@@ -125,7 +130,7 @@ fn write_enum_internal(source: &mut String, enm: &CEnum) -> Result<()> {
 
 fn write_typedef_external(source: &mut String, td: &CTypedef) -> Result<()> {
     if let CTypeRef::Pointer(p) = td.underlying_type.type_ref() {
-        if let CTypeRef::FunctionProto {..} = p.type_ref() {
+        if let CTypeRef::FunctionProto { .. } = p.type_ref() {
             write!(
                 source,
                 "pub use internal::{} as {};",
@@ -303,7 +308,7 @@ fn write_type(source: &mut String, qt: &CQualType, c_ast: &CAST) -> Result<()> {
                 unimplemented!("no struct or typedef {usr}")
             }
         }
-        CTypeRef::FunctionProto { result, args } => {
+        CTypeRef::FunctionProto { .. } => {
             unimplemented!("Writing function prototype")
         }
         CTypeRef::Template(parm) => {

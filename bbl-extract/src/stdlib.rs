@@ -8,7 +8,7 @@ use bbl_clang::{
 
 use crate::{
     ast::{get_namespaces_for_decl, AST},
-    class::{ClassDecl, MethodState, RuleOfFive, NeedsImplicit},
+    class::{ClassDecl, NeedsImplicit},
     function::{Argument, Const, PureVirtual, Static, Virtual},
     function::{Deleted, FunctionProto, Method, MethodKind},
     namespace,
@@ -172,14 +172,6 @@ pub fn create_std_string(
         // vec![TemplateParameterDecl::typ("_CharT", 0)],
         vec![],
         false,
-        RuleOfFive {
-            ctor: MethodState::Defined(AccessSpecifier::Public),
-            copy_ctor: MethodState::Defined(AccessSpecifier::Public),
-            move_ctor: MethodState::Defined(AccessSpecifier::Public),
-            copy_assign: MethodState::Undefined,
-            move_assign: MethodState::Undefined,
-            dtor: MethodState::Defined(AccessSpecifier::Public),
-        },
         NeedsImplicit::default(),
     );
 
@@ -353,14 +345,6 @@ fn create_std_vector_tmpl(
         vec![u_std],
         vec![TemplateParameterDecl::typ("T", 0)],
         false,
-        RuleOfFive {
-            ctor: MethodState::Defined(AccessSpecifier::Public),
-            copy_ctor: MethodState::Undefined,
-            move_ctor: MethodState::Undefined,
-            copy_assign: MethodState::Undefined,
-            move_assign: MethodState::Undefined,
-            dtor: MethodState::Undefined,
-        },
         NeedsImplicit {
             copy_ctor: true,
             move_ctor: true,
@@ -499,14 +483,6 @@ fn create_std_unique_ptr_tmpl(
         vec![u_std],
         vec![TemplateParameterDecl::typ("T", 0)],
         false,
-        RuleOfFive {
-            ctor: MethodState::Defined(AccessSpecifier::Public),
-            copy_ctor: MethodState::Undefined,
-            move_ctor: MethodState::Undefined,
-            copy_assign: MethodState::Undefined,
-            move_assign: MethodState::Undefined,
-            dtor: MethodState::Undefined,
-        },
         NeedsImplicit {
             dtor: true,
             ..Default::default()
@@ -609,9 +585,9 @@ mod tests {
                     Include { name: "vector", bracket: "<" }
                     Namespace c:@N@Test_1_0 Test_1_0 Some("Test")
                     Namespace c:@N@std std None
-                    ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
+                    ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
 
-                    ClassDecl c:@N@std@ST>2#T#T@vector vector rename=None OpaquePtr is_pod=false ignore=false rof=[public ctor ] needs=[cctor mctor dtor ] template_parameters=[Type(T)] specializations=[ClassTemplateSpecializationId(0)] namespaces=[c:@N@std]
+                    ClassDecl c:@N@std@ST>2#T#T@vector vector rename=None OpaquePtr is_pod=false ignore=false needs=[cctor mctor dtor ] template_parameters=[Type(T)] specializations=[ClassTemplateSpecializationId(0)] namespaces=[c:@N@std]
                     Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:vector_ctor_default vector rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
                     Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:vector_ctor_pointers vector rename=Some("from_begin_and_end") ignore=false return=void args=[begin: const T *, end: const T *] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
                     Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function BBL:vector_data_const data rename=Some("data") ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
@@ -661,9 +637,9 @@ mod tests {
                     Include { name: "memory", bracket: "<" }
                     Namespace c:@N@Test_1_0 Test_1_0 Some("Test")
                     Namespace c:@N@std std None
-                    ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false rof=[] needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
+                    ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
 
-                    ClassDecl c:@N@std@ST>2#T#T@unique_ptr unique_ptr rename=None OpaquePtr is_pod=false ignore=false rof=[public ctor ] needs=[dtor ] template_parameters=[Type(T)] specializations=[ClassTemplateSpecializationId(0)] namespaces=[c:@N@std]
+                    ClassDecl c:@N@std@ST>2#T#T@unique_ptr unique_ptr rename=None OpaquePtr is_pod=false ignore=false needs=[dtor ] template_parameters=[Type(T)] specializations=[ClassTemplateSpecializationId(0)] namespaces=[c:@N@std]
                     Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_ctor_default unique_ptr rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
                     Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_const get rename=Some("get") ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_mut get rename=Some("get_mut") ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]

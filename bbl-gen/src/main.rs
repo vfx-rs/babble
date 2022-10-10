@@ -1,8 +1,6 @@
 use std::{fmt::Display, path::{PathBuf, Path}};
 use anyhow::Result;
 
-use log::*;
-
 use bbl::*;
 
 use clap::{Parser, ValueEnum};
@@ -121,7 +119,7 @@ fn main() -> Result<()> {
     };
 
     // parse the given cpp snippet, which just includes the header of the library we want to bind, giving us an AST
-    let mut ast = if let Some(filename) = args.filename {
+    let ast = if let Some(_filename) = args.filename {
         unimplemented!()
     } else if let Some(source) = args.source { 
         parse(&source, &options)?
