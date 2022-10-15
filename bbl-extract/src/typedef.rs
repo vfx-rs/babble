@@ -49,20 +49,6 @@ impl Typedef {
         &self.underlying_type
     }
 
-    pub fn pretty_print(
-        &self,
-        depth: usize,
-        ast: &AST,
-        outer_template_parameters: &[TemplateParameterDecl],
-    ) {
-        println!(
-            "+ Typedef {} {} = {}",
-            self.usr,
-            get_qualified_name(&self.name, &self.namespaces, ast).unwrap(),
-            self.underlying_type.format(ast, &[], None)
-        )
-    }
-
     pub fn get_qualified_name(&self, ast: &AST) -> Result<String> {
         get_qualified_name(self.name(), &self.namespaces, ast)
     }

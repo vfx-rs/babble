@@ -83,38 +83,6 @@ impl CAST {
     pub fn get_function_proto(&self, usr: USR) -> Option<&CFunctionProto> {
         self.function_protos.get(&usr.into())
     }
-
-    pub fn pretty_print(&self, depth: usize) -> Result<()> {
-        for inc in self.includes.iter() {
-            println!("{}", inc.get_statement());
-        }
-
-        for st in self.structs.iter() {
-            st.pretty_print(depth, self)
-                .map_err(|e| Error::FailedToFormatStruct {
-                    name: st.name_internal.clone(),
-                    source: Box::new(e),
-                })?;
-        }
-        println!();
-
-        for fun in self.functions.iter() {
-            fun.pretty_print(depth, self)
-                .map_err(|e| Error::FailedToFormatFunction {
-                    name: fun.name_internal.clone(),
-                    source: Box::new(e),
-                })?;
-        }
-        println!();
-
-        println!(
-            "{} structs and {} functions",
-            self.structs.len(),
-            self.functions.len()
-        );
-
-        Ok(())
-    }
 }
 
 /// Given a C++ entity name, and a public and private prefix, generate the equivalent names for the C API, possibly

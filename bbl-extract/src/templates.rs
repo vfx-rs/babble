@@ -199,53 +199,6 @@ impl ClassTemplateSpecialization {
             })
     }
 
-    pub fn pretty_print(&self, depth: usize, ast: &AST) {
-        let indent = format!("{:width$}", "", width = depth * 2);
-
-        let args = self
-            .template_arguments()
-            .iter()
-            .map(|a| format!("{:?}", a))
-            .collect::<Vec<_>>();
-
-        let ns_string = self
-            .namespaces
-            .iter()
-            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
-            .collect::<Vec<String>>()
-            .join("::");
-
-        println!(
-            "+ ClassTemplateSpecialization {}::{} of ({}) with <{}>",
-            ns_string,
-            self.name,
-            self.usr,
-            args.join(", ")
-        );
-
-        let class = ast.get_class(self.specialized_decl).unwrap();
-        class.pretty_print(depth, ast, Some(self.template_arguments()));
-    }
-
-    pub fn format(&self, ast: &AST) -> String {
-        let args = self
-            .template_arguments()
-            .iter()
-            .map(|a| format!("{:?}", a))
-            .collect::<Vec<_>>();
-
-        let ns_string = self
-            .namespaces
-            .iter()
-            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
-            .collect::<Vec<String>>()
-            .join("::");
-
-        // this will be complicated...
-        let class = ast.get_class(self.specialized_decl).unwrap();
-        class.format(ast, Some(self.template_arguments()))
-    }
-
     pub fn get_qualified_name(&self, ast: &AST) -> Result<String> {
         get_qualified_name(self.name(), &self.namespaces, ast)
     }
@@ -279,64 +232,6 @@ impl FunctionTemplateSpecialization {
 
     pub fn namespaces(&self) -> &[USR] {
         &self.namespaces
-    }
-
-    pub fn pretty_print(
-        &self,
-        depth: usize,
-        ast: &AST,
-        outer_template_parameters: &[TemplateParameterDecl],
-    ) {
-        let indent = format!("{:width$}", "", width = depth * 2);
-
-        let args = self
-            .template_arguments()
-            .iter()
-            .map(|a| format!("{:?}", a))
-            .collect::<Vec<_>>();
-
-        let ns_string = self
-            .namespaces
-            .iter()
-            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
-            .collect::<Vec<String>>()
-            .join("::");
-
-        println!(
-            "+ FunctionTemplateSpecialization {}::{} of ({}) with <{}>",
-            ns_string,
-            self.name,
-            self.usr,
-            args.join(", ")
-        );
-
-        // this will be complicated...
-        let function = ast.get_function(self.specialized_decl).unwrap();
-        function.pretty_print(
-            depth,
-            ast,
-            outer_template_parameters,
-            Some(self.template_arguments()),
-        );
-    }
-
-    pub fn format(&self, ast: &AST, outer_template_parameters: &[TemplateParameterDecl]) -> String {
-        let args = self
-            .template_arguments()
-            .iter()
-            .map(|a| format!("{:?}", a))
-            .collect::<Vec<_>>();
-
-        let ns_string = self
-            .namespaces
-            .iter()
-            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
-            .collect::<Vec<String>>()
-            .join("::");
-
-        // this will be complicated...
-        let function = ast.get_function(self.specialized_decl).unwrap();
-        function.format()
     }
 }
 

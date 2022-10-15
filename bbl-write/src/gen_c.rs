@@ -428,7 +428,14 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<St
         CTypeRef::Ref(usr) => {
             // first check to see if there's a direct class reference
             if let Some(st) = c_ast.get_struct(*usr) {
-                format!("{}{const_}", st.format(use_public_names))
+                format!(
+                    "{}{const_}",
+                    if use_public_names {
+                        &st.name_external
+                    } else {
+                        &st.name_internal
+                    }
+                )
             } else if let Some(td) = c_ast.get_typedef(*usr) {
                 // no struct with this USR, see if there's a typedef instead
                 format!("{}{const_}", td.name_external)

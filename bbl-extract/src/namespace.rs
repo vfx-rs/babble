@@ -21,11 +21,6 @@ impl Debug for Namespace {
 }
 
 impl Namespace {
-    pub fn pretty_print(&self, depth: usize, ast: &AST) {
-        let indent = format!("{:width$}", "", width = depth * 2);
-        println!("+ Namespace {} {}", self.usr, self.name);
-    }
-
     pub fn usr(&self) -> USR {
         self.usr
     }

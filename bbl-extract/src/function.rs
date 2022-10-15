@@ -281,46 +281,6 @@ impl Function {
 
         s
     }
-
-    pub fn pretty_print(
-        &self,
-        depth: usize,
-        ast: &AST,
-        outer_template_parameters: &[TemplateParameterDecl],
-        template_args: Option<&[TemplateArgument]>,
-    ) {
-        let indent = format!("{:width$}", "", width = depth * 2);
-
-        let s = self.format();
-
-        let mut modify_attrs = Vec::new();
-        if self.ignored {
-            modify_attrs.push("ignored".to_string());
-        }
-
-        if let Some(new_name) = &self.replacement_name {
-            modify_attrs.push(format!("rename(\"{new_name}\")"));
-        }
-
-        let attr_string = if modify_attrs.is_empty() {
-            String::new()
-        } else {
-            format!("    [[{}]]", modify_attrs.join(", "))
-        };
-
-        let template_str = if !self.template_parameters.is_empty() {
-            let parms = self
-                .template_parameters
-                .iter()
-                .map(|t| t.name().to_string())
-                .collect::<Vec<_>>();
-            format!("{indent}template <typename {}>\n", parms.join(", typename"))
-        } else {
-            String::new()
-        };
-
-        println!("{template_str}{indent}{s}{attr_string}");
-    }
 }
 
 #[derive(Clone)]
@@ -551,35 +511,6 @@ impl Method {
         };
 
         s
-    }
-
-    pub fn pretty_print(
-        &self,
-        depth: usize,
-        ast: &AST,
-        class_template_parameters: &[TemplateParameterDecl],
-        class_template_args: Option<&[TemplateArgument]>,
-    ) {
-        let indent = format!("{:width$}", "", width = depth * 2);
-
-        let s = self.format();
-
-        let mut modify_attrs = Vec::new();
-        if self.function.ignored {
-            modify_attrs.push("ignored".to_string());
-        }
-
-        if let Some(new_name) = &self.function.replacement_name {
-            modify_attrs.push(format!("rename(\"{new_name}\")"));
-        }
-
-        let attr_string = if modify_attrs.is_empty() {
-            String::new()
-        } else {
-            format!("    [[{}]]", modify_attrs.join(", "))
-        };
-
-        println!("{indent}{s}{attr_string}");
     }
 }
 

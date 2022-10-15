@@ -99,43 +99,6 @@ impl CQualType {
         self.type_ref.is_template(c_ast)
     }
 
-    #[instrument(level = "trace", skip(ast))]
-    pub fn format(&self, ast: &CAST, use_public_names: bool) -> Result<String> {
-        let const_ = if self.is_const { " const" } else { "" };
-
-        match &self.type_ref {
-            CTypeRef::Builtin(tk) => Ok(format!("{}{const_}", tk.spelling())),
-            CTypeRef::Pointer(pointee) => Ok(format!(
-                "{}*{const_}",
-                pointee.format(ast, use_public_names)?
-            )),
-            CTypeRef::Ref(usr) => {
-                if let Some(st) = ast.get_struct(*usr) {
-                    Ok(st.format(use_public_names))
-                } else if let Some(td) = ast.get_typedef(*usr) {
-                    // no struct with this USR, see if there's a typedef instead
-                    Ok(format!("{}{const_}", td.name_external))
-                } else {
-                    Err(Error::RefNotFound {
-                        usr: *usr,
-                        backtrace: Backtrace::new(),
-                    })
-                }
-            }
-            CTypeRef::FunctionProto { result, args } => {
-                let mut s = String::new();
-                write!(s, "{}(*)(", **result).unwrap();
-                for arg in args {
-                    write!(s, "{}, ", arg).unwrap();
-                }
-                write!(s, ")").unwrap();
-                Ok(s)
-            }
-            CTypeRef::Template(parm) => Ok(format!("{parm}{const_}")),
-            CTypeRef::Unknown(tk) => Ok(format!("UNKNOWN({}){const_}", tk.spelling())),
-        }
-    }
-
     pub fn int(name: &str, is_const: bool) -> CQualType {
         CQualType {
             name: name.to_string(),

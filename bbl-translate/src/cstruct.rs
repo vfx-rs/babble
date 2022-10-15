@@ -46,19 +46,6 @@ impl CField {
     pub fn qual_type(&self) -> &CQualType {
         &self.qual_type
     }
-
-    fn format(&self, ast: &CAST, use_public_names: bool) -> Result<String> {
-        Ok(format!(
-            "{}: {}",
-            self.name,
-            self.qual_type.format(ast, use_public_names).map_err(|e| {
-                Error::FailedToFormatField {
-                    name: self.name.clone(),
-                    source: Box::new(e),
-                }
-            })?
-        ))
-    }
 }
 
 pub struct CStruct {
@@ -80,43 +67,6 @@ impl std::fmt::Debug for CStruct {
             "CStruct {} {} {} {:?} fields={:?}",
             self.usr, self.name_internal, self.name_external, self.bind_kind, self.fields
         )
-    }
-}
-
-impl CStruct {
-    #[instrument(level = "trace")]
-    pub fn format(&self, use_public_name: bool) -> String {
-        if use_public_name {
-            &self.name_external
-        } else {
-            &self.name_internal
-        }
-        .to_string()
-    }
-
-    #[instrument(level = "trace", skip(ast))]
-    pub fn pretty_print(&self, _depth: usize, ast: &CAST) -> Result<()> {
-        println!("typedef struct {{");
-
-        for field in self.fields.iter() {
-            println!(
-                "  {};",
-                field
-                    .format(ast, false)
-                    .map_err(|e| Error::FailedToFormatStruct {
-                        name: self.name_internal.clone(),
-                        source: Box::new(e)
-                    })?
-            );
-        }
-
-        println!("}} {};", self.name_internal);
-
-        if self.name_internal != self.name_external {
-            println!("typedef {} {};", self.name_internal, self.name_external);
-        }
-
-        Ok(())
     }
 }
 

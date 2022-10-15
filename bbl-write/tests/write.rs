@@ -17,9 +17,10 @@ use crate::common::init_log;
 use indoc::indoc;
 
 #[test]
-fn write_simple_class() -> Result<(), Error> {
-    let mut ast = parse_string_and_extract_ast(
-        r#"
+fn write_simple_class() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
 namespace Test_1_0 {
 class Class {
 public:
@@ -28,34 +29,34 @@ public:
 };
 }
             "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    println!("{ast:?}");
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
 
-    let ns = ast.find_namespace("Test_1_0")?;
-    ast.rename_namespace(ns, "Test");
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0)?;
+        assert_eq!(c_ast.structs.len(), 1);
+        assert_eq!(c_ast.functions.len(), 5);
 
-    assert_eq!(c_ast.structs.len(), 1);
-    assert_eq!(c_ast.functions.len(), 5);
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
 
-    let (c_header, c_source) = gen_c("test", &c_ast)?;
-    println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn write_simple_valuetype() -> Result<(), Error> {
-    let mut ast = parse_string_and_extract_ast(
-        r#"
+fn write_simple_valuetype() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
 namespace Test_1_0 {
 
 class Class {
@@ -66,37 +67,34 @@ public:
 
 }
             "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    println!("{ast:?}");
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
 
-    let ns = ast.find_namespace("Test_1_0")?;
-    ast.rename_namespace(ns, "Test");
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
 
-    // let class = ast.find_class("Test_1_0::Class")?;
-    // ast.class_set_bind_kind(class, ClassBindKind::ValueType)?;
+        assert_eq!(c_ast.structs.len(), 1);
+        assert_eq!(c_ast.functions.len(), 3);
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0)?;
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
 
-    assert_eq!(c_ast.structs.len(), 1);
-    assert_eq!(c_ast.functions.len(), 3);
-
-    let (c_header, c_source) = gen_c("test", &c_ast)?;
-    println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn write_valuetype_pass_by_value() -> Result<(), Error> {
-    let mut ast = parse_string_and_extract_ast(
-        r#"
+fn write_valuetype_pass_by_value() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
 namespace Test_1_0 {
 
 class Class {
@@ -109,34 +107,34 @@ void fun(Class c);
 
 }
             "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    println!("{ast:?}");
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
 
-    let ns = ast.find_namespace("Test_1_0")?;
-    ast.rename_namespace(ns, "Test");
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0)?;
+        assert_eq!(c_ast.structs.len(), 1);
+        assert_eq!(c_ast.functions.len(), 4);
 
-    assert_eq!(c_ast.structs.len(), 1);
-    assert_eq!(c_ast.functions.len(), 4);
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
 
-    let (c_header, c_source) = gen_c("test", &c_ast)?;
-    println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn write_opaqueptr_pass_by_value() -> Result<(), Error> {
-    let mut ast = parse_string_and_extract_ast(
-        r#"
+fn write_opaqueptr_pass_by_value() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
 namespace Test_1_0 {
 class Class {
     int _c; // will force opaqueptr as no longer POD
@@ -147,34 +145,34 @@ public:
 void fun(Class c);
 }
             "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    println!("{ast:?}");
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
 
-    let ns = ast.find_namespace("Test_1_0")?;
-    ast.rename_namespace(ns, "Test");
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0)?;
+        assert_eq!(c_ast.structs.len(), 1);
+        assert_eq!(c_ast.functions.len(), 5);
 
-    assert_eq!(c_ast.structs.len(), 1);
-    assert_eq!(c_ast.functions.len(), 5);
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
-    let (c_header, c_source) = gen_c("test", &c_ast)?;
-    println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn write_nested_valuetype() -> Result<(), Error> {
-    let mut ast = parse_string_and_extract_ast(
-        r#"
+fn write_nested_valuetype() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
 namespace Test_1_0 {
 class A {
 public:
@@ -188,35 +186,34 @@ public:
 };
 }
             "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    println!("{ast:?}");
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
 
-    let ns = ast.find_namespace("Test_1_0")?;
-    ast.rename_namespace(ns, "Test");
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0)?;
+        assert_eq!(c_ast.structs.len(), 2);
+        assert_eq!(c_ast.functions.len(), 6);
 
-    assert_eq!(c_ast.structs.len(), 2);
-    assert_eq!(c_ast.functions.len(), 6);
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
-    let (c_header, c_source) = gen_c("test", &c_ast)?;
-    println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn write_nested_valuetype_with_forced_member() -> Result<(), Error> {
-    init_log();
-    let mut ast = parse_string_and_extract_ast(
-        r#"
+fn write_nested_valuetype_with_forced_member() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
 namespace Test_1_0 {
 class A {
 public:
@@ -231,38 +228,37 @@ public:
 };
 }
             "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    println!("{ast:?}");
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
 
-    let ns = ast.find_namespace("Test_1_0")?;
-    ast.rename_namespace(ns, "Test");
+        let class = ast.find_class("Test_1_0::A")?;
+        ast.class_set_bind_kind(class, ClassBindKind::ValueType)?;
 
-    let class = ast.find_class("Test_1_0::A")?;
-    ast.class_set_bind_kind(class, ClassBindKind::ValueType)?;
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0)?;
+        assert_eq!(c_ast.structs.len(), 2);
+        assert_eq!(c_ast.functions.len(), 5);
 
-    assert_eq!(c_ast.structs.len(), 2);
-    assert_eq!(c_ast.functions.len(), 5);
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
-    let (c_header, c_source) = gen_c("test", &c_ast)?;
-    println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn write_includes() -> Result<(), Error> {
-    init_log();
-    let mut ast = parse_string_and_extract_ast(
-        r#"
+fn write_includes() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
 #include <stddef.h>
 #include <string>
 
@@ -280,38 +276,35 @@ public:
 };
 }
             "#,
-        &cli_args()?,
-        true,
-        Some("Test_1_0"),
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            Some("Test_1_0"),
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    println!("{ast:?}");
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
 
-    let ns = ast.find_namespace("Test_1_0")?;
-    ast.rename_namespace(ns, "Test");
+        let class = ast.find_class("Test_1_0::A")?;
+        ast.class_set_bind_kind(class, ClassBindKind::ValueType)?;
 
-    let class = ast.find_class("Test_1_0::A")?;
-    ast.class_set_bind_kind(class, ClassBindKind::ValueType)?;
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
-    println!("ast has {} includes", ast.includes().len());
-    println!("cast has {} includes", c_ast.includes.len());
-    c_ast.pretty_print(0)?;
+        assert_eq!(c_ast.structs.len(), 2);
+        assert_eq!(c_ast.functions.len(), 5);
 
-    assert_eq!(c_ast.structs.len(), 2);
-    assert_eq!(c_ast.functions.len(), 5);
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
-    let (c_header, c_source) = gen_c("test", &c_ast)?;
-    println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn take_std_string_by_value() -> Result<(), Error> {
-    run_test(|| {
+fn take_std_string_by_value() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
         let mut ast = parse_string_and_extract_ast(
             r#"
     #include <string>
@@ -329,8 +322,6 @@ fn take_std_string_by_value() -> Result<(), Error> {
             &AllowList::default(),
             &OverrideList::default(),
         )?;
-
-        println!("{ast:?}");
 
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
@@ -504,8 +495,8 @@ fn write_inherited() -> Result<(), Error> {
 }
 
 #[test]
-fn write_take_std_string_fun() -> Result<(), Error> {
-    run_test(|| {
+fn write_take_std_string_fun() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
         let mut ast = parse_string_and_extract_ast(
             r#"
     #include <string>
@@ -521,13 +512,12 @@ fn write_take_std_string_fun() -> Result<(), Error> {
             &OverrideList::default(),
         )?;
 
-        println!("{ast:?}");
-
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;
-        c_ast.pretty_print(0)?;
+        println!("{c_ast:?}");
+
 
         assert_eq!(c_ast.structs.len(), 1);
         assert_eq!(c_ast.functions.len(), 7);

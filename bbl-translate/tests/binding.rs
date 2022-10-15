@@ -15,10 +15,10 @@ use bbl_translate::translate_cpp_ast_to_c;
 use indoc::indoc;
 
 #[test]
-fn test_binding_rename() -> Result<(), Error> {
-    common::init_log();
-    let mut ast = parse_string_and_extract_ast(
-        r#"
+fn test_binding_rename() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
 
 class Class {
     int a;
@@ -30,38 +30,37 @@ public:
 };
     
         "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    let class = ast.find_class("Class")?;
+        let class = ast.find_class("Class")?;
 
-    let method = ast.find_method(class, "method(float) -> int")?;
-    ast.rename_method(class, method, "method_float");
+        let method = ast.find_method(class, "method(float) -> int")?;
+        ast.rename_method(class, method, "method_float");
 
-    let method = ast.find_method(class, "method(int) -> int")?;
-    ast.rename_method(class, method, "method_int");
+        let method = ast.find_method(class, "method(int) -> int")?;
+        ast.rename_method(class, method, "method_int");
 
-    let method = ast.find_method(class, "method(unsigned int) -> int")?;
-    ast.ignore_method(class, method);
+        let method = ast.find_method(class, "method(unsigned int) -> int")?;
+        ast.ignore_method(class, method);
 
-    println!("{ast:?}");
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
 
-    c_ast.pretty_print(0)?;
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn test_binding_pass_class() -> Result<(), Error> {
-    common::init_log();
-    let ast = parse_string_and_extract_ast(
-        r#"
+fn test_binding_pass_class() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let ast = parse_string_and_extract_ast(
+            r#"
 
 namespace Test {
 class A {
@@ -76,31 +75,30 @@ public:
 }
     
         "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    println!("{ast:?}");
+        let class = ast.find_class("B")?;
 
-    let class = ast.find_class("B")?;
+        let _method = ast.find_method(class, "take_a(const A &)")?;
 
-    let _method = ast.find_method(class, "take_a(const A &)")?;
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
 
-    c_ast.pretty_print(0)?;
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn test_binding_vec3() -> Result<(), Error> {
-    common::init_log();
-    let mut ast = parse_string_and_extract_ast(
-        r#"
+fn test_binding_vec3() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
 namespace Imath_3_1 {
 
 class Vec3;
@@ -174,34 +172,33 @@ public:
 }
 
         "#,
-        &cli_args()?,
-        true,
-        Some("Imath_3_1"),
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            Some("Imath_3_1"),
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    println!("{ast:?}");
+        let namespace = ast.find_namespace("Imath_3_1")?;
+        ast.rename_namespace(namespace, "Imath");
 
-    let namespace = ast.find_namespace("Imath_3_1")?;
-    ast.rename_namespace(namespace, "Imath");
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
 
-    c_ast.pretty_print(0)?;
+        // This will have to do for now
+        assert_eq!(c_ast.structs.len(), 1);
+        assert_eq!(c_ast.functions.len(), 42);
 
-    // This will have to do for now
-    assert_eq!(c_ast.structs.len(), 1);
-    assert_eq!(c_ast.functions.len(), 42);
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn test_binding_error_not_found() -> Result<(), Error> {
-    common::init_log();
-    let ast = parse_string_and_extract_ast(
-        r#"
+fn test_binding_error_not_found() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let ast = parse_string_and_extract_ast(
+            r#"
 
 class Class {
     int a;
@@ -213,31 +210,29 @@ public:
 };
     
         "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    let class = ast.find_class("Class")?;
-    let method = ast.find_method(class, "foo()");
-    assert!(matches!(
-        method,
-        Err(bbl_extract::error::Error::MethodNotFound { .. })
-    ));
+        let class = ast.find_class("Class")?;
+        let method = ast.find_method(class, "foo()");
+        assert!(matches!(
+            method,
+            Err(bbl_extract::error::Error::MethodNotFound { .. })
+        ));
 
-    println!("{ast:?}");
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn test_binding_error_multiple() -> Result<(), Error> {
-    common::init_log();
-
-    let ast = parse_string_and_extract_ast(
-        r#"
+fn test_binding_error_multiple() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let ast = parse_string_and_extract_ast(
+            r#"
 
 class Class {
     int a;
@@ -249,31 +244,29 @@ public:
 };
     
         "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    let class = ast.find_class("Class")?;
-    let method = ast.find_method(class, "method");
-    assert!(matches!(
-        method,
-        Err(bbl_extract::error::Error::MultipleMatches { .. })
-    ));
+        let class = ast.find_class("Class")?;
+        let method = ast.find_method(class, "method");
+        assert!(matches!(
+            method,
+            Err(bbl_extract::error::Error::MultipleMatches { .. })
+        ));
 
-    println!("{ast:?}");
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn test_binding_template() -> anyhow::Result<()> {
-    common::init_log();
-
-    let mut ast = parse_string_and_extract_ast(
-        r#"
+fn test_binding_template() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
 
 namespace Test {
 
@@ -288,92 +281,86 @@ public:
 }
     
         "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    println!("{ast:?}");
+        let class = ast.find_class("Class")?;
+        ast.specialize_class(
+            class,
+            "ClassFloat",
+            vec![TemplateArgument::Type(QualType::float())],
+        )?;
 
-    let class = ast.find_class("Class")?;
-    ast.specialize_class(
-        class,
-        "ClassFloat",
-        vec![TemplateArgument::Type(QualType::float())],
-    )?;
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
 
-    println!("{ast:?}");
-
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0)?;
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn bind_function() -> Result<(), Error> {
-    common::init_log();
-
-    let ast = parse_string_and_extract_ast(
-        r#"
+fn bind_function() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let ast = parse_string_and_extract_ast(
+            r#"
 namespace Test {
 int basic_function(int&& a, float*);
 }
         "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    println!("{ast:?}");
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        assert_eq!(c_ast.structs.len(), 0);
+        assert_eq!(c_ast.functions.len(), 1);
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
-    assert_eq!(c_ast.structs.len(), 0);
-    assert_eq!(c_ast.functions.len(), 1);
-    c_ast.pretty_print(0)?;
+        println!("{c_ast:?}");
 
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
-fn bind_function_template() -> Result<(), Error> {
-    common::init_log();
-
-    let mut ast = parse_string_and_extract_ast(
-        r#"
+fn bind_function_template() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
 namespace Test {
 template <typename T>
 T function_template(T&& a, float*);
 }
         "#,
-        &cli_args()?,
-        true,
-        None,
-        &AllowList::default(),
-        &OverrideList::default(),
-    )?;
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
 
-    println!("{ast:?}");
-    let function = ast.find_function("function_template")?;
-    ast.specialize_function(
-        function,
-        "function_float",
-        vec![TemplateArgument::Type(QualType::float())],
-    )?;
+        println!("{ast:?}");
+        let function = ast.find_function("function_template")?;
+        ast.specialize_function(
+            function,
+            "function_float",
+            vec![TemplateArgument::Type(QualType::float())],
+        )?;
 
-    println!("{ast:?}");
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
 
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
-    c_ast.pretty_print(0)?;
+        assert_eq!(c_ast.structs.len(), 0);
+        assert_eq!(c_ast.functions.len(), 1);
 
-    assert_eq!(c_ast.structs.len(), 0);
-    assert_eq!(c_ast.functions.len(), 1);
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[test]
@@ -393,7 +380,7 @@ fn translate_method_template() -> bbl_util::Result<()> {
             true,
             None,
             &AllowList::default(),
-        &OverrideList::default(),
+            &OverrideList::default(),
         )?;
 
         let class = ast.find_class("Class")?;
@@ -442,7 +429,7 @@ public:
             true,
             None,
             &AllowList::default(),
-        &OverrideList::default(),
+            &OverrideList::default(),
         )?;
 
         let class = ast.find_class("Class")?;
@@ -492,7 +479,7 @@ public:
             true,
             None,
             &AllowList::default(),
-        &OverrideList::default(),
+            &OverrideList::default(),
         )?;
 
         let class = ast.find_class("Class")?;
@@ -575,13 +562,16 @@ public:
             true,
             Some("Test"),
             &AllowList::default(),
-        &OverrideList::default(),
+            &OverrideList::default(),
         )?;
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;
 
         println!("{c_ast:?}");
-        bbl_util::compare(&format!("{c_ast:?}"), indoc!(r#"
+        bbl_util::compare(
+            &format!("{c_ast:?}"),
+            indoc!(
+                r#"
             CStruct c:@N@std@N@__cxx11@S@basic_string>#C#$@N@std@S@char_traits>#C#$@N@std@S@allocator>#C std_string std_string OpaquePtr fields=[]
             CStruct c:@N@Test@S@Class Test_Class Test_Class ValueType fields=[]
             CTypedef std_string std_string c:@N@std@N@__cxx11@S@basic_string>#C#$@N@std@S@char_traits>#C#$@N@std@S@allocator>#C
@@ -596,7 +586,9 @@ public:
             CFunction Test_Class_copy_ctor Test_Class_copy_ctor([result: c:@N@Test@S@Class*, rhs: c:@N@Test@S@Class const* const])  -> Int
             CFunction Test_Class_move_ctor Test_Class_move_ctor([result: c:@N@Test@S@Class*, rhs: c:@N@Test@S@Class const*])  -> Int
             Include { name: "string", bracket: "<" }
-        "#))?;
+        "#
+            ),
+        )?;
 
         Ok(())
     })
@@ -674,7 +666,7 @@ fn translate_vector() -> bbl_util::Result<()> {
             true,
             None,
             &AllowList::new(vec!["^Test_1_0".to_string()]),
-        &OverrideList::default(),
+            &OverrideList::default(),
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -733,7 +725,7 @@ fn translate_unique_ptr() -> bbl_util::Result<()> {
             true,
             None,
             &AllowList::new(vec!["^Test_1_0".to_string()]),
-        &OverrideList::default(),
+            &OverrideList::default(),
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -742,7 +734,10 @@ fn translate_unique_ptr() -> bbl_util::Result<()> {
         let c_ast = translate_cpp_ast_to_c(&ast)?;
 
         println!("{c_ast:?}");
-        bbl_util::compare(&format!("{c_ast:?}"), indoc!(r#"
+        bbl_util::compare(
+            &format!("{c_ast:?}"),
+            indoc!(
+                r#"
             CStruct c:@N@Test_1_0@S@Class Test_1_0_Class Test_Class OpaquePtr fields=[]
             CStruct c:@N@std@ST>2#T#T@unique_ptr std_unique_ptr_Test_1_0_Class_ std_unique_ptr_Test_1_0_Class_ OpaquePtr fields=[]
             CTypedef Test_1_0_ClassPtr Test_ClassPtr c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_
@@ -755,7 +750,9 @@ fn translate_unique_ptr() -> bbl_util::Result<()> {
             CFunction std_unique_ptr_Test_1_0_Class__get_mut std_unique_ptr_Test_1_0_Class__get_mut([this_: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_*, result: c:@N@Test_1_0@S@Class**])  -> Int
             CFunction std_unique_ptr_Test_1_0_Class__dtor std_unique_ptr_Test_1_0_Class__dtor([this_: c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_*])  -> Int
             Include { name: "memory", bracket: "<" }
-        "#))?;
+        "#
+            ),
+        )?;
 
         Ok(())
     })
@@ -780,7 +777,7 @@ fn translate_std_function() -> Result<(), bbl_util::Error> {
             true,
             None,
             &AllowList::new(vec!["^Test_1_0".to_string()]),
-        &OverrideList::default(),
+            &OverrideList::default(),
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -830,13 +827,16 @@ fn translate_nested_template() -> bbl_util::Result<()> {
             true,
             None,
             &AllowList::new(vec![r#"^Test::.*$"#.to_string()]),
-        &OverrideList::default(),
+            &OverrideList::default(),
         )?;
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
-        bbl_util::compare(&format!("{c_ast:?}"), indoc!(r#"
+        bbl_util::compare(
+            &format!("{c_ast:?}"),
+            indoc!(
+                r#"
             CStruct c:@N@Test@S@Class Test_Class Test_Class ValueType fields=[]
             CStruct c:@N@std@ST>2#T#T@unique_ptr std_unique_ptr_Test_Class_ std_unique_ptr_Test_Class_ OpaquePtr fields=[]
             CTypedef Test_HandleTo_Test_Class_Handle Test_HandleTo_Test_Class_Handle c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_
@@ -850,6 +850,8 @@ fn translate_nested_template() -> bbl_util::Result<()> {
             CFunction std_unique_ptr_Test_Class__get_mut std_unique_ptr_Test_Class__get_mut([this_: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_*, result: c:@N@Test@S@Class**])  -> Int
             CFunction std_unique_ptr_Test_Class__dtor std_unique_ptr_Test_Class__dtor([this_: c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_*])  -> Int
             Include { name: "memory", bracket: "<" }
-        "#))
+        "#
+            ),
+        )
     })
 }

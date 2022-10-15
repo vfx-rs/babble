@@ -298,7 +298,7 @@ fn write_type(source: &mut String, qt: &CQualType, c_ast: &CAST) -> Result<()> {
         CTypeRef::Ref(usr) => {
             // first check to see if there's a direct class reference
             if let Some(st) = c_ast.get_struct(*usr) {
-                write!(source, "{}", st.format(true))?;
+                write!(source, "{}", st.name_external)?;
             } else if let Some(td) = c_ast.get_typedef(*usr) {
                 // no struct with this USR, see if there's a typedef instead
                 write!(source, "{}", td.name_external.clone())?;

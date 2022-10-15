@@ -251,57 +251,6 @@ impl ClassDecl {
         self.rename = Some(name.to_string());
     }
 
-    pub fn pretty_print(
-        &self,
-        depth: usize,
-        ast: &AST,
-        class_template_args: Option<&[TemplateArgument]>,
-    ) {
-        if !self.template_parameters.is_empty() {
-            self.pretty_print_template(depth, ast, class_template_args);
-            return;
-        }
-
-        let indent = format!("{:width$}", "", width = depth * 2);
-
-        let pod = if self.is_pod { "[POD]" } else { "" };
-
-        println!("+ ClassDecl {} {}", self.usr, pod);
-
-        let ns_string = self
-            .namespaces
-            .iter()
-            .map(|u| ast.get_namespace(*u).unwrap().name.clone())
-            .collect::<Vec<String>>()
-            .join("::");
-
-        let name = if let Some(ref rename) = self.rename {
-            rename
-        } else {
-            &self.name
-        };
-
-        println!("{indent}class {ns_string}::{} {{", name);
-
-        for method in &self.methods {
-            method.pretty_print(
-                depth + 1,
-                ast,
-                &self.template_parameters,
-                class_template_args,
-            );
-        }
-
-        for field in &self.fields {
-            println!(
-                "{indent}{indent}{};",
-                field.format(ast, &self.template_parameters, class_template_args)
-            );
-        }
-
-        println!("{indent}}}");
-    }
-
     pub fn format(&self, ast: &AST, template_args: Option<&[TemplateArgument]>) -> String {
         let ns_string = self
             .namespaces
@@ -323,65 +272,6 @@ impl ClassDecl {
             )
         };
         format!("{ns_string}::{}{template}", self.name)
-    }
-
-    fn pretty_print_template(
-        &self,
-        depth: usize,
-        ast: &AST,
-        template_args: Option<&[TemplateArgument]>,
-    ) {
-        let indent = format!("{:width$}", "", width = depth * 2);
-
-        let ns_string = self
-            .namespaces
-            .iter()
-            .map(|u| {
-                ast.get_namespace(*u)
-                    .unwrap_or_else(|| panic!("Failed to get namespace with usr {u}"))
-                    .name
-                    .clone()
-            })
-            .collect::<Vec<String>>()
-            .join("::");
-
-        println!("+ ClassTemplate {}", self.usr);
-
-        let template_decl = if self.template_parameters.is_empty() {
-            String::new()
-        } else {
-            format!(
-                "template <{}>\n{indent}",
-                self.template_parameters
-                    .iter()
-                    .map(|t| specialize_template_parameter(t, template_args))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        };
-
-        let template = if self.template_parameters.is_empty() {
-            String::new()
-        } else {
-            format!(
-                "<{}>",
-                self.template_parameters
-                    .iter()
-                    .map(|t| specialize_template_parameter(t, template_args))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        };
-        println!(
-            "{indent}{template_decl}class {ns_string}::{}{template} {{",
-            self.name
-        );
-
-        for method in &self.methods {
-            method.pretty_print(depth + 1, ast, &self.template_parameters, template_args);
-        }
-
-        println!("{indent}}}");
     }
 
     pub fn find_method(&self, ast: &AST, signature: &str) -> Result<(MethodId, &Method)> {

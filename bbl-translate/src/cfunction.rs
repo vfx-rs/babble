@@ -41,21 +41,6 @@ impl std::fmt::Debug for CArgument {
     }
 }
 
-impl CArgument {
-    fn format(&self, ast: &CAST, use_public_names: bool) -> Result<String> {
-        Ok(format!(
-            "{}: {}",
-            self.name,
-            self.qual_type.format(ast, use_public_names).map_err(|e| {
-                Error::FailedToFormatArgument {
-                    name: self.name.clone(),
-                    source: Box::new(e),
-                }
-            })?
-        ))
-    }
-}
-
 #[derive(Debug)]
 pub enum CFunctionSource {
     /// This function was translated from a method
@@ -110,32 +95,6 @@ impl std::fmt::Debug for CFunction {
 }
 
 impl CFunction {
-    #[instrument(level = "trace", skip(ast))]
-    pub fn pretty_print(&self, _depth: usize, ast: &CAST) -> Result<()> {
-        let args = self
-            .arguments
-            .iter()
-            .map(|a| a.format(ast, false))
-            .collect::<Result<Vec<String>>>()?;
-        let arg_str = args.join(", ");
-
-        println!(
-            "{}({arg_str}) -> {};",
-            self.name_internal,
-            self.result
-                .format(ast, false)
-                .map_err(|e| Error::FailedToFormatFunction {
-                    name: self.name_internal.clone(),
-                    source: Box::new(e)
-                })?
-        );
-        if self.name_internal != self.name_external {
-            println!("#define {} {}", self.name_external, self.name_internal);
-        }
-
-        Ok(())
-    }
-
     /// Does this function have a return value?
     pub fn has_return_value(&self) -> bool {
         !self.arguments.is_empty() && self.arguments[0].is_result

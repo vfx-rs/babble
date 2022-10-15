@@ -275,19 +275,6 @@ impl QualType {
         }
     }
 
-    // pub fn is_template(&self) -> bool {
-    //     match &self.type_ref {
-    //         TypeRef::TemplateNonTypeParameter(_) | TypeRef::TemplateTypeParameter(_) => true,
-    //         TypeRef::Builtin(_)
-    //         | TypeRef::Ref(_)
-    //         | TypeRef::Unknown(_)
-    //         | TypeRef::FunctionProto { .. } => false,
-    //         TypeRef::Pointer(p) | TypeRef::LValueReference(p) | TypeRef::RValueReference(p) => {
-    //             p.is_template()
-    //         }
-    //     }
-    // }
-
     pub fn template_parameter_name(&self) -> Option<&str> {
         match &self.type_ref {
             TypeRef::TemplateNonTypeParameter(name) | TypeRef::TemplateTypeParameter(name) => {
