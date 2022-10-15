@@ -6,17 +6,18 @@ use bbl_clang::cli_args;
 use bbl_clang::cursor::{CurClassDecl, Cursor, USR};
 use bbl_clang::translation_unit::TranslationUnit;
 use log::*;
+use regex::Regex;
 use std::fmt::{Debug, Display};
 use tracing::instrument;
 use ustr::Ustr;
 use backtrace::Backtrace;
 
-use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST, ClassTemplateSpecializationId, dump_cursor, dump_cursor_until};
+use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST, ClassTemplateSpecializationId, dump_cursor, dump_cursor_until, ClassId};
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::index_map::IndexMapKey;
 use crate::{parse_string_and_extract_ast, AllowList, class};
 use crate::qualtype::extract_type;
-use crate::stdlib::{create_std_string, create_std_vector, create_std_unique_ptr, create_std_function};
+use crate::stdlib::{create_std_string, create_std_vector, create_std_unique_ptr, create_std_function, create_std_map};
 use crate::templates::{TemplateParameterDecl, TemplateArgument, extract_class_template_specialization};
 use crate::{function::Method, qualtype::QualType};
 use bbl_clang::cursor_kind::CursorKind;
@@ -186,6 +187,10 @@ impl ClassDecl {
 
     pub fn is_specialized(&self) -> bool {
         !self.specializations.is_empty()
+    }
+
+    pub fn add_specialization(&mut self, id: ClassTemplateSpecializationId) {
+        self.specializations.push(id);
     }
 
     pub fn bind_kind(&self) -> &ClassBindKind {
@@ -521,31 +526,43 @@ impl Display for ClassDecl {
     }
 }
 
-#[instrument(skip(tu, ast, already_visited), level = "trace")]
+#[instrument(skip(tu, ast, already_visited, overrides), level = "trace")]
 pub fn extract_class_decl(
     class_decl: CurClassDecl,
     tu: &TranslationUnit,
     ast: &mut AST,
     already_visited: &mut Vec<USR>,
     allow_list: &AllowList,
+    overrides: &OverrideList,
 ) -> Result<USR> {
+    let namespaces = get_namespaces_for_decl(class_decl.into(), tu, ast, already_visited)?;
+    let class_decl_qualified_name = get_qualified_name(&class_decl.display_name(), &namespaces, ast)?;
+
     // Check for std:: types we're going to extract manually here
     if class_decl.display_name().starts_with("basic_string<") {
         debug!("Extracting basic_string {}", class_decl.usr());
         return create_std_string(class_decl.into(), ast, already_visited);
     } else if class_decl.display_name().starts_with("vector<") {
-        return create_std_vector(class_decl, ast, already_visited, tu, allow_list);
+        return create_std_vector(class_decl, ast, already_visited, tu, allow_list, overrides);
     } else if class_decl.display_name().starts_with("unique_ptr<") {
-        return create_std_unique_ptr(class_decl, ast, already_visited, tu, allow_list);
+        return create_std_unique_ptr(class_decl, ast, already_visited, tu, allow_list, overrides);
+    } else if class_decl.display_name().starts_with("map<") {
+        return create_std_map(class_decl, ast, already_visited, tu, allow_list, overrides);
     } else if class_decl.display_name().starts_with("function<") {
         unreachable!("std::function should have been extracted in type extraction");
-        return create_std_function(class_decl, ast, already_visited, tu, allow_list);
+        return create_std_function(class_decl, ast, already_visited, tu, allow_list, overrides);
+    }
+
+    for over in &overrides.overs {
+        if over.0.is_match(&class_decl_qualified_name) {
+            return over.1(class_decl.into(), ast, tu, already_visited, allow_list, overrides);
+        }
     }
 
     if class_decl.specialized_template().is_ok() {
         // this is a class template specialization, handle it separately
         debug!("extract_class_decl: {} is a CTS", class_decl.usr());
-        return extract_class_template_specialization(class_decl, already_visited, ast, tu, allow_list);
+        return extract_class_template_specialization(class_decl, already_visited, ast, tu, allow_list, overrides);
     }
 
     if already_visited.contains(&class_decl.usr()) {
@@ -555,7 +572,7 @@ pub fn extract_class_decl(
         already_visited.push(class_decl.usr());
     }
 
-    let cd = extract_class_decl_inner(class_decl, tu, ast, already_visited, allow_list, None)?;
+    let cd = extract_class_decl_inner(class_decl, tu, ast, already_visited, allow_list, overrides, None)?;
 
     debug!("extract_class_decl: inserting {}", class_decl.usr());
     if class_decl.kind() == CursorKind::ClassTemplate && cd.template_parameters.is_empty() {
@@ -567,7 +584,15 @@ pub fn extract_class_decl(
     Ok(class_decl.usr())
 }
 
-fn extract_class_decl_inner(class_decl: CurClassDecl, tu: &TranslationUnit, ast: &mut AST, already_visited: &mut Vec<USR>, allow_list: &AllowList, qname_override: Option<&str>) -> Result<ClassDecl> {
+fn extract_class_decl_inner(
+    class_decl: CurClassDecl, 
+    tu: &TranslationUnit, 
+    ast: &mut AST, 
+    already_visited: &mut Vec<USR>, 
+    allow_list: &AllowList, 
+    class_overrides: &OverrideList, 
+    qname_override: Option<&str>) 
+-> Result<ClassDecl> {
     let namespaces = get_namespaces_for_decl(class_decl.into(), tu, ast, already_visited)?;
     let class_decl_qualified_name = get_qualified_name(&class_decl.display_name(), &namespaces, ast)?;
 
@@ -587,7 +612,7 @@ fn extract_class_decl_inner(class_decl: CurClassDecl, tu: &TranslationUnit, ast:
                     // we pass a class name override through when extracting the base class members. This will turn 
                     // Base::method() into Class::method(). Thus the allow list will work as expected, and still allow
                     // us to avoid adding the Base class to the AST while lofting up its members into Class
-                    let base = extract_class_decl_inner(c_base_decl.try_into()?, tu, ast, already_visited, allow_list, qname_override.or(Some(&class_decl_qualified_name)) )?;
+                    let base = extract_class_decl_inner(c_base_decl.try_into()?, tu, ast, already_visited, allow_list, class_overrides, qname_override.or(Some(&class_decl_qualified_name)) )?;
                     let access = c_base.cxx_access_specifier()?;
 
                     for method in &base.methods {
@@ -695,14 +720,20 @@ fn extract_class_decl_inner(class_decl: CurClassDecl, tu: &TranslationUnit, ast:
                             tu,
                             ast,
                             allow_list,
+                            class_overrides,
                             &class_name,
                         ) {
                             Ok(method) => methods.push(method),
                             Err(e) => {
-                                return Err(Error::FailedToExtractMethod {
-                                    name: member.display_name(),
-                                    source: Box::new(e),
-                                })
+                                if e.is_unsupported() {
+                                    error!("Could not extract method {member_qualified_name} which will be ignored due to unsupported feature: {e:?}");
+                                    continue;
+                                } else {
+                                    return Err(Error::FailedToExtractMethod {
+                                        name: member.display_name(),
+                                        source: Box::new(e),
+                                    })
+                                }
                             }
                         }
                     }
@@ -727,6 +758,7 @@ fn extract_class_decl_inner(class_decl: CurClassDecl, tu: &TranslationUnit, ast:
                         ast,
                         tu,
                         allow_list,
+                        class_overrides,
                     )
                     .map_err(|e| {
                         Error::FailedToExtractField {
@@ -827,6 +859,32 @@ fn extract_class_decl_inner(class_decl: CurClassDecl, tu: &TranslationUnit, ast:
     Ok(cd)
 }
 
+#[derive(Default)]
+pub struct OverrideList {
+    overs: Vec<(regex::Regex, Box<ClassExtractionFn>)>,
+}
+
+impl OverrideList {
+    pub fn new(overs: Vec<(String, Box<ClassExtractionFn>)>) -> Self {
+        let overs = overs.into_iter().map(|(s, c)| {
+            (Regex::new(&s).unwrap(), c)
+        }).collect();
+
+        OverrideList {
+            overs
+        }
+    }
+}
+
+impl Debug for OverrideList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s: Vec<String> = self.overs.iter().map(|o| o.0.as_str().to_string()).collect();
+        write!(f, "[{}]", s.join(", "))
+    }
+}
+
+pub type ClassExtractionFn = fn(Cursor, &mut AST, &TranslationUnit, &mut Vec<USR>, &AllowList, &OverrideList) -> Result<USR>;
+
 // TODO(AL): fix these once we've patched libclang
 fn method_is_copy_assignment_operator(method: Cursor, class: Cursor) -> bool {
     false
@@ -843,6 +901,7 @@ pub fn extract_field(
     ast: &mut AST,
     tu: &TranslationUnit,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<Field> {
     let template_parameters = class_template_parameters
         .iter()
@@ -857,6 +916,7 @@ pub fn extract_field(
         ast,
         tu,
         allow_list,
+        class_overrides,
     )?;
 
     Ok(Field {
@@ -936,7 +996,7 @@ mod tests {
     use bbl_clang::cli_args;
     use indoc::indoc;
 
-    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList, init_log};
+    use crate::{class::{ClassBindKind, OverrideList}, error::Error, parse_string_and_extract_ast, AllowList, init_log};
 
     #[test]
     fn extract_pod() -> Result<(), Error> {
@@ -955,6 +1015,7 @@ mod tests {
             true,
             None,
             &AllowList::default(),
+            &OverrideList::default(),
         )?;
 
         println!("{ast:?}");
@@ -995,6 +1056,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::default(),
+            &OverrideList::default(),
             )?;
 
             println!("{ast:?}");
@@ -1037,6 +1099,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::default(),
+            &OverrideList::default(),
             )?;
 
             println!("{ast:?}");
@@ -1094,6 +1157,7 @@ mod tests {
                     "^Class$".to_string(),
                     "^Class.*$".to_string()
                     ]),
+            &OverrideList::default(),
             )?;
 
             println!("{ast:?}");
@@ -1150,6 +1214,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::default(),
+            &OverrideList::default(),
             )?;
 
             println!("{ast:?}");

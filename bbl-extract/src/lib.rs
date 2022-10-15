@@ -7,6 +7,7 @@ use bbl_clang::{
     cursor_kind::CursorKind, diagnostic::Severity, index::Index, translation_unit::TranslationUnit,
     virtual_file,
 };
+use class::OverrideList;
 use env_logger::fmt::Color;
 use log::*;
 
@@ -62,6 +63,7 @@ pub fn parse_file_and_extract_ast<
     log_diagnostics: bool,
     namespace: Option<&str>,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<AST> {
     let index = Index::new();
     let tu = index.create_translation_unit(path, cli_args)?;
@@ -79,7 +81,7 @@ pub fn parse_file_and_extract_ast<
 
     let cur = tu.get_cursor()?;
 
-    let ast = extract_ast_from_namespace(namespace, cur, &tu, allow_list)?;
+    let ast = extract_ast_from_namespace(namespace, cur, &tu, allow_list, class_overrides)?;
 
     Ok(ast)
 }
@@ -107,9 +109,10 @@ pub fn parse_string_and_extract_ast<
     log_diagnostics: bool,
     namespace: Option<&str>,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<AST> {
     let path = virtual_file::write_temp_file(contents.as_ref())?;
-    parse_file_and_extract_ast(&path, cli_args, log_diagnostics, namespace, allow_list)
+    parse_file_and_extract_ast(&path, cli_args, log_diagnostics, namespace, allow_list, class_overrides)
 }
 
 #[instrument(level = "trace")]

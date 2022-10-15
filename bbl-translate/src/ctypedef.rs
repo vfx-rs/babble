@@ -7,7 +7,7 @@ use bbl_extract::{
     typedef::Typedef,
 };
 use hashbrown::HashSet;
-use tracing::{error, instrument};
+use tracing::{error, instrument, debug};
 
 use crate::{
     build_namespace_prefix,
@@ -69,6 +69,7 @@ pub fn translate_class_template_specialization(
         })?;
     let class = &ast.classes()[class_id];
 
+    debug!("Translating CTS {} with args {:?}", cts.name(), cts.template_arguments());
     translate_class_template(
         ast,
         class_id,

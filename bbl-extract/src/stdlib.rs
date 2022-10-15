@@ -8,7 +8,7 @@ use bbl_clang::{
 
 use crate::{
     ast::{get_namespaces_for_decl, AST},
-    class::{ClassDecl, NeedsImplicit},
+    class::{ClassDecl, NeedsImplicit, OverrideList},
     function::{Argument, Const, PureVirtual, Static, Virtual},
     function::{Deleted, FunctionProto, Method, MethodKind},
     namespace,
@@ -185,6 +185,7 @@ pub fn create_std_vector(
     already_visited: &mut Vec<USR>,
     tu: &TranslationUnit,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<USR> {
     if already_visited.contains(&c.usr()) {
         return Ok(c.usr());
@@ -206,6 +207,7 @@ pub fn create_std_vector(
         ast,
         tu,
         allow_list,
+        class_overrides,
     )?)];
 
     let cts = ClassTemplateSpecialization {
@@ -350,7 +352,7 @@ fn create_std_vector_tmpl(
             move_ctor: true,
             dtor: true,
             ..Default::default()
-        }
+        },
     );
 
     ast.insert_class(cd);
@@ -364,6 +366,7 @@ pub fn create_std_unique_ptr(
     already_visited: &mut Vec<USR>,
     tu: &TranslationUnit,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<USR> {
     if already_visited.contains(&c.usr()) {
         return Ok(c.usr());
@@ -385,6 +388,7 @@ pub fn create_std_unique_ptr(
         ast,
         tu,
         allow_list,
+        class_overrides,
     )?)];
 
     let cts = ClassTemplateSpecialization {
@@ -486,7 +490,7 @@ fn create_std_unique_ptr_tmpl(
         NeedsImplicit {
             dtor: true,
             ..Default::default()
-        }
+        },
     );
 
     ast.insert_class(cd);
@@ -500,6 +504,7 @@ pub fn create_std_function(
     already_visited: &mut Vec<USR>,
     tu: &TranslationUnit,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<USR> {
     if already_visited.contains(&c.usr()) {
         return Ok(c.usr());
@@ -524,7 +529,15 @@ pub fn create_std_function(
         );
     }
 
-    let result = extract_type(ty.result_type()?, &[], already_visited, ast, tu, allow_list)?;
+    let result = extract_type(
+        ty.result_type()?,
+        &[],
+        already_visited,
+        ast,
+        tu,
+        allow_list,
+        class_overrides,
+    )?;
     let num_args = ty.num_arg_types()?;
     let mut args = Vec::new();
     for i in 0..num_args {
@@ -535,6 +548,7 @@ pub fn create_std_function(
             ast,
             tu,
             allow_list,
+            class_overrides,
         )?);
     }
 
@@ -543,8 +557,174 @@ pub fn create_std_function(
     Ok(c.usr())
 }
 
+pub fn create_std_map(
+    c: CurClassDecl,
+    ast: &mut AST,
+    already_visited: &mut Vec<USR>,
+    tu: &TranslationUnit,
+    allow_list: &AllowList,
+    class_overrides: &OverrideList,
+) -> Result<USR> {
+    if already_visited.contains(&c.usr()) {
+        return Ok(c.usr());
+    } else {
+        already_visited.push(c.usr());
+    }
+
+    let c_tmpl = c.specialized_template().unwrap();
+    let usr_tmpl = create_std_map_tmpl(c_tmpl, ast, tu, already_visited)?;
+
+    let name = c.display_name();
+
+    let namespaces = get_namespaces_for_decl(c.into(), tu, ast, already_visited)?;
+    let ty_key = c.template_argument_type(0)?;
+    let ty_t = c.template_argument_type(1)?;
+    let template_arguments = vec![
+        TemplateArgument::Type(extract_type(
+            ty_key,
+            &[],
+            already_visited,
+            ast,
+            tu,
+            allow_list,
+            class_overrides,
+        )?),
+        TemplateArgument::Type(extract_type(
+            ty_t,
+            &[],
+            already_visited,
+            ast,
+            tu,
+            allow_list,
+            class_overrides,
+        )?),
+    ];
+
+    let cts = ClassTemplateSpecialization {
+        specialized_decl: usr_tmpl,
+        name,
+        usr: c.usr(),
+        namespaces,
+        template_arguments,
+    };
+
+    let id = ast.insert_class_template_specialization(cts);
+    let cd = ast.get_class_mut(usr_tmpl).unwrap();
+    cd.specializations.push(id);
+
+    Ok(c.usr())
+}
+
+fn create_std_map_tmpl(
+    c_tmpl: Cursor,
+    ast: &mut AST,
+    tu: &TranslationUnit,
+    already_visited: &mut Vec<USR>,
+) -> Result<USR> {
+    if already_visited.contains(&c_tmpl.usr()) {
+        return Ok(c_tmpl.usr());
+    } else {
+        already_visited.push(c_tmpl.usr());
+    }
+
+    // get the namespaces for std::vector<> as we might not have found them already
+    let namespaces = get_namespaces_for_decl(c_tmpl, tu, ast, already_visited)?;
+
+    let u_std = ast
+        .find_namespace("std")
+        .map(|id| ast.namespaces()[id].usr())
+        .unwrap();
+
+    let method_namespaces = vec![u_std, c_tmpl.usr()];
+
+    let methods = vec![
+        Method::new(
+            USR::new("BBL:map_ctor_default"),
+            "map".to_string(),
+            MethodKind::Constructor,
+            QualType::void(),
+            Vec::new(),
+            Some("ctor".to_string()),
+            method_namespaces.clone(),
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(false),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ),
+        Method::new(
+            USR::new("BBL:map_at_const"),
+            "at".to_string(),
+            MethodKind::Method,
+            QualType::lvalue_reference("const T &", QualType::template_parameter("T", "T", true)),
+            vec![Argument::new(
+                "key",
+                QualType::lvalue_reference(
+                    "const Key &",
+                    QualType::template_parameter("Key", "Key", true),
+                ),
+            )],
+            Some("at".to_string()),
+            method_namespaces.clone(),
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(true),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ),
+        Method::new(
+            USR::new("BBL:map_at_mut"),
+            "at".to_string(),
+            MethodKind::Method,
+            QualType::lvalue_reference("T &", QualType::template_parameter("T", "T", false)),
+            vec![Argument::new(
+                "key",
+                QualType::lvalue_reference(
+                    "const Key &",
+                    QualType::template_parameter("Key", "Key", true),
+                ),
+            )],
+            Some("at_mut".to_string()),
+            method_namespaces,
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(false),
+            Static(false),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ),
+    ];
+
+    let cd = ClassDecl::new(
+        c_tmpl.usr(),
+        "map".to_string(),
+        Vec::new(),
+        methods,
+        vec![u_std],
+        vec![
+            TemplateParameterDecl::typ("Key", 0),
+            TemplateParameterDecl::typ("T", 1),
+        ],
+        false,
+        NeedsImplicit {
+            dtor: true,
+            ..Default::default()
+        },
+    );
+
+    ast.insert_class(cd);
+
+    Ok(c_tmpl.usr())
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::class::OverrideList;
     use crate::parse_string_and_extract_ast;
     use crate::AllowList;
     use bbl_clang::cli_args;
@@ -572,6 +752,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::new(vec!["^Test_1_0".to_string()]),
+                &OverrideList::default(),
             )?;
 
             let ns = ast.find_namespace("Test_1_0")?;
@@ -624,6 +805,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::new(vec!["^Test_1_0".to_string()]),
+                &OverrideList::default(),
             )?;
 
             let ns = ast.find_namespace("Test_1_0")?;
@@ -671,6 +853,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::new(vec!["^Test_1_0".to_string()]),
+                &OverrideList::default(),
             )?;
 
             let ns = ast.find_namespace("Test_1_0")?;

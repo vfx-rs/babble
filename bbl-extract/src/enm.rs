@@ -93,7 +93,7 @@ mod tests {
     use bbl_clang::cli_args;
     use indoc::indoc;
 
-    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList};
+    use crate::{class::{ClassBindKind, OverrideList}, error::Error, parse_string_and_extract_ast, AllowList};
 
     #[test]
     fn extract_enum() -> bbl_util::Result<()> {
@@ -120,6 +120,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::default(),
+            &OverrideList::default(),
             )?;
 
             println!("{ast:?}");

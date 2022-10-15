@@ -11,7 +11,7 @@ use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::Translat
 use tracing::{debug, error, info, instrument, trace, warn};
 use ustr::{Ustr, UstrMap};
 
-use crate::class::extract_class_decl;
+use crate::class::{extract_class_decl, OverrideList};
 use crate::class::{ClassBindKind, ClassDecl, MethodSpecializationId};
 use crate::enm::{extract_enum, Enum};
 use crate::function::{extract_function, Function, FunctionProto, FunctionProtoId, Method};
@@ -660,7 +660,10 @@ pub fn get_qualified_name(decl: &str, namespaces: &[USR], ast: &AST) -> Result<S
 
 #[allow(clippy::too_many_arguments)]
 /// Main recursive function to walk the AST and extract the pieces we're interested in
-#[instrument(skip(depth, max_depth, tu, already_visited), level = "trace")]
+#[instrument(
+    skip(depth, max_depth, tu, already_visited, class_overrides),
+    level = "trace"
+)]
 pub fn extract_ast(
     c: Cursor,
     depth: usize,
@@ -669,6 +672,7 @@ pub fn extract_ast(
     ast: &mut AST,
     tu: &TranslationUnit,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<()> {
     if depth > max_depth {
         return Ok(());
@@ -686,7 +690,14 @@ pub fn extract_ast(
         match c.kind() {
             CursorKind::ClassDecl => {
                 if c.is_definition() {
-                    extract_class_decl(c.try_into()?, tu, ast, already_visited, allow_list)?;
+                    extract_class_decl(
+                        c.try_into()?,
+                        tu,
+                        ast,
+                        already_visited,
+                        allow_list,
+                        class_overrides,
+                    )?;
                 }
 
                 return Ok(());
@@ -700,6 +711,7 @@ pub fn extract_ast(
                         ast,
                         already_visited,
                         allow_list,
+                        class_overrides,
                     )?;
                 }
 
@@ -714,13 +726,14 @@ pub fn extract_ast(
                         ast,
                         already_visited,
                         allow_list,
+                        class_overrides,
                     )?;
                 }
 
                 return Ok(());
             }
             CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
-                extract_typedef_decl(c.try_into()?, already_visited, ast, tu, allow_list, &[])?;
+                extract_typedef_decl(c.try_into()?, already_visited, ast, tu, allow_list, class_overrides, &[])?;
                 return Ok(());
             }
             CursorKind::Namespace => {
@@ -746,12 +759,19 @@ pub fn extract_ast(
                 }
             }
             CursorKind::FunctionDecl | CursorKind::FunctionTemplate => {
-                let fun = extract_function(c, &[], already_visited, tu, ast, allow_list).map_err(
-                    |e| Error::FailedToExtractFunction {
-                        name: c.display_name(),
-                        source: Box::new(e),
-                    },
-                )?;
+                let fun = extract_function(
+                    c,
+                    &[],
+                    already_visited,
+                    tu,
+                    ast,
+                    allow_list,
+                    class_overrides,
+                )
+                .map_err(|e| Error::FailedToExtractFunction {
+                    name: c.display_name(),
+                    source: Box::new(e),
+                })?;
                 ast.insert_function(fun);
                 already_visited.push(c.usr());
 
@@ -783,6 +803,7 @@ pub fn extract_ast(
             ast,
             tu,
             allow_list,
+            class_overrides,
         )?;
     }
 
@@ -1096,12 +1117,13 @@ pub fn dump_type(
     }
 }
 
-#[instrument(level = "trace", skip(tu))]
+#[instrument(level = "trace", skip(tu, class_overrides))]
 pub fn extract_ast_from_namespace(
     name: Option<&str>,
     c_tu: Cursor,
     tu: &TranslationUnit,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<AST> {
     let ns = if let Some(name) = name {
         if name.is_empty() {
@@ -1133,7 +1155,16 @@ pub fn extract_ast_from_namespace(
 
     let mut already_visited = Vec::new();
     for cur in ns {
-        extract_ast(cur, 0, 100, &mut already_visited, &mut ast, tu, allow_list)?;
+        extract_ast(
+            cur,
+            0,
+            100,
+            &mut already_visited,
+            &mut ast,
+            tu,
+            allow_list,
+            class_overrides,
+        )?;
     }
 
     Ok(ast)

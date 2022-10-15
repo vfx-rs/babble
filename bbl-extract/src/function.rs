@@ -8,7 +8,7 @@ use tracing::instrument;
 
 use crate::AllowList;
 use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, FunctionTemplateSpecializationId, dump_cursor_until};
-use crate::class::MethodSpecializationId;
+use crate::class::{MethodSpecializationId, OverrideList};
 use crate::index_map::IndexMapKey;
 use crate::qualtype::{extract_type};
 use crate::templates::{TemplateParameterDecl, TemplateArgument};
@@ -650,6 +650,7 @@ pub fn extract_argument(
     ast: &mut AST,
     tu: &TranslationUnit,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<Argument> {
     let children = c_arg.children();
     trace!("extracting arg {c_arg:?}");
@@ -658,7 +659,7 @@ pub fn extract_argument(
     trace!("  has type {ty:?}");
 
     let qual_type = 
-        extract_type(ty, template_parameters, already_visited, ast, tu, allow_list)?;
+        extract_type(ty, template_parameters, already_visited, ast, tu, allow_list, class_overrides)?;
 
     Ok(Argument {
         name: c_arg.spelling(),
@@ -674,6 +675,7 @@ pub fn extract_function(
     tu: &TranslationUnit,
     ast: &mut AST,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<Function> {
     let c_function = c_function.canonical()?;
 
@@ -750,6 +752,7 @@ pub fn extract_function(
             ast,
             tu,
             allow_list,
+            class_overrides,
         )
         .map_err(|e| Error::FailedToExtractResult {
             name: format!("{:?}", ty_result),
@@ -775,6 +778,7 @@ pub fn extract_function(
                     ast,
                     tu,
                     allow_list,
+                    class_overrides,
                 )
                 .map_err(|e| Error::FailedToExtractArgument {
                     name: c_arg.display_name(),
@@ -841,6 +845,7 @@ pub fn extract_method(
     tu: &TranslationUnit,
     ast: &mut AST,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
     class_name: &str,
 ) -> Result<Method> {
     let c_method = c_method.canonical()?;
@@ -885,6 +890,7 @@ pub fn extract_method(
             tu,
             ast,
             allow_list,
+            class_overrides,
         )
         .map_err(|e| Error::FailedToExtractMethod {
             name: c_method.display_name(),
@@ -980,7 +986,7 @@ mod tests {
     use bbl_clang::cli_args;
     use indoc::indoc;
 
-    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList};
+    use crate::{class::{ClassBindKind, OverrideList}, error::Error, parse_string_and_extract_ast, AllowList};
 
     #[test]
     fn extract_static_method() -> bbl_util::Result<()> {
@@ -1002,6 +1008,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::default(),
+            &OverrideList::default(),
             )?;
 
             println!("{ast:?}");
@@ -1047,6 +1054,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::default(),
+            &OverrideList::default(),
             )?;
 
             println!("{ast:?}");

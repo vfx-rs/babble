@@ -175,7 +175,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
     let type_replacements = TypeReplacements::default();
 
     for (class_id, class) in ast.classes().iter().enumerate() {
-        debug!("translating {class:?}");
+        debug!("translating class {}", class.name());
         // if this is a template class, we'll ignore it and translate its specializations instead
         if class.is_templated() {
             if !class.is_specialized() {
@@ -196,7 +196,11 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
             &mut functions,
             &mut used_names,
             &type_replacements,
-        )?;
+        )
+        .map_err(|e| Error::FailedToTranslateClass {
+            name: class.name().to_string(),
+            source: Box::new(e),
+        })?;
     }
 
     for cts in ast.class_template_specializations().iter() {
@@ -207,15 +211,26 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
             &mut typedefs,
             &mut functions,
             &mut used_names,
-        )?;
+        )
+        .map_err(|e| Error::FailedToTranslateClassTemplateSpecialization {
+            name: cts.usr().to_string(),
+            source: Box::new(e),
+        })?;
     }
 
     for fts in ast.function_template_specializations().iter() {
-        translate_function_template_specialization(ast, fts, &mut functions, &mut used_names)?;
+        translate_function_template_specialization(ast, fts, &mut functions, &mut used_names)
+            .map_err(|e| Error::TranslateFunction {
+                name: fts.name().to_string(),
+                source: Box::new(e),
+            })?;
     }
 
     for (_type_alias_id, td) in ast.type_aliases().iter().enumerate() {
-        translate_typedef(ast, td, &mut typedefs)?;
+        translate_typedef(ast, td, &mut typedefs).map_err(|e| Error::FailedToTranslateTypedef {
+            usr: td.usr(),
+            source: Box::new(e),
+        })?;
     }
 
     for (function_id, function) in ast.functions().iter().enumerate() {
@@ -237,15 +252,27 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
             &mut used_names,
             &[],
             &type_replacements,
-        )?;
+        )
+        .map_err(|e| Error::TranslateFunction {
+            name: function.name().to_string(),
+            source: Box::new(e),
+        })?;
     }
 
     for (_enum_id, enm) in ast.enums().iter().enumerate() {
-        translate_enum(ast, enm, &mut enums)?;
+        translate_enum(ast, enm, &mut enums).map_err(|e| Error::FailedToTranslateEnum {
+            name: enm.name().to_string(),
+            source: Box::new(e),
+        })?;
     }
 
     for proto in ast.function_protos().iter() {
-        translate_function_proto(proto, ast, &mut function_protos)?;
+        translate_function_proto(proto, ast, &mut function_protos).map_err(|e| {
+            Error::FailedToTranslateFunctionProto {
+                name: proto.name().to_string(),
+                source: Box::new(e),
+            }
+        })?;
     }
 
     Ok(CAST {

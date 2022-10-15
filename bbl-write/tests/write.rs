@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use bbl_clang::{cli_args, cli_args_with, virtual_file::configure_temp_cmake_project};
 use bbl_extract::{
-    class::ClassBindKind, parse_file_and_extract_ast, parse_string_and_extract_ast, AllowList,
+    class::{ClassBindKind, OverrideList},
+    parse_file_and_extract_ast, parse_string_and_extract_ast, AllowList,
 };
 use bbl_translate::translate_cpp_ast_to_c;
 use common::run_test;
@@ -31,6 +32,7 @@ public:
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     println!("{ast:?}");
@@ -68,6 +70,7 @@ public:
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     println!("{ast:?}");
@@ -110,6 +113,7 @@ void fun(Class c);
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     println!("{ast:?}");
@@ -147,6 +151,7 @@ void fun(Class c);
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     println!("{ast:?}");
@@ -187,6 +192,7 @@ public:
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     println!("{ast:?}");
@@ -229,6 +235,7 @@ public:
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     println!("{ast:?}");
@@ -277,6 +284,7 @@ public:
         true,
         Some("Test_1_0"),
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     println!("{ast:?}");
@@ -319,6 +327,7 @@ fn take_std_string_by_value() -> Result<(), Error> {
             true,
             Some("Test_1_0"),
             &AllowList::default(),
+            &OverrideList::default(),
         )?;
 
         println!("{ast:?}");
@@ -363,6 +372,7 @@ fn write_take_std_string() -> Result<(), Error> {
             true,
             Some("Test_1_0"),
             &AllowList::default(),
+            &OverrideList::default(),
         )?;
 
         println!("{ast:?}");
@@ -400,6 +410,7 @@ fn write_implicit_ctor() -> Result<(), Error> {
             true,
             None,
             &AllowList::default(),
+            &OverrideList::default(),
         )?;
 
         println!("{ast:?}");
@@ -460,6 +471,7 @@ fn write_inherited() -> Result<(), Error> {
             true,
             None,
             &AllowList::default(),
+            &OverrideList::default(),
         )?;
 
         println!("{ast:?}");
@@ -506,6 +518,7 @@ fn write_take_std_string_fun() -> Result<(), Error> {
             true,
             Some("Test_1_0"),
             &AllowList::default(),
+            &OverrideList::default(),
         )?;
 
         println!("{ast:?}");
@@ -553,6 +566,7 @@ fn build_take_std_string() -> bbl_util::Result<()> {
             true,
             Some("Test_1_0"),
             &AllowList::default(),
+            &OverrideList::default(),
         )?;
 
         println!("{ast:?}");
@@ -611,6 +625,7 @@ fn write_enum() -> Result<(), Error> {
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     let ns = ast.find_namespace("Test_1_0")?;
@@ -647,6 +662,7 @@ fn write_vector() -> Result<(), Error> {
         true,
         None,
         &AllowList::new(vec!["^Test_1_0".to_string()]),
+        &OverrideList::default(),
     )?;
 
     let ns = ast.find_namespace("Test_1_0")?;
@@ -683,6 +699,7 @@ fn write_unique_ptr() -> Result<(), Error> {
         true,
         None,
         &AllowList::new(vec!["^Test_1_0".to_string()]),
+        &OverrideList::default(),
     )?;
 
     let ns = ast.find_namespace("Test_1_0")?;
@@ -715,6 +732,7 @@ fn write_std_function() -> Result<(), bbl_util::Error> {
             true,
             None,
             &AllowList::new(vec!["^Test_1_0".to_string()]),
+            &OverrideList::default(),
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -756,7 +774,8 @@ fn write_nested_template() -> bbl_util::Result<()> {
             &cli_args()?,
             true,
             None,
-            &AllowList::new(vec![r#"^Test::.*$"#.to_string()])
+            &AllowList::new(vec![r#"^Test::.*$"#.to_string()]),
+            &OverrideList::default(),
         )?;
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;
@@ -768,7 +787,6 @@ fn write_nested_template() -> bbl_util::Result<()> {
         Ok(())
     })
 }
-
 
 #[test]
 fn write_template_typedef_member() -> bbl_util::Result<()> {
@@ -799,7 +817,8 @@ fn write_template_typedef_member() -> bbl_util::Result<()> {
             &cli_args()?,
             true,
             None,
-            &AllowList::new(vec![r#"^Test::.*$"#.to_string()])
+            &AllowList::new(vec![r#"^Test::.*$"#.to_string()]),
+            &OverrideList::default(),
         )?;
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;

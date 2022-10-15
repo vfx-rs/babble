@@ -1,11 +1,22 @@
 use std::path::{Path, PathBuf};
 
-use bbl_clang::{cli_args_with, virtual_file::configure_temp_cmake_project};
-use bbl_extract::{parse_file_and_extract_ast};
+pub use bbl_clang::{
+    cli_args_with, cursor::Cursor, cursor::USR, exception::ExceptionSpecificationKind,
+    translation_unit::TranslationUnit, virtual_file::configure_temp_cmake_project,
+};
+pub use bbl_extract::{class::OverrideList, parse_file_and_extract_ast};
 use bbl_write::{cmake::build_project, gen_c::gen_c, gen_rust_ffi::write_rust_ffi_module};
 
-pub use bbl_extract::{ast::{AST, ClassId, MethodId}, templates::TemplateArgument, qualtype::QualType, class::ClassBindKind};
 pub use bbl_extract::AllowList;
+pub use bbl_extract::{
+    ast::{get_namespaces_for_decl, ClassId, MethodId, AST},
+    class::{ClassBindKind, ClassDecl, ClassExtractionFn, NeedsImplicit},
+    error::Error as ExtractError,
+    function::{Const, Deleted, Method, MethodKind, PureVirtual, Static, Virtual},
+    qualtype::extract_type,
+    qualtype::QualType,
+    templates::{ClassTemplateSpecialization, TemplateArgument, TemplateParameterDecl},
+};
 pub use bbl_translate::translate_cpp_ast_to_c;
 use tracing::debug;
 
@@ -29,6 +40,7 @@ pub fn parse(header: &str, options: &BindOptions) -> Result<AST, Error> {
         options.log_diagnostics,
         options.limit_to_namespace,
         &options.allow_list,
+        &options.overrides,
     )?;
 
     Ok(ast)
@@ -95,6 +107,7 @@ pub struct BindOptions<'a, 'b, 'c, 'd, 'e> {
     pub limit_to_namespace: Option<&'d str>,
     pub compile_definitions: &'e [&'e str],
     pub allow_list: AllowList,
+    pub overrides: OverrideList,
     pub log_diagnostics: bool,
 }
 
@@ -109,6 +122,7 @@ impl<'a, 'b, 'c, 'd, 'e> Default for BindOptions<'a, 'b, 'c, 'd, 'e> {
             log_diagnostics: true,
             limit_to_namespace: None,
             allow_list: AllowList::default(),
+            overrides: OverrideList::default(),
         }
     }
 }

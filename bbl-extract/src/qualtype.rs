@@ -10,7 +10,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::{
     ast::AST,
-    class::{extract_class_decl, specialize_template_parameter, ClassBindKind},
+    class::{extract_class_decl, specialize_template_parameter, ClassBindKind, OverrideList},
     enm::extract_enum,
     error::Error,
     templates::{TemplateArgument, TemplateParameterDecl},
@@ -465,8 +465,10 @@ pub fn extract_type(
     ast: &mut AST,
     tu: &TranslationUnit,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<QualType> {
     debug!("extract_type {ty:?} {template_parameters:?}");
+
     let is_const = ty.is_const_qualified();
     let name = if is_const {
         if let Some(s) = ty.spelling().strip_prefix("const ") {
@@ -477,6 +479,12 @@ pub fn extract_type(
     } else {
         ty.spelling()
     };
+
+    if name.contains("std::enable_if") {
+        return Err(Error::Unsupported {
+            description: "std::enable_if is unsupported".to_string(),
+        });
+    }
 
     if ty.is_builtin() {
         trace!("got builtin {:?}", ty);
@@ -502,7 +510,14 @@ pub fn extract_type(
                 );
             }
 
-            extract_std_function_as_pointer(ty, ast, already_visited, tu, allow_list)
+            extract_std_function_as_pointer(
+                ty,
+                ast,
+                already_visited,
+                tu,
+                allow_list,
+                class_overrides,
+            )
         } else {
             // extract underlying decl here
             match c_decl.kind() {
@@ -514,6 +529,7 @@ pub fn extract_type(
                         ast,
                         tu,
                         allow_list,
+                        class_overrides,
                         template_parameters,
                     )?;
 
@@ -531,6 +547,7 @@ pub fn extract_type(
                         ast,
                         already_visited,
                         allow_list,
+                        class_overrides,
                     )?;
 
                     Ok(QualType {
@@ -562,6 +579,7 @@ pub fn extract_type(
                     ast,
                     tu,
                     allow_list,
+                    class_overrides,
                 )?;
                 Ok(QualType {
                     name,
@@ -589,6 +607,7 @@ pub fn extract_type(
                                 ast,
                                 tu,
                                 allow_list,
+                                class_overrides,
                             );
                         }
                     }
@@ -601,6 +620,7 @@ pub fn extract_type(
                     ast,
                     tu,
                     allow_list,
+                    class_overrides,
                 )?;
                 Ok(QualType {
                     name,
@@ -617,6 +637,7 @@ pub fn extract_type(
                     ast,
                     tu,
                     allow_list,
+                    class_overrides,
                 )?;
                 Ok(QualType {
                     name,
@@ -644,7 +665,7 @@ pub fn extract_type(
                 }
             }
             TypeKind::FunctionProto => {
-                extract_function_pointer(ty, ast, already_visited, tu, allow_list)
+                extract_function_pointer(ty, ast, already_visited, tu, allow_list, class_overrides)
             }
             _ => {
                 error!("Unhandled {:?}", ty);
@@ -661,6 +682,7 @@ pub fn extract_function_pointer(
     already_visited: &mut Vec<USR>,
     tu: &TranslationUnit,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<QualType> {
     if ty.kind() != TypeKind::FunctionProto {
         panic!(
@@ -672,7 +694,15 @@ pub fn extract_function_pointer(
 
     let name = ty.spelling();
 
-    let result = extract_type(ty.result_type()?, &[], already_visited, ast, tu, allow_list)?;
+    let result = extract_type(
+        ty.result_type()?,
+        &[],
+        already_visited,
+        ast,
+        tu,
+        allow_list,
+        class_overrides,
+    )?;
     let num_args = ty.num_arg_types()?;
     let mut args = Vec::new();
     for i in 0..num_args {
@@ -683,6 +713,7 @@ pub fn extract_function_pointer(
             ast,
             tu,
             allow_list,
+            class_overrides,
         )?);
     }
 
@@ -703,6 +734,7 @@ pub fn extract_std_function_as_pointer(
     already_visited: &mut Vec<USR>,
     tu: &TranslationUnit,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<QualType> {
     if ty.kind() != TypeKind::FunctionProto {
         panic!(
@@ -714,7 +746,15 @@ pub fn extract_std_function_as_pointer(
 
     let name = ty.spelling();
 
-    let result = extract_type(ty.result_type()?, &[], already_visited, ast, tu, allow_list)?;
+    let result = extract_type(
+        ty.result_type()?,
+        &[],
+        already_visited,
+        ast,
+        tu,
+        allow_list,
+        class_overrides,
+    )?;
     let num_args = ty.num_arg_types()?;
     let mut args = Vec::new();
     for i in 0..num_args {
@@ -725,6 +765,7 @@ pub fn extract_std_function_as_pointer(
             ast,
             tu,
             allow_list,
+            class_overrides,
         )?);
     }
 

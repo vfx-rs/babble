@@ -10,8 +10,8 @@ use bbl_clang::{
 use tracing::log::{debug, trace};
 
 use crate::{
-    ast::{get_namespaces_for_decl, get_qualified_name, AST, dump_cursor, dump_cursor_until},
-    class::{extract_class_decl, ClassBindKind},
+    ast::{dump_cursor, dump_cursor_until, get_namespaces_for_decl, get_qualified_name, AST},
+    class::{self, extract_class_decl, ClassBindKind, OverrideList},
     qualtype::{extract_type, QualType},
     AllowList,
 };
@@ -30,8 +30,12 @@ pub fn extract_class_template_specialization(
     ast: &mut AST,
     tu: &TranslationUnit,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<USR> {
-    debug!("extract_class_template_specialization: {c_class_decl:?} {}", c_class_decl.is_definition());
+    debug!(
+        "extract_class_template_specialization: {c_class_decl:?} {}",
+        c_class_decl.is_definition()
+    );
 
     if already_visited.contains(&c_class_decl.usr()) {
         return Ok(c_class_decl.usr());
@@ -39,8 +43,14 @@ pub fn extract_class_template_specialization(
         already_visited.push(c_class_decl.usr());
     }
 
-    let template_arguments =
-        extract_template_args(c_class_decl, already_visited, ast, tu, allow_list)?;
+    let template_arguments = extract_template_args(
+        c_class_decl,
+        already_visited,
+        ast,
+        tu,
+        allow_list,
+        class_overrides,
+    )?;
     let namespaces = get_namespaces_for_decl(c_class_decl.into(), tu, ast, already_visited)?;
 
     let specialized_decl: CurClassTemplate = c_class_decl
@@ -62,6 +72,7 @@ pub fn extract_class_template_specialization(
         ast,
         already_visited,
         allow_list,
+        class_overrides,
     )?;
 
     // let name = regex::Regex::new("(?:[^a-zA-Z0-9])+")
@@ -86,6 +97,7 @@ pub fn extract_template_args(
     ast: &mut AST,
     tu: &TranslationUnit,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
 ) -> Result<Vec<TemplateArgument>> {
     let mut result = Vec::new();
     let num_template_args = c_class_decl.num_template_arguments();
@@ -108,6 +120,7 @@ pub fn extract_template_args(
                     ast,
                     tu,
                     allow_list,
+                    class_overrides,
                 )?))
             }
             TemplateArgumentKind::Integral => result.push(TemplateArgument::Integral(
@@ -141,6 +154,22 @@ impl Debug for ClassTemplateSpecialization {
 }
 
 impl ClassTemplateSpecialization {
+    pub fn new(
+        specialized_decl: USR,
+        usr: USR,
+        name: &str,
+        template_arguments: Vec<TemplateArgument>,
+        namespaces: Vec<USR>,
+    ) -> Self {
+        ClassTemplateSpecialization {
+            specialized_decl,
+            usr,
+            name: name.to_string(),
+            template_arguments,
+            namespaces,
+        }
+    }
+
     pub fn specialized_decl(&self) -> USR {
         self.specialized_decl
     }
@@ -421,7 +450,11 @@ mod tests {
     use bbl_clang::cli_args;
     use indoc::indoc;
 
-    use crate::{class::ClassBindKind, error::Error, parse_string_and_extract_ast, AllowList};
+    use crate::{
+        class::{ClassBindKind, OverrideList},
+        error::Error,
+        parse_string_and_extract_ast, AllowList,
+    };
 
     #[test]
     fn extract_nested_template() -> bbl_util::Result<()> {
@@ -450,7 +483,8 @@ mod tests {
                 &cli_args()?,
                 true,
                 None,
-                &AllowList::new(vec![r#"^Test::.*$"#.to_string()])
+                &AllowList::new(vec![r#"^Test::.*$"#.to_string()]),
+                &OverrideList::default(),
             )?;
 
             println!("{ast:?}");

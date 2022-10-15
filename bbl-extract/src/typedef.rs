@@ -7,7 +7,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::AllowList;
 use crate::ast::{dump_cursor, get_namespaces_for_decl, get_qualified_name, TypeAliasId, AST};
-use crate::class::extract_class_decl;
+use crate::class::{extract_class_decl, OverrideList};
 use crate::namespace::extract_namespace;
 use crate::qualtype::{extract_type, QualType};
 use crate::stdlib::create_std_string;
@@ -75,6 +75,7 @@ pub fn extract_typedef_decl<'a>(
     ast: &'a mut AST,
     tu: &TranslationUnit,
     allow_list: &AllowList,
+    class_overrides: &OverrideList,
     extra_template_parameters: &[String],
 ) -> Result<USR> {
     let usr = c_typedef.usr();
@@ -95,6 +96,7 @@ pub fn extract_typedef_decl<'a>(
         ast,
         tu,
         allow_list,
+        class_overrides,
     )?;
 
     let id = ast.insert_type_alias(Typedef {
@@ -113,7 +115,7 @@ mod tests {
     use indoc::indoc;
     use log::Level;
 
-    use crate::{class::ClassBindKind, parse_string_and_extract_ast, AllowList};
+    use crate::{class::{ClassBindKind, OverrideList}, parse_string_and_extract_ast, AllowList};
 
     #[test]
     fn extract_typealias_typedef() -> bbl_util::Result<()> {
@@ -144,6 +146,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::default(),
+                &OverrideList::default(),
             )?;
 
             println!("{ast:?}");
@@ -191,6 +194,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::default(),
+                &OverrideList::default(),
             )?;
 
             println!("{ast:?}");

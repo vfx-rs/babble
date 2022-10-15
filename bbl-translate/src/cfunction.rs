@@ -448,7 +448,12 @@ pub fn translate_function(
                     TypeRef::LValueReference(_) | TypeRef::RValueReference(_)
                 ) {
                     // pointer converted from a reference - cast and deref
-                    let to_type = get_cpp_cast_expr(&arg.qual_type, ast)?;
+                    let to_type = get_cpp_cast_expr(&arg.qual_type, ast).map_err(|e| {
+                        Error::FailedToCastArgument {
+                            name: arg.name.clone(),
+                            source: Box::new(e),
+                        }
+                    })?;
                     let cast = Expr::Cast {
                         to_type,
                         value: Box::new(Expr::Token(arg.name.clone())),
@@ -458,7 +463,12 @@ pub fn translate_function(
                     });
                 } else {
                     // just a regular pointer
-                    let to_type = get_cpp_cast_expr(&arg.qual_type, ast)?;
+                    let to_type = get_cpp_cast_expr(&arg.qual_type, ast).map_err(|e| {
+                        Error::FailedToCastArgument {
+                            name: arg.name.clone(),
+                            source: Box::new(e),
+                        }
+                    })?;
                     arg_pass.push(Expr::Cast {
                         to_type,
                         value: Box::new(Expr::Token(arg.name.clone())),
@@ -478,7 +488,12 @@ pub fn translate_function(
 
                         arg_pass.push(Expr::Deref {
                             value: Box::new(Expr::Cast {
-                                to_type: get_cpp_cast_expr(&arg.qual_type, ast)?,
+                                to_type: get_cpp_cast_expr(&arg.qual_type, ast).map_err(|e| {
+                                    Error::FailedToCastArgument {
+                                        name: arg.name.clone(),
+                                        source: Box::new(e),
+                                    }
+                                })?,
                                 value: Box::new(Expr::Token(arg.name.clone())),
                             }),
                         });
@@ -495,7 +510,12 @@ pub fn translate_function(
                             arg.qual_type.clone(),
                             false,
                         );
-                        let to_type = get_cpp_cast_expr(&tmp_qual_type, ast)?;
+                        let to_type = get_cpp_cast_expr(&tmp_qual_type, ast).map_err(|e| {
+                            Error::FailedToCastArgument {
+                                name: arg.name.clone(),
+                                source: Box::new(e),
+                            }
+                        })?;
                         arg_pass.push(Expr::Deref {
                             value: Box::new(Expr::Cast {
                                 to_type,
@@ -557,7 +577,12 @@ pub fn translate_function(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast)?;
+                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                    Error::FailedToCastArgument {
+                        name: "[result]".to_string(),
+                        source: Box::new(e),
+                    }
+                })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -576,6 +601,10 @@ pub fn translate_function(
             CTypeRef::Pointer(_) => {
                 let cpp_type_ref = result.cpp_type_ref.clone();
 
+                // we need to assign to the pointer, so make it not const
+                let mut result = result;
+                result.is_const = false;
+
                 let result_qt = CQualType {
                     name: format!("{}*", result.name()),
                     cpp_type_ref: result.cpp_type_ref().clone(),
@@ -583,7 +612,12 @@ pub fn translate_function(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast)?;
+                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                    Error::FailedToCastArgument {
+                        name: "[result]".to_string(),
+                        source: Box::new(e),
+                    }
+                })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -625,7 +659,12 @@ pub fn translate_function(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast)?;
+                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                    Error::FailedToCastArgument {
+                        name: "[result]".to_string(),
+                        source: Box::new(e),
+                    }
+                })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -885,7 +924,12 @@ pub fn translate_method(
                     TypeRef::LValueReference(_) | TypeRef::RValueReference(_)
                 ) {
                     // pointer converted from a reference - cast and deref
-                    let to_type = get_cpp_cast_expr(&arg.qual_type, ast)?;
+                    let to_type = get_cpp_cast_expr(&arg.qual_type, ast).map_err(|e| {
+                        Error::FailedToCastArgument {
+                            name: arg.name.clone(),
+                            source: Box::new(e),
+                        }
+                    })?;
                     let cast = Expr::Cast {
                         to_type,
                         value: Box::new(Expr::Token(arg.name.clone())),
@@ -895,7 +939,12 @@ pub fn translate_method(
                     });
                 } else {
                     // just a regular pointer
-                    let to_type = get_cpp_cast_expr(&arg.qual_type, ast)?;
+                    let to_type = get_cpp_cast_expr(&arg.qual_type, ast).map_err(|e| {
+                        Error::FailedToCastArgument {
+                            name: arg.name.clone(),
+                            source: Box::new(e),
+                        }
+                    })?;
                     arg_pass.push(Expr::Cast {
                         to_type,
                         value: Box::new(Expr::Token(arg.name.clone())),
@@ -915,7 +964,12 @@ pub fn translate_method(
 
                         arg_pass.push(Expr::Deref {
                             value: Box::new(Expr::Cast {
-                                to_type: get_cpp_cast_expr(&arg.qual_type, ast)?,
+                                to_type: get_cpp_cast_expr(&arg.qual_type, ast).map_err(|e| {
+                                    Error::FailedToCastArgument {
+                                        name: arg.name.clone(),
+                                        source: Box::new(e),
+                                    }
+                                })?,
                                 value: Box::new(Expr::Token(arg.name.clone())),
                             }),
                         });
@@ -932,7 +986,12 @@ pub fn translate_method(
                             arg.qual_type.clone(),
                             false,
                         );
-                        let to_type = get_cpp_cast_expr(&tmp_qual_type, ast)?;
+                        let to_type = get_cpp_cast_expr(&tmp_qual_type, ast).map_err(|e| {
+                            Error::FailedToCastArgument {
+                                name: arg.name.clone(),
+                                source: Box::new(e),
+                            }
+                        })?;
                         arg_pass.push(Expr::Deref {
                             value: Box::new(Expr::Cast {
                                 to_type,
@@ -995,7 +1054,12 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast)?;
+                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                    Error::FailedToCastArgument {
+                        name: "[result]".to_string(),
+                        source: Box::new(e),
+                    }
+                })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -1014,6 +1078,10 @@ pub fn translate_method(
             CTypeRef::Pointer(_) => {
                 let cpp_type_ref = result.cpp_type_ref.clone();
 
+                // we need to assign to the pointer, so make it not const
+                let mut result = result;
+                result.is_const = false;
+
                 let result_qt = CQualType {
                     name: format!("{}*", result.name()),
                     cpp_type_ref: result.cpp_type_ref().clone(),
@@ -1021,7 +1089,12 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast)?;
+                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                    Error::FailedToCastArgument {
+                        name: "[result]".to_string(),
+                        source: Box::new(e),
+                    }
+                })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -1063,7 +1136,12 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast)?;
+                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                    Error::FailedToCastArgument {
+                        name: "[result]".to_string(),
+                        source: Box::new(e),
+                    }
+                })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -1127,7 +1205,12 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast)?;
+                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                    Error::FailedToCastArgument {
+                        name: "[result]".to_string(),
+                        source: Box::new(e),
+                    }
+                })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -1171,7 +1254,12 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast)?;
+                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                    Error::FailedToCastArgument {
+                        name: "[result]".to_string(),
+                        source: Box::new(e),
+                    }
+                })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -1244,7 +1332,10 @@ pub fn translate_method(
             })),
         };
 
-        let to_type = get_cpp_cast_expr(&qt, ast)?;
+        let to_type = get_cpp_cast_expr(&qt, ast).map_err(|e| Error::FailedToCastArgument {
+            name: "[self]".to_string(),
+            source: Box::new(e),
+        })?;
         let self_name = get_unique_argument_name("this_", &mut used_argument_names);
 
         arguments.insert(
@@ -1279,7 +1370,10 @@ pub fn translate_method(
             })),
         };
 
-        let to_type = get_cpp_cast_expr(&qt, ast)?;
+        let to_type = get_cpp_cast_expr(&qt, ast).map_err(|e| Error::FailedToCastArgument {
+            name: "[self]".to_string(),
+            source: Box::new(e),
+        })?;
         let self_name = get_unique_argument_name("this_", &mut used_argument_names);
 
         arguments.insert(
@@ -1427,7 +1521,11 @@ fn get_cpp_cast_expr(qt: &CQualType, ast: &AST) -> Result<String> {
                 })
             }
         }
-        _ => unreachable!(),
+        CTypeRef::FunctionProto { result, args } => Err(Error::Unsupported {
+            description: format!("Cannot cast FunctionProto {qt:?}"),
+        }),
+        CTypeRef::Template(t) => Err(Error::TriedToTranslateTemplateParmeter { name: t.clone() }),
+        _ => unreachable!("Got unreachable type for cast {qt:?}"),
     }?;
 
     if qt.is_const() {

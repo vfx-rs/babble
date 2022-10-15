@@ -210,7 +210,7 @@ pub fn translate_class(
             continue;
         }
 
-        let c_function = translate_method(
+        match translate_method(
             class,
             class.template_parameters(),
             template_args,
@@ -224,9 +224,26 @@ pub fn translate_class(
             ast,
             type_replacements,
             None,
-        )?;
-
-        functions.insert(method.usr().into(), c_function);
+        ) {
+            Ok(c_function) => {
+                functions.insert(method.usr().into(), c_function);
+            }
+            Err(e) => {
+                if e.is_unsupported() {
+                    error!(
+                        "Failed to translate method {}::{} due to unsupported feature: {e:?}",
+                        class.name(),
+                        method.name()
+                    );
+                    continue;
+                } else {
+                    return Err(Error::TranslateMethod {
+                        name: format!("{}::{}", class.name(), method.name()),
+                        source: Box::new(e),
+                    });
+                }
+            }
+        }
     }
 
     for (spec_method_id, spec_method) in class.specialized_methods().iter().enumerate() {
@@ -258,7 +275,11 @@ pub fn translate_class(
             ast,
             type_replacements,
             Some(spec_method.name()),
-        )?;
+        )
+        .map_err(|e| Error::TranslateSpecializedMethod {
+            name: method.name().to_string(),
+            source: Box::new(e),
+        })?;
 
         functions.insert(method.usr().into(), c_function);
     }
@@ -412,7 +433,11 @@ pub fn translate_class_template(
             ast,
             &type_replacements,
             Some(spec_method.name()),
-        )?;
+        )
+        .map_err(|e| Error::TranslateSpecializedMethod {
+            name: method.name().to_string(),
+            source: Box::new(e),
+        })?;
 
         functions.insert(method.usr().into(), c_function);
     }

@@ -3,7 +3,31 @@ use bbl_clang::cursor::USR;
 
 #[derive(Debug)]
 pub enum Error {
+    FailedToTranslateClass{
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    FailedToTranslateClassTemplateSpecialization {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    FailedToTranslateEnum {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    FailedToTranslateFunctionProto {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     TranslateFunction {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    TranslateMethod {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    TranslateSpecializedMethod {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
@@ -42,6 +66,10 @@ pub enum Error {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    FailedToCastArgument {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     FailedToFormatArgument {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
@@ -70,13 +98,37 @@ pub enum Error {
         name: String,
         backtrace: Backtrace,
     },
+    Unsupported {
+        description: String,
+    },
+    TriedToTranslateTemplateParmeter {
+        name: String,
+    },
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::FailedToTranslateClass{ name, .. } => {
+                write!(f, "Failed to translate class {name}")
+            }
+            Error::FailedToTranslateClassTemplateSpecialization { name, .. } => {
+                write!(f, "Failed to translate class template specialization {name}")
+            }
+            Error::FailedToTranslateEnum { name, .. } => {
+                write!(f, "Failed to translate enum {name}")
+            }
+            Error::FailedToTranslateFunctionProto { name, .. } => {
+                write!(f, "Failed to translate function proto {name}")
+            }
             Error::TranslateFunction { name, .. } => {
                 write!(f, "Failed to translate function {name}")
+            }
+            Error::TranslateMethod { name, .. } => {
+                write!(f, "Failed to translate method {name}")
+            }
+            Error::TranslateSpecializedMethod { name, .. } => {
+                write!(f, "Failed to translate specialized method {name}")
             }
             Error::TranslateField { name, .. } => write!(f, "Failed to translate field {name}"),
             Error::FailedToGetClassFromRef(usr) => {
@@ -98,6 +150,9 @@ impl std::fmt::Display for Error {
             Error::FailedToFormatArgument { name, .. } => {
                 write!(f, "Failed to format argument {name}")
             }
+            Error::FailedToCastArgument { name, .. } => {
+                write!(f, "Failed to cast argument {name}")
+            }
             Error::FailedToGetQualifiedName { usr, .. } => {
                 write!(f, "Failed to get qualified name from usr {usr}")
             }
@@ -116,6 +171,12 @@ impl std::fmt::Display for Error {
             Error::InvalidTemplateArgumentKind { name, .. } => {
                 write!(f, "Invalid template argument kind {name}")
             }
+            Error::Unsupported { description } => {
+                write!(f, "Unsupported: {description}")
+            }
+            Error::TriedToTranslateTemplateParmeter { name } => {
+                write!(f, "Tried to translate a template parameter: {name}")
+            }
         }
     }
 }
@@ -125,6 +186,8 @@ impl std::error::Error for Error {
         use Error::*;
         match self {
             TranslateFunction { source, .. }
+            | TranslateMethod { source, .. }
+            | TranslateSpecializedMethod { source, .. }
             | TranslateField { source, .. }
             | FailedToTranslateType { source, .. }
             | FailedToFormatField { source, .. }
@@ -133,10 +196,36 @@ impl std::error::Error for Error {
             | FailedToFormatFunction { source, .. }
             | FailedToGetQualifiedName { source, .. }
             | FailedToGetBindKind { source, .. }
+            | FailedToCastArgument { source, .. }
+            | FailedToTranslateClass { source, .. }
+            | FailedToTranslateClassTemplateSpecialization { source, .. }
+            | FailedToTranslateEnum { source, .. }
+            | FailedToTranslateFunctionProto { source, .. }
             | FailedToTranslateTypedef { source, .. } => Some(source.as_ref()),
             Extraction(e) => Some(e),
             Clang(e) => Some(e),
             _ => None,
+        }
+    }
+}
+
+impl Error {
+    // returns true if the cause of this error is ultimately that there's an unsupported feature
+    pub fn is_unsupported(&self) -> bool {
+        match self {
+            crate::Error::Unsupported { .. } => return true,
+            _ => (),
+        }
+
+        use std::error::Error;
+        if let Some(e) = self.source() {
+            if let Some(e) = e.downcast_ref::<crate::error::Error>() {
+                e.is_unsupported()
+            } else {
+                false
+            }
+        } else {
+            false
         }
     }
 }
@@ -155,18 +244,9 @@ impl From<bbl_clang::error::Error> for Error {
 
 #[derive(Debug)]
 pub enum TranslateTypeError {
-    TemplateParmNotFound {
-        name: String,
-        backtrace: Backtrace,
-    },
-    TemplateArgNotFound {
-        name: String,
-        backtrace: Backtrace,
-    },
-    InvalidTemplateArgumentKind {
-        name: String,
-        backtrace: Backtrace,
-    },
+    TemplateParmNotFound { name: String, backtrace: Backtrace },
+    TemplateArgNotFound { name: String, backtrace: Backtrace },
+    InvalidTemplateArgumentKind { name: String, backtrace: Backtrace },
 }
 
 impl std::fmt::Display for TranslateTypeError {

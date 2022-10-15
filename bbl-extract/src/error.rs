@@ -121,6 +121,30 @@ pub enum Error {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    Unsupported {
+        description: String,
+    }
+}
+
+impl Error {
+    // returns true if the cause of this error is ultimately that there's an unsupported feature
+    pub fn is_unsupported(&self) -> bool {
+        match self {
+            crate::Error::Unsupported { .. } => return true,
+            _ => (),
+        }
+
+        use std::error::Error;
+        if let Some(e) = self.source() {
+            if let Some(e) = e.downcast_ref::<crate::error::Error>() {
+                e.is_unsupported()
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
 }
 
 impl std::error::Error for Error {

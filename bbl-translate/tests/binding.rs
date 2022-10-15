@@ -3,6 +3,7 @@ mod common;
 use std::path::Path;
 
 use bbl_clang::{cli_args, cli_args_with, virtual_file::configure_temp_cmake_project};
+use bbl_extract::class::OverrideList;
 use bbl_extract::templates::TemplateArgument;
 use bbl_extract::{
     parse_file_and_extract_ast, parse_string_and_extract_ast, qualtype::QualType, AllowList,
@@ -33,6 +34,7 @@ public:
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     let class = ast.find_class("Class")?;
@@ -78,6 +80,7 @@ public:
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     println!("{ast:?}");
@@ -175,6 +178,7 @@ public:
         true,
         Some("Imath_3_1"),
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     println!("{ast:?}");
@@ -213,6 +217,7 @@ public:
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     let class = ast.find_class("Class")?;
@@ -248,6 +253,7 @@ public:
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     let class = ast.find_class("Class")?;
@@ -286,6 +292,7 @@ public:
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     println!("{ast:?}");
@@ -319,6 +326,7 @@ int basic_function(int&& a, float*);
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     println!("{ast:?}");
@@ -346,6 +354,7 @@ T function_template(T&& a, float*);
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     println!("{ast:?}");
@@ -384,6 +393,7 @@ fn translate_method_template() -> bbl_util::Result<()> {
             true,
             None,
             &AllowList::default(),
+        &OverrideList::default(),
         )?;
 
         let class = ast.find_class("Class")?;
@@ -432,6 +442,7 @@ public:
             true,
             None,
             &AllowList::default(),
+        &OverrideList::default(),
         )?;
 
         let class = ast.find_class("Class")?;
@@ -481,6 +492,7 @@ public:
             true,
             None,
             &AllowList::default(),
+        &OverrideList::default(),
         )?;
 
         let class = ast.find_class("Class")?;
@@ -538,6 +550,7 @@ public:
         true,
         Some("Test"),
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
     println!("{ast:?}");
 
@@ -562,6 +575,7 @@ public:
             true,
             Some("Test"),
             &AllowList::default(),
+        &OverrideList::default(),
         )?;
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;
@@ -616,6 +630,7 @@ fn translate_enum() -> Result<(), Error> {
         true,
         None,
         &AllowList::default(),
+        &OverrideList::default(),
     )?;
 
     let ns = ast.find_namespace("Test_1_0")?;
@@ -659,6 +674,7 @@ fn translate_vector() -> bbl_util::Result<()> {
             true,
             None,
             &AllowList::new(vec!["^Test_1_0".to_string()]),
+        &OverrideList::default(),
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -717,6 +733,7 @@ fn translate_unique_ptr() -> bbl_util::Result<()> {
             true,
             None,
             &AllowList::new(vec!["^Test_1_0".to_string()]),
+        &OverrideList::default(),
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -763,6 +780,7 @@ fn translate_std_function() -> Result<(), bbl_util::Error> {
             true,
             None,
             &AllowList::new(vec!["^Test_1_0".to_string()]),
+        &OverrideList::default(),
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -812,6 +830,7 @@ fn translate_nested_template() -> bbl_util::Result<()> {
             true,
             None,
             &AllowList::new(vec![r#"^Test::.*$"#.to_string()]),
+        &OverrideList::default(),
         )?;
 
         let c_ast = translate_cpp_ast_to_c(&ast)?;
