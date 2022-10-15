@@ -10,7 +10,7 @@ use bbl_extract::{
 use bbl_translate::translate_cpp_ast_to_c;
 use common::run_test;
 
-use bbl_write::{cmake::build_project, error::Error, gen_c::gen_c};
+use bbl_write::{cmake::build_project, error::Error, gen_c::gen_c, gen_rust_ffi::write_rust_ffi};
 
 use crate::common::init_log;
 
@@ -816,6 +816,38 @@ fn write_template_typedef_member() -> bbl_util::Result<()> {
 
         let (c_header, c_source) = gen_c("test", &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+
+        Ok(())
+    })
+}
+
+#[test]
+fn write_size_t() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
+                #include <stddef.h>
+                size_t void take_size_t(size_t);
+            "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
+
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
+
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+        
+        let mut ffi = String::new();
+        write_rust_ffi(&mut ffi, &c_ast)?;
+
+        println!("FFI:\n---------\n{ffi}");
 
         Ok(())
     })

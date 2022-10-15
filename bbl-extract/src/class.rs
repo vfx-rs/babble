@@ -484,7 +484,20 @@ fn extract_class_decl_inner(
     qname_override: Option<&str>) 
 -> Result<ClassDecl> {
     let namespaces = get_namespaces_for_decl(class_decl.into(), tu, ast, already_visited)?;
-    let class_decl_qualified_name = get_qualified_name(&class_decl.display_name(), &namespaces, ast)?;
+    let mut class_name = class_decl.display_name();
+    let mut class_spelling = class_decl.spelling();
+    if class_name.is_empty() {
+        class_name = "anon".into();
+    }
+    let class_name = class_name;
+
+    if class_spelling.is_empty() {
+        debug!("spelling is empty, class_name is {class_name}");
+        class_spelling = "anon".into();
+    }
+    let class_spelling = class_spelling;
+
+    let class_decl_qualified_name = get_qualified_name(&class_name, &namespaces, ast)?;
 
     debug!(
         "extract_class_decl({}) {}",
@@ -652,7 +665,7 @@ fn extract_class_decl_inner(
                     )
                     .map_err(|e| {
                         Error::FailedToExtractField {
-                            class: class_decl.display_name(),
+                            class: class_name.clone(),
                             name: member.display_name(),
                             source: Box::new(e),
                         }
@@ -737,7 +750,7 @@ fn extract_class_decl_inner(
 
     let cd = ClassDecl::new(
         class_decl.usr(),
-        class_decl.spelling(),
+        class_spelling,
         fields,
         methods,
         namespaces,

@@ -129,15 +129,11 @@ fn write_enum_internal(source: &mut String, enm: &CEnum) -> Result<()> {
 }
 
 fn write_typedef_external(source: &mut String, td: &CTypedef) -> Result<()> {
-    if let CTypeRef::Pointer(p) = td.underlying_type.type_ref() {
-        if let CTypeRef::FunctionProto { .. } = p.type_ref() {
-            write!(
-                source,
-                "pub use internal::{} as {};",
-                td.name_external, td.name_external
-            )?;
-        }
-    }
+    writeln!(
+        source,
+        "pub use internal::{} as {};",
+        td.name_external, td.name_external
+    )?;
 
     Ok(())
 }
@@ -160,9 +156,15 @@ fn write_typedef_internal(source: &mut String, td: &CTypedef, c_ast: &CAST) -> R
 
             write!(source, ") -> ")?;
             write_type(source, result.as_ref(), c_ast)?;
-            write!(source, ";")?;
+            writeln!(source, ";")?;
+
+            return Ok(());
         }
     }
+
+    write!(source, "pub type {} = ", td.name_internal)?;
+    write_type(source, &td.underlying_type, c_ast)?;
+    write!(source, ";")?;
 
     Ok(())
 }
@@ -271,7 +273,7 @@ fn write_type(source: &mut String, qt: &CQualType, c_ast: &CAST) -> Result<()> {
             source,
             "{}",
             match tk {
-                TypeKind::Bool => "c_bool",
+                TypeKind::Bool => "bool",
                 TypeKind::Char_S => "c_char",
                 TypeKind::Char_U => "c_uchar",
                 TypeKind::Double => "c_double",

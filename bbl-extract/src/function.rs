@@ -632,13 +632,6 @@ pub fn extract_function(
     let children = c_function.children();
     debug!("{} children", children.len());
     debug!("{:?}", children);
-    // TODO(AL): Can't currently see a good way to get at enable_if_t template arguments, so can't actually extract the 
-    // given types here (not that we could evaluate the conditions anyway).
-    // for c in &children {
-    //     if c.display_name().starts_with("enable_if_t") {
-    //         dump_cursor_until(*c, tu, 2);
-    //     }
-    // }
 
     let c_template_parameters: Vec<Cursor> = children
         .iter()
