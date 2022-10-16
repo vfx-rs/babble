@@ -47,6 +47,8 @@ pub enum Error {
     FailedToBuildCMake { stdout: String, stderr: String },
     #[error("CMake installation failed: \n{stdout}\n\n{stderr}")]
     FailedToInstallCMake { stdout: String, stderr: String },
+    #[error("Failed to find type from USR {0}")]
+    FailedToFindTyperef(USR),
 }
 
 #[derive(Debug, thiserror::Error)]

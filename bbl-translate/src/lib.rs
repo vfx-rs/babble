@@ -4,6 +4,7 @@ pub mod cstruct;
 pub mod ctype;
 pub mod ctypedef;
 pub mod error;
+pub mod to_rust;
 
 use bbl_clang::cursor::USR;
 use bbl_extract::ast::Include;

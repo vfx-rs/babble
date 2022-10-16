@@ -10,12 +10,12 @@ use bbl_translate::{
 };
 
 use crate::error::Error;
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 use std::{borrow::Cow, fmt::Write};
 
 use indoc::indoc;
 
-type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub fn write_rust_ffi_module(module_path: &str, c_ast: &CAST) -> Result<(), Error> {
     // write the rust ffi module
