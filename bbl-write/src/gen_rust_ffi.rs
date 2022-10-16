@@ -135,6 +135,14 @@ fn write_typedef_external(source: &mut String, td: &CTypedef, c_ast: &CAST) -> R
         return Ok(());
     }
 
+    let mut underlying_type = String::new();
+    write_type(&mut underlying_type, &td.underlying_type, c_ast, false)?;
+
+    // C allows typedefs to the same name, but Rust doesn't
+    if td.name_internal == underlying_type {
+        return Ok(());
+    }
+
     writeln!(
         source,
         "pub use internal::{} as {};",
@@ -174,9 +182,19 @@ fn write_typedef_internal(source: &mut String, td: &CTypedef, c_ast: &CAST) -> R
         return Ok(());
     }
 
-    write!(source, "pub type {} = ", td.name_internal)?;
-    write_type(source, &td.underlying_type, c_ast, false)?;
-    writeln!(source, ";")?;
+    let mut underlying_type = String::new();
+    write_type(&mut underlying_type, &td.underlying_type, c_ast, false)?;
+
+    // C allows typedefs to the same name, but Rust doesn't
+    if td.name_internal == underlying_type {
+        return Ok(());
+    }
+
+    write!(
+        source,
+        "pub type {} = {};",
+        td.name_internal, underlying_type
+    )?;
 
     Ok(())
 }
@@ -351,8 +369,19 @@ fn write_type(
                 unimplemented!("no struct or typedef {usr}")
             }
         }
-        CTypeRef::FunctionProto { .. } => {
-            unimplemented!("Writing function prototype")
+        CTypeRef::FunctionProto { result, args } => {
+            let mut s_result = String::new();
+            write_type(&mut s_result, result, c_ast, external_names)?;
+
+            let s_args = args.iter().map(|a| {
+                let mut s_a = String::new();
+                write_type(&mut s_a, a, c_ast, external_names)?;
+                Ok(s_a)
+            }).collect::<Result<Vec<String>>>()?;
+
+            write!(source, "extern fn({}) -> {}", s_args.join(", "), s_result)?;
+
+            // unimplemented!("Writing function prototype {}(*)({})", s_result, s_args.join(", "))
         }
         CTypeRef::Template(parm) => {
             panic!("Unexpanded template {parm}")
