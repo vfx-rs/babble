@@ -56,7 +56,7 @@ pub fn bind(
     let c_ast = translate_cpp_ast_to_c(ast)?;
 
     let (c_header, c_source) = gen_c(project_name, &c_ast)?;
-    debug!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+    // debug!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
     build_project(
         project_name,

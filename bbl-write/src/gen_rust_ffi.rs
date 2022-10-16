@@ -21,7 +21,7 @@ pub fn write_rust_ffi_module(module_path: &str, c_ast: &CAST) -> Result<(), Erro
     // write the rust ffi module
     let mut ffi_source = String::new();
     write_rust_ffi(&mut ffi_source, c_ast)?;
-    println!("{}", ffi_source);
+    // println!("{}", ffi_source);
 
     std::fs::write(module_path, &ffi_source)?;
 
@@ -43,7 +43,7 @@ pub fn write_rust_ffi(source: &mut String, c_ast: &CAST) -> Result<()> {
 
     // typedefs
     for td in c_ast.typedefs.iter() {
-        write_typedef_external(source, td)?;
+        write_typedef_external(source, td, c_ast)?;
     }
     writeln!(source)?;
 
@@ -128,11 +128,17 @@ fn write_enum_internal(source: &mut String, enm: &CEnum) -> Result<()> {
     Ok(())
 }
 
-fn write_typedef_external(source: &mut String, td: &CTypedef) -> Result<()> {
+fn write_typedef_external(source: &mut String, td: &CTypedef, c_ast: &CAST) -> Result<()> {
+    if td.is_template(c_ast) {
+        // skip anything that's a templated typedef. We pick these up during AST extraction and preserve them because
+        // we may(?) need them during type resolution, but we don't want to declare them.
+        return Ok(());
+    }
+
     writeln!(
         source,
         "pub use internal::{} as {};",
-        td.name_external, td.name_external
+        td.name_internal, td.name_external
     )?;
 
     Ok(())
@@ -141,7 +147,7 @@ fn write_typedef_external(source: &mut String, td: &CTypedef) -> Result<()> {
 fn write_typedef_internal(source: &mut String, td: &CTypedef, c_ast: &CAST) -> Result<()> {
     if let CTypeRef::Pointer(p) = td.underlying_type.type_ref() {
         if let CTypeRef::FunctionProto { result, args } = p.type_ref() {
-            write!(source, "pub type {} = extern fn(", td.name_external)?;
+            write!(source, "pub type {} = extern fn(", td.name_internal)?;
 
             let mut first = true;
             for arg in args {
@@ -151,20 +157,26 @@ fn write_typedef_internal(source: &mut String, td: &CTypedef, c_ast: &CAST) -> R
                     first = false;
                 }
 
-                write_type(source, arg, c_ast)?;
+                write_type(source, arg, c_ast, false)?;
             }
 
             write!(source, ") -> ")?;
-            write_type(source, result.as_ref(), c_ast)?;
+            write_type(source, result.as_ref(), c_ast, false)?;
             writeln!(source, ";")?;
 
             return Ok(());
         }
     }
 
+    if td.is_template(c_ast) {
+        // skip anything that's a templated typedef. We pick these up during AST extraction and preserve them because
+        // we may(?) need them during type resolution, but we don't want to declare them.
+        return Ok(());
+    }
+
     write!(source, "pub type {} = ", td.name_internal)?;
-    write_type(source, &td.underlying_type, c_ast)?;
-    write!(source, ";")?;
+    write_type(source, &td.underlying_type, c_ast, false)?;
+    writeln!(source, ";")?;
 
     Ok(())
 }
@@ -181,14 +193,14 @@ fn write_function_internal(source: &mut String, fun: &CFunction, c_ast: &CAST) -
         }
 
         write!(source, "{}: ", sanitize_name(&arg.name))?;
-        write_type(source, &arg.qual_type, c_ast)?;
+        write_type(source, &arg.qual_type, c_ast, false)?;
     }
 
     write!(source, ")")?;
 
     if fun.has_return_value() {
         write!(source, " -> ")?;
-        write_type(source, &fun.result, c_ast)?;
+        write_type(source, &fun.result, c_ast, false)?;
     }
 
     writeln!(source, ";")?;
@@ -232,7 +244,7 @@ pub struct {0} {{
 
             for field in &st.fields {
                 write!(source, "    pub {}: ", sanitize_name(field.name()))?;
-                write_type(source, field.qual_type(), c_ast)?;
+                write_type(source, field.qual_type(), c_ast, false)?;
                 writeln!(source, ",")?;
             }
 
@@ -267,7 +279,12 @@ fn write_struct_external(source: &mut String, st: &CStruct) -> Result<()> {
     Ok(())
 }
 
-fn write_type(source: &mut String, qt: &CQualType, c_ast: &CAST) -> Result<()> {
+fn write_type(
+    source: &mut String,
+    qt: &CQualType,
+    c_ast: &CAST,
+    external_names: bool,
+) -> Result<()> {
     match qt.type_ref() {
         CTypeRef::Builtin(tk) => write!(
             source,
@@ -295,17 +312,41 @@ fn write_type(source: &mut String, qt: &CQualType, c_ast: &CAST) -> Result<()> {
         CTypeRef::Pointer(pointee) => {
             let const_ = if pointee.is_const() { "const" } else { "mut" };
             write!(source, "*{} ", const_)?;
-            write_type(source, pointee, c_ast)?;
+            write_type(source, pointee, c_ast, external_names)?;
         }
         CTypeRef::Ref(usr) => {
             // first check to see if there's a direct class reference
             if let Some(st) = c_ast.get_struct(*usr) {
-                write!(source, "{}", st.name_external)?;
+                write!(
+                    source,
+                    "{}",
+                    if external_names {
+                        &st.name_external
+                    } else {
+                        &st.name_internal
+                    }
+                )?;
             } else if let Some(td) = c_ast.get_typedef(*usr) {
                 // no struct with this USR, see if there's a typedef instead
-                write!(source, "{}", td.name_external.clone())?;
+                write!(
+                    source,
+                    "{}",
+                    if external_names {
+                        &td.name_external
+                    } else {
+                        &td.name_internal
+                    }
+                )?;
             } else if let Some(enm) = c_ast.get_enum(*usr) {
-                write!(source, "{}", enm.name_internal)?;
+                write!(
+                    source,
+                    "{}",
+                    if external_names {
+                        &enm.name_external
+                    } else {
+                        &enm.name_internal
+                    }
+                )?;
             } else {
                 unimplemented!("no struct or typedef {usr}")
             }

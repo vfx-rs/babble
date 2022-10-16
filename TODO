@@ -1,1 +1,6 @@
 - [ ] automatically rename const/non-const method pairs
+- [ ] unions/anonymous unions
+- [ ] CRTP
+- [ ] std::function in argument position
+- [ ] generate high-level rust
+- [ ] opaquebytes
