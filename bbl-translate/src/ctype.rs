@@ -271,7 +271,7 @@ pub fn translate_qual_type(
         }),
         TypeRef::Typedef(usr) => {
             let td = ast.get_type_alias(*usr).unwrap();
-            if td.underlying_type().is_template_typedef(ast) {
+            if td.underlying_type().is_template(ast) {
                 // expand the template now
                 translate_qual_type(
                     td.underlying_type(),

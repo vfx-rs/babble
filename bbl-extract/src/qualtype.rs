@@ -123,17 +123,17 @@ impl TypeRef {
         }
     }
 
-    pub fn is_template_typedef(&self, ast: &AST) -> bool {
+    pub fn is_template(&self, ast: &AST) -> bool {
         match self {
             TypeRef::TemplateTypeParameter(_) => true,
             TypeRef::LValueReference(p) | TypeRef::RValueReference(p) | TypeRef::Pointer(p) => {
-                p.is_template_typedef(ast)
+                p.is_template(ast)
             }
             TypeRef::Typedef(usr) => ast
                 .get_type_alias(*usr)
                 .unwrap()
                 .underlying_type()
-                .is_template_typedef(ast),
+                .is_template(ast),
             _ => false,
         }
     }
@@ -166,8 +166,59 @@ impl QualType {
         }
     }
 
-    pub fn is_template_typedef(&self, ast: &AST) -> bool {
-        self.type_ref.is_template_typedef(ast)
+    pub fn is_template(&self, ast: &AST) -> bool {
+        self.type_ref.is_template(ast)
+    }
+
+    pub fn replace_templates(
+        &mut self,
+        template_parameters: &[TemplateParameterDecl],
+        template_arguments: &[TemplateArgument],
+    ) -> Result<()> {
+        use TypeRef::*;
+        match &mut self.type_ref {
+            TemplateTypeParameter(parm_name) => {
+                let mut parm_index = None;
+                for parm in template_parameters {
+                    match parm {
+                        TemplateParameterDecl::Type { name, index } => {
+                            if name == parm_name {
+                                parm_index = Some(*index)
+                            }
+                        }
+                        TemplateParameterDecl::Integer { .. } => (),
+                    }
+                }
+
+                let parm_index = parm_index.ok_or(Error::NoMatchingTemplateParameter {
+                    name: parm_name.clone(),
+                    backtrace: backtrace::Backtrace::new(),
+                })?;
+
+                match &template_arguments[parm_index] {
+                    TemplateArgument::Type(qt) => {
+                        *self = qt.clone();
+                    }
+                    TemplateArgument::Null => todo!(),
+                    TemplateArgument::Declaration => todo!(),
+                    TemplateArgument::NullPtr => todo!(),
+                    TemplateArgument::Integral(_) => todo!(),
+                    TemplateArgument::Template => todo!(),
+                    TemplateArgument::TemplateExpansion => todo!(),
+                    TemplateArgument::Expression => todo!(),
+                    TemplateArgument::Pack => todo!(),
+                }
+
+                Ok(())
+            }
+            Builtin(_) | Ref(_) | Typedef(_) => Ok(()), // TODO(AL): handle templated typedefs here...
+            Pointer(ref mut p) | LValueReference(ref mut p) | RValueReference(ref mut p) => {
+                p.replace_templates(template_parameters, template_arguments)
+            }
+            TemplateNonTypeParameter(_) => todo!(),
+            FunctionProto { result, args } => todo!(),
+            Unknown(_) => todo!(),
+        }
     }
 
     pub fn get_bind_kind(&self, ast: &AST) -> Result<ClassBindKind> {

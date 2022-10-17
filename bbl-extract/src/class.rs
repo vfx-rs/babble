@@ -47,7 +47,7 @@ impl From<MethodSpecializationId> for usize {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct NeedsImplicit {
     pub ctor: bool,
     pub copy_ctor: bool,
@@ -828,6 +828,7 @@ pub fn extract_field(
     })
 }
 
+#[derive(Clone)]
 pub struct Field {
     pub(crate) name: String,
     pub(crate) qual_type: QualType,

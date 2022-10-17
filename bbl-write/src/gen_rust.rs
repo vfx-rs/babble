@@ -135,6 +135,7 @@ public:
     }
 
 
+    /* 
     #[test]
     fn write_rust_method_template_ret() -> bbl_util::Result<()> {
         bbl_util::run_test(|| {
@@ -189,5 +190,6 @@ public:
             Ok(())
         })
     }
+    */
 
 }

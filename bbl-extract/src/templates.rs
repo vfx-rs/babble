@@ -11,7 +11,7 @@ use tracing::log::{debug, trace};
 
 use crate::{
     ast::{dump_cursor, dump_cursor_until, get_namespaces_for_decl, get_qualified_name, AST},
-    class::{self, extract_class_decl, ClassBindKind, OverrideList},
+    class::{self, extract_class_decl, ClassBindKind, OverrideList, ClassDecl},
     qualtype::{extract_type, QualType},
     AllowList,
 };
@@ -75,11 +75,6 @@ pub fn extract_class_template_specialization(
         class_overrides,
     )?;
 
-    // let name = regex::Regex::new("(?:[^a-zA-Z0-9])+")
-    //     .unwrap()
-    //     .replace_all(&c_class_decl.display_name(), "_")
-    //     .to_string();
-
     ast.insert_class_template_specialization(ClassTemplateSpecialization {
         specialized_decl: specialized_decl.usr(),
         usr: c_class_decl.usr(),
@@ -89,6 +84,42 @@ pub fn extract_class_template_specialization(
     });
 
     Ok(c_class_decl.usr())
+}
+
+pub fn specialize_class_template(class_template: &ClassDecl, cts: &ClassTemplateSpecialization, ast: &mut AST) -> Result<ClassDecl> {
+    let usr = cts.usr();
+    let name = cts.name().to_string();
+
+    let mut fields = Vec::new();
+    let mut methods = Vec::new();
+    let namespaces = cts.namespaces().to_vec();
+    let template_parameters = class_template.template_parameters().to_vec();
+    let template_arguments = cts.template_arguments().to_vec();
+    let is_pod = class_template.is_pod(); // TODO(AL): need to re-evaluate this from the specialization
+    let needs_implicit = class_template.needs_implicit.clone();
+
+    for tmpl_field in class_template.fields() {
+        let mut spec_field = tmpl_field.clone();
+
+        if spec_field.qual_type.is_template(ast) {
+            spec_field.qual_type.replace_templates(&template_parameters, &template_arguments)?;
+        }
+
+        fields.push(spec_field);
+    }
+
+    let cd = ClassDecl::new(
+        usr,
+        name,
+        fields,
+        methods,
+        namespaces,
+        template_parameters,
+        is_pod,
+        needs_implicit,
+    );
+
+    Ok(cd)
 }
 
 pub fn extract_template_args(
