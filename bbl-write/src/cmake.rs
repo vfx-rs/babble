@@ -84,6 +84,7 @@ project({project_name})
 {prefix_str}
 
 set(CMAKE_INSTALL_PREFIX {})
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 {find_packages_str}
 
