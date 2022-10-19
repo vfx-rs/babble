@@ -65,6 +65,10 @@ where
         self.map.insert(key, id);
         id
     }
+
+    pub fn swap(&mut self, id: K, value: &mut T) {
+        std::mem::swap(&mut self.storage[id.get()], value)
+    }
 }
 
 impl<T, K> Index<K> for UstrIndexMap<T, K>

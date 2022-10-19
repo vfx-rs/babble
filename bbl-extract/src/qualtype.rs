@@ -170,10 +170,12 @@ impl QualType {
         self.type_ref.is_template(ast)
     }
 
+    /// Expand any `template_parameters` in this QualType with the matching `template_arguments`
     pub fn replace_templates(
         &mut self,
         template_parameters: &[TemplateParameterDecl],
         template_arguments: &[TemplateArgument],
+        ast: &AST,
     ) -> Result<()> {
         use TypeRef::*;
         match &mut self.type_ref {
@@ -190,30 +192,63 @@ impl QualType {
                     }
                 }
 
-                let parm_index = parm_index.ok_or(Error::NoMatchingTemplateParameter {
-                    name: parm_name.clone(),
-                    backtrace: backtrace::Backtrace::new(),
-                })?;
-
-                match &template_arguments[parm_index] {
-                    TemplateArgument::Type(qt) => {
-                        *self = qt.clone();
+                // It's not an error to not find the parm index. In the case of a tempated method on a templated class, 
+                // we'll replace the templates in two phases (once by specializing the method, and the other the class)
+                if let Some(parm_index) = parm_index {
+                    match &template_arguments[parm_index] {
+                        TemplateArgument::Type(qt) => {
+                            let is_const = self.is_const || qt.is_const;
+                            *self = qt.clone();
+                            self.is_const = is_const;
+                        }
+                        TemplateArgument::Null => todo!(),
+                        TemplateArgument::Declaration => todo!(),
+                        TemplateArgument::NullPtr => todo!(),
+                        TemplateArgument::Integral(_) => todo!(),
+                        TemplateArgument::Template => todo!(),
+                        TemplateArgument::TemplateExpansion => todo!(),
+                        TemplateArgument::Expression => todo!(),
+                        TemplateArgument::Pack => todo!(),
                     }
-                    TemplateArgument::Null => todo!(),
-                    TemplateArgument::Declaration => todo!(),
-                    TemplateArgument::NullPtr => todo!(),
-                    TemplateArgument::Integral(_) => todo!(),
-                    TemplateArgument::Template => todo!(),
-                    TemplateArgument::TemplateExpansion => todo!(),
-                    TemplateArgument::Expression => todo!(),
-                    TemplateArgument::Pack => todo!(),
                 }
 
                 Ok(())
             }
-            Builtin(_) | Ref(_) | Typedef(_) => Ok(()), // TODO(AL): handle templated typedefs here...
-            Pointer(ref mut p) | LValueReference(ref mut p) | RValueReference(ref mut p) => {
-                p.replace_templates(template_parameters, template_arguments)
+            Builtin(_) => Ok(()),
+            Ref(usr) => {
+                if let Some(class) = ast.get_class(*usr) {
+                    if class.is_templated() {
+                        // find the specialization that matches the given template arguments
+                        if let Some(usr_spec) = class.get_specialization(template_arguments) {
+                            println!("!!! FOUND SPEC");
+                            self.type_ref = TypeRef::Ref(usr_spec);
+                            Ok(())
+                        } else {
+                            todo!("need to generate specialization here")
+                        }
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    todo!("Handle type for {usr}")
+                }
+            }
+            Typedef(usr) => {
+                let td = ast.get_type_alias(*usr).ok_or(Error::TypeAliasNotFound {
+                    usr: *usr,
+                    backtrace: backtrace::Backtrace::new(),
+                })?;
+                if td.underlying_type().is_template(ast) {
+                    let mut qt = td.underlying_type().clone();
+                    let is_const = qt.is_const || self.is_const;
+                    qt.replace_templates(template_parameters, template_arguments, ast)?;
+                    *self = qt;
+                    self.is_const = is_const;
+                }
+                Ok(())
+            }
+            Pointer(p) | LValueReference(p) | RValueReference(p) => {
+                p.replace_templates(template_parameters, template_arguments, ast)
             }
             TemplateNonTypeParameter(_) => todo!(),
             FunctionProto { result, args } => todo!(),

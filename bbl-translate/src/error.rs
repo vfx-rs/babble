@@ -3,7 +3,7 @@ use bbl_clang::cursor::USR;
 
 #[derive(Debug)]
 pub enum Error {
-    FailedToTranslateClass{
+    FailedToTranslateClass {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
@@ -20,6 +20,13 @@ pub enum Error {
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
     TranslateFunction {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    TranslateResult {
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    TranslateArgument {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
@@ -109,11 +116,14 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::FailedToTranslateClass{ name, .. } => {
+            Error::FailedToTranslateClass { name, .. } => {
                 write!(f, "Failed to translate class {name}")
             }
             Error::FailedToTranslateClassTemplateSpecialization { name, .. } => {
-                write!(f, "Failed to translate class template specialization {name}")
+                write!(
+                    f,
+                    "Failed to translate class template specialization {name}"
+                )
             }
             Error::FailedToTranslateEnum { name, .. } => {
                 write!(f, "Failed to translate enum {name}")
@@ -123,6 +133,12 @@ impl std::fmt::Display for Error {
             }
             Error::TranslateFunction { name, .. } => {
                 write!(f, "Failed to translate function {name}")
+            }
+            Error::TranslateResult { .. } => {
+                write!(f, "Failed to translate result")
+            }
+            Error::TranslateArgument { name, .. } => {
+                write!(f, "Failed to translate argument {name}")
             }
             Error::TranslateMethod { name, .. } => {
                 write!(f, "Failed to translate method {name}")
@@ -188,6 +204,7 @@ impl std::error::Error for Error {
             TranslateFunction { source, .. }
             | TranslateMethod { source, .. }
             | TranslateSpecializedMethod { source, .. }
+            | TranslateArgument { source, .. }
             | TranslateField { source, .. }
             | FailedToTranslateType { source, .. }
             | FailedToFormatField { source, .. }

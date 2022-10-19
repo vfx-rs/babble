@@ -53,6 +53,47 @@ public:
 }
 
 #[test]
+fn write_simple_template() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            r#"
+namespace Test_1_0 {
+
+template <typename T>
+class Class {
+public:
+    T t;
+    int method1(const T&);
+    void method2(const Class& c);
+};
+
+typedef Class<float> ClassFloat;
+}
+            "#,
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
+
+        let ns = ast.find_namespace("Test_1_0")?;
+        ast.rename_namespace(ns, "Test");
+
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
+
+        // assert_eq!(c_ast.structs.len(), 1);
+        // assert_eq!(c_ast.functions.len(), 5);
+
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n\n{c_header}\n\nSOURCE:\n\n{c_source}");
+
+        Ok(())
+    })
+}
+
+#[test]
 fn write_simple_valuetype() -> bbl_util::Result<()> {
     bbl_util::run_test(|| {
         let mut ast = parse_string_and_extract_ast(
@@ -518,7 +559,6 @@ fn write_take_std_string_fun() -> bbl_util::Result<()> {
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
-
         assert_eq!(c_ast.structs.len(), 1);
         assert_eq!(c_ast.functions.len(), 7);
 
@@ -843,7 +883,7 @@ fn write_size_t() -> bbl_util::Result<()> {
 
         let (c_header, c_source) = gen_c("test", &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
-        
+
         let mut ffi = String::new();
         write_rust_ffi(&mut ffi, &c_ast)?;
 

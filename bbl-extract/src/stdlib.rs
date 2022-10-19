@@ -15,7 +15,7 @@ use crate::{
     qualtype::{extract_type, QualType, TypeRef},
     templates::{
         extract_class_template_specialization, ClassTemplateSpecialization, TemplateArgument,
-        TemplateParameterDecl,
+        TemplateParameterDecl, specialize_class_template,
     },
     AllowList,
 };
@@ -215,12 +215,18 @@ pub fn create_std_vector(
         name,
         usr: c.usr(),
         namespaces,
-        template_arguments,
+        template_arguments: template_arguments.clone(),
     };
 
-    let id = ast.insert_class_template_specialization(cts);
     let cd = ast.get_class_mut(usr_tmpl).unwrap();
-    cd.specializations.push(id);
+    cd.add_specialization(template_arguments, c.usr());
+
+    let cd = ast.get_class(usr_tmpl).unwrap();
+    let sd = specialize_class_template(cd, &cts, ast)?;
+    ast.insert_class(sd);
+
+    let id = ast.insert_class_template_specialization(cts);
+
 
     Ok(c.usr())
 }
@@ -396,12 +402,18 @@ pub fn create_std_unique_ptr(
         name,
         usr: c.usr(),
         namespaces,
-        template_arguments,
+        template_arguments: template_arguments.clone(),
     };
 
-    let id = ast.insert_class_template_specialization(cts);
     let cd = ast.get_class_mut(usr_tmpl).unwrap();
-    cd.specializations.push(id);
+    cd.add_specialization(template_arguments, c.usr());
+
+    let cd = ast.get_class(usr_tmpl).unwrap();
+    let sd = specialize_class_template(cd, &cts, ast)?;
+    ast.insert_class(sd);
+
+    let id = ast.insert_class_template_specialization(cts);
+
 
     Ok(c.usr())
 }
@@ -605,12 +617,17 @@ pub fn create_std_map(
         name,
         usr: c.usr(),
         namespaces,
-        template_arguments,
+        template_arguments: template_arguments.clone(),
     };
 
-    let id = ast.insert_class_template_specialization(cts);
     let cd = ast.get_class_mut(usr_tmpl).unwrap();
-    cd.specializations.push(id);
+    cd.add_specialization(template_arguments, c.usr());
+
+    let cd = ast.get_class(usr_tmpl).unwrap();
+    let sd = specialize_class_template(cd, &cts, ast)?;
+    ast.insert_class(sd);
+
+    let id = ast.insert_class_template_specialization(cts);
 
     Ok(c.usr())
 }
@@ -768,7 +785,14 @@ mod tests {
                     Namespace c:@N@std std None
                     ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
 
-                    ClassDecl c:@N@std@ST>2#T#T@vector vector rename=None OpaquePtr is_pod=false ignore=false needs=[cctor mctor dtor ] template_parameters=[Type(T)] specializations=[ClassTemplateSpecializationId(0)] namespaces=[c:@N@std]
+                    ClassDecl c:@N@std@ST>2#T#T@vector vector rename=None OpaquePtr is_pod=false ignore=false needs=[cctor mctor dtor ] template_parameters=[Type(T)] specializations=[([Test_1_0::Class], c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_)] namespaces=[c:@N@std]
+                    Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:vector_ctor_default vector rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+                    Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:vector_ctor_pointers vector rename=Some("from_begin_and_end") ignore=false return=void args=[begin: const T *, end: const T *] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+                    Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function BBL:vector_data_const data rename=Some("data") ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:vector_data_mut data rename=Some("data_mut") ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+                    Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function BBL:vector_size size rename=None ignore=false return=ULongLong args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
+
+                    ClassDecl c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_ vector<Test_1_0::Class> rename=None OpaquePtr is_pod=false ignore=false needs=[cctor mctor dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@std]
                     Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:vector_ctor_default vector rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
                     Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:vector_ctor_pointers vector rename=Some("from_begin_and_end") ignore=false return=void args=[begin: const T *, end: const T *] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
                     Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function BBL:vector_data_const data rename=Some("data") ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
@@ -821,7 +845,12 @@ mod tests {
                     Namespace c:@N@std std None
                     ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
 
-                    ClassDecl c:@N@std@ST>2#T#T@unique_ptr unique_ptr rename=None OpaquePtr is_pod=false ignore=false needs=[dtor ] template_parameters=[Type(T)] specializations=[ClassTemplateSpecializationId(0)] namespaces=[c:@N@std]
+                    ClassDecl c:@N@std@ST>2#T#T@unique_ptr unique_ptr rename=None OpaquePtr is_pod=false ignore=false needs=[dtor ] template_parameters=[Type(T)] specializations=[([Test_1_0::Class], c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_)] namespaces=[c:@N@std]
+                    Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_ctor_default unique_ptr rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
+                    Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_const get rename=Some("get") ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_mut get rename=Some("get_mut") ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
+
+                    ClassDecl c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_ unique_ptr<Test_1_0::Class> rename=None OpaquePtr is_pod=false ignore=false needs=[dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@std]
                     Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_ctor_default unique_ptr rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
                     Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_const get rename=Some("get") ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_mut get rename=Some("get_mut") ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]

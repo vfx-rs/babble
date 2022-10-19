@@ -25,8 +25,9 @@ use bbl_clang::cursor_kind::CursorKind;
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Default)]
 pub enum ClassBindKind {
+    #[default]
     OpaquePtr,
     OpaqueBytes,
     ValueType,
@@ -70,6 +71,7 @@ impl Debug for NeedsImplicit {
     }
 }
 
+#[derive(Default)]
 pub struct ClassDecl {
     pub(crate) usr: USR,
     pub(crate) name: String,
@@ -78,7 +80,7 @@ pub struct ClassDecl {
     pub(crate) namespaces: Vec<USR>,
     pub(crate) template_parameters: Vec<TemplateParameterDecl>,
     /// List of the specializations made from this class if it is templated
-    pub(crate) specializations: Vec<ClassTemplateSpecializationId>,
+    pub(crate) specializations: Vec<(Vec<TemplateArgument>, USR)>,
 
     pub(crate) ignore: bool,
     pub(crate) rename: Option<String>,
@@ -189,8 +191,19 @@ impl ClassDecl {
         !self.specializations.is_empty()
     }
 
-    pub fn add_specialization(&mut self, id: ClassTemplateSpecializationId) {
-        self.specializations.push(id);
+    pub fn add_specialization(&mut self, args: Vec<TemplateArgument>, usr: USR) {
+        self.specializations.push((args, usr));
+    }
+
+    /// Find the specialization of this class template with template arguments matching `args`
+    pub fn get_specialization(&self, args: &[TemplateArgument]) -> Option<USR> {
+        for (a, usr) in &self.specializations {
+            if a == args {
+                return Some(*usr);
+            }
+        }
+
+        None
     }
 
     pub fn bind_kind(&self) -> &ClassBindKind {
@@ -385,26 +398,32 @@ impl ClassDecl {
         method_id: MethodId,
         name: &str,
         template_arguments: Vec<TemplateArgument>,
+        ast: &AST,
     ) -> Result<MethodSpecializationId> {
         let method_decl = &mut self.methods[method_id.get()];
 
         let usr = USR::new(&format!("{}_{name}", method_decl.usr().as_str()));
 
         let id = self.specialized_methods.len();
+        let id = MethodSpecializationId(id);
+        method_decl.specializations.push(id);
 
         let mts = MethodTemplateSpecialization {
             specialized_decl: method_id,
             usr,
             name: name.into(),
-            template_arguments,
+            template_arguments: template_arguments.clone(),
             namespaces: Vec::new(),
         };
 
+        // Monomorphize the method here and insert it as a regular method
+        let mut method_spec = method_decl.clone();
+        method_spec.replace_templates(method_decl.template_parameters(), &template_arguments, ast)?;
+        method_spec.function.template_parameters = vec![];
+        method_spec.function.name = name.into();
+
+        self.methods.push(method_spec);
         self.specialized_methods.push(mts);
-
-        let id = MethodSpecializationId(id);
-
-        method_decl.specializations.push(id);
 
         Ok(id)
     }

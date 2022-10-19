@@ -512,6 +512,15 @@ impl Method {
 
         s
     }
+
+    pub(crate) fn replace_templates(&mut self, template_parameters: &[TemplateParameterDecl], template_arguments: &[TemplateArgument], ast: &AST) -> Result<()> {
+        self.function.result.replace_templates(template_parameters, template_arguments, ast)?;
+        for arg in &mut self.function.arguments {
+            arg.qual_type.replace_templates(template_parameters, template_arguments, ast)?;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

@@ -53,7 +53,10 @@ pub fn translate_cpp_ast_to_rust(ast: &AST, c_ast: &CAST) -> Result<RAST> {
             continue;
         }
 
-        let st = translate_class(class, ast, c_ast)?;
+        let st = translate_class(class, ast, c_ast).map_err(|e| Error::FailedToTranslateClass {
+            name: class.name().to_string(),
+            source: Box::new(e),
+        })?;
         structs.insert(st.usr().into(), st);
     }
 
@@ -66,7 +69,19 @@ fn translate_class(class: &ClassDecl, ast: &AST, c_ast: &CAST) -> Result<RStruct
 
     let mut methods = Vec::new();
     for method in class.methods().iter() {
-        methods.push(translate_method(method, ast, c_ast)?);
+        if method.is_templated() {
+            if !method.is_specialized() {
+                warn!("Method {} is templated but has no specializations and so will be ignored", method.name());
+            }
+            continue;
+        }
+
+        methods.push(
+            translate_method(method, ast, c_ast).map_err(|e| Error::TranslateMethod {
+                name: method.name().to_string(),
+                source: Box::new(e),
+            })?,
+        );
     }
 
     Ok(RStruct {
@@ -83,7 +98,11 @@ fn translate_method(method: &Method, ast: &AST, c_ast: &CAST) -> Result<RMethod>
     let result = if let TypeRef::Builtin(TypeKind::Void) = method.result().type_ref {
         None
     } else {
-        Some(translate_type(method.result(), ast)?)
+        Some(
+            translate_type(method.result(), ast).map_err(|e| Error::TranslateResult {
+                source: Box::new(e),
+            })?,
+        )
     };
 
     let mut arguments = Vec::new();
@@ -100,7 +119,10 @@ fn translate_method(method: &Method, ast: &AST, c_ast: &CAST) -> Result<RMethod>
     for arg in method.arguments() {
         arguments.push(RArgument {
             name: arg.name().to_string(),
-            ty: translate_type(arg.qual_type(), ast)?,
+            ty: translate_type(arg.qual_type(), ast).map_err(|e| Error::TranslateArgument {
+                name: arg.name().to_string(),
+                source: Box::new(e),
+            })?,
         })
     }
 
@@ -125,7 +147,11 @@ fn translate_type(qt: &QualType, ast: &AST) -> Result<RTypeRef> {
                 pointee: Box::new(translate_type(pointee, ast)?),
             }
         }
-        _ => todo!(),
+        _ => {
+            return Err(Error::TriedToTranslateTemplateParmeter {
+                name: qt.name.clone(),
+            })
+        }
     };
 
     Ok(result)
@@ -279,7 +305,6 @@ mod tests {
     use bbl_extract::{class::OverrideList, parse_string_and_extract_ast, AllowList};
 
     use crate::translate_cpp_ast_to_c;
-
     use super::translate_cpp_ast_to_rust;
 
     #[test]

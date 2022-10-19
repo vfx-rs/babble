@@ -135,7 +135,6 @@ public:
     }
 
 
-    /* 
     #[test]
     fn write_rust_method_template_ret() -> bbl_util::Result<()> {
         bbl_util::run_test(|| {
@@ -165,6 +164,8 @@ public:
                 vec![TemplateArgument::Type(QualType::float())],
             )?;
 
+            println!("{ast:?}");
+
             let c_ast = translate_cpp_ast_to_c(&ast)?;
 
             bbl_util::compare(
@@ -172,10 +173,10 @@ public:
                 indoc!(
                     r#"
             CStruct c:@N@Test@S@Class Test_Class Test_Class ValueType fields=[]
+            CFunction Test_Class_method_float Test_Class_method_float([this_: c:@N@Test@S@Class*, result: Float const**, arg: Float const*])  -> Int
             CFunction Test_Class_ctor Test_Class_ctor([result: c:@N@Test@S@Class*])  -> Int
             CFunction Test_Class_copy_ctor Test_Class_copy_ctor([result: c:@N@Test@S@Class*, rhs: c:@N@Test@S@Class const* const])  -> Int
             CFunction Test_Class_move_ctor Test_Class_move_ctor([result: c:@N@Test@S@Class*, rhs: c:@N@Test@S@Class const*])  -> Int
-            CFunction Test_Class_method_float Test_Class_method_float([this_: c:@N@Test@S@Class*, result: Float const**, arg: Float const*])  -> Int
         "#
                 ),
             )?;
@@ -190,6 +191,5 @@ public:
             Ok(())
         })
     }
-    */
 
 }

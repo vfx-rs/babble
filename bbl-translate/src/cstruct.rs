@@ -196,6 +196,7 @@ pub fn translate_class(
         }
     }
 
+    /*
     for (spec_method_id, spec_method) in class.specialized_methods().iter().enumerate() {
         let combined_template_args = template_args
             .iter()
@@ -233,6 +234,7 @@ pub fn translate_class(
 
         functions.insert(method.usr().into(), c_function);
     }
+    */
 
     Ok(())
 }

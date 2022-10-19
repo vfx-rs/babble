@@ -172,6 +172,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
         })?;
     }
 
+    /*
     for cts in ast.class_template_specializations().iter() {
         translate_class_template_specialization(
             ast,
@@ -186,6 +187,7 @@ pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
             source: Box::new(e),
         })?;
     }
+    */
 
     for fts in ast.function_template_specializations().iter() {
         translate_function_template_specialization(ast, fts, &mut functions, &mut used_names)

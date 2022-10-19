@@ -41,7 +41,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 use ustr::Ustr;
 
-#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct USR(Ustr);
 
 impl USR {

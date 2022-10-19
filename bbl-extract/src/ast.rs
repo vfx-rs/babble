@@ -18,7 +18,7 @@ use crate::function::{extract_function, Function, FunctionProto, FunctionProtoId
 use crate::index_map::{IndexMapKey, UstrIndexMap};
 use crate::namespace::{self, extract_namespace, Namespace};
 use crate::templates::{
-    extract_class_template_specialization, ClassTemplateSpecialization,
+    extract_class_template_specialization, specialize_class_template, ClassTemplateSpecialization,
     FunctionTemplateSpecialization, TemplateArgument,
 };
 use crate::typedef::{extract_typedef_decl, Typedef};
@@ -293,24 +293,35 @@ impl AST {
         name: &str,
         args: Vec<TemplateArgument>,
     ) -> Result<ClassTemplateSpecializationId> {
-        let class_decl = self.classes.index_mut(class_id);
+        let (sd, id, usr) = {
+            let class_decl = self.classes.index(class_id);
 
-        let usr = USR::new(&format!("{}_{name}", class_decl.usr().as_str()));
+            let usr = USR::new(&format!("{}_{name}", class_decl.usr().as_str()));
 
-        let cts = ClassTemplateSpecialization {
-            specialized_decl: class_decl.usr(),
-            usr,
-            name: name.into(),
-            template_arguments: args,
-            namespaces: Vec::new(),
+            let cts = ClassTemplateSpecialization {
+                specialized_decl: class_decl.usr(),
+                usr,
+                name: name.into(),
+                template_arguments: args.clone(),
+                namespaces: Vec::new(),
+            };
+
+            // add the specialization before specialize_class_template as the template will probably refer to itself
+            let class_decl = self.classes.index_mut(class_id);
+            class_decl.add_specialization(args, usr);
+
+            let class_decl = self.classes.index(class_id);
+
+            let sd = specialize_class_template(class_decl, &cts, self)?;
+            debug!("Inserting specialized class template {}", sd.usr());
+
+            let id = self.class_template_specializations.insert(usr.into(), cts);
+            let id = ClassTemplateSpecializationId(id);
+
+            (sd, id, usr)
         };
 
-        let id = self.class_template_specializations.insert(usr.into(), cts);
-
-        let id = ClassTemplateSpecializationId(id);
-
-        class_decl.specializations.push(id);
-
+        self.classes.insert(usr.into(), sd);
         Ok(id)
     }
 
@@ -489,9 +500,14 @@ impl AST {
         name: &str,
         args: Vec<TemplateArgument>,
     ) -> Result<MethodSpecializationId> {
-        self.classes
-            .index_mut(class_id)
-            .specialize_method(method_id, name, args)
+        let mut class = ClassDecl::default();
+        self.classes.swap(class_id, &mut class);
+
+        let id = class.specialize_method(method_id, name, args, self)?;
+
+        self.classes.swap(class_id, &mut class);
+
+        Ok(id)
     }
 
     pub fn method_name(&self, class_id: ClassId, method_id: MethodId) -> &str {
@@ -733,7 +749,15 @@ pub fn extract_ast(
                 return Ok(());
             }
             CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
-                extract_typedef_decl(c.try_into()?, already_visited, ast, tu, allow_list, class_overrides, &[])?;
+                extract_typedef_decl(
+                    c.try_into()?,
+                    already_visited,
+                    ast,
+                    tu,
+                    allow_list,
+                    class_overrides,
+                    &[],
+                )?;
                 return Ok(());
             }
             CursorKind::Namespace => {

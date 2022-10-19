@@ -71,7 +71,10 @@ pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
             continue;
         }
 
-        let decl = generate_typedef(td, c_ast)?;
+        let decl = generate_typedef(td, c_ast).map_err(|e| Error::FailedToGenerateTypedef {
+            name: td.name_internal.clone(),
+            source: Box::new(e),
+        })?;
         header = format!("{header}{decl}\n")
     }
 
@@ -114,20 +117,32 @@ fn gen_function_signature(
 ) -> Result<String, Error> {
     let result = format!(
         "{} {}",
-        gen_c_type(&fun.result, c_ast, use_public_names)?,
+        gen_c_type(&fun.result, c_ast, use_public_names).map_err(|e| {
+            Error::FailedToGenerateResultType {
+                source: Box::new(e),
+            }
+        })?,
         fun.name_internal
     );
+
+    let str_arg_types = fun
+        .arguments
+        .iter()
+        .map(|a| {
+            gen_c_type(&a.qual_type, c_ast, use_public_names).map_err(|e| {
+                Error::FailedToGenerateArgument {
+                    name: a.name.clone(),
+                    source: Box::new(e),
+                }
+            })
+        })
+        .collect::<Result<Vec<String>>>()?;
 
     let arg_str = fun
         .arguments
         .iter()
-        .map(|a| {
-            format!(
-                "{} {}",
-                gen_c_type(&a.qual_type, c_ast, use_public_names).unwrap(),
-                a.name
-            )
-        })
+        .zip(str_arg_types.iter())
+        .map(|(a, ty)| format!("{} {}", ty, a.name,))
         .collect::<Vec<String>>();
 
     Ok(format!("{result}({})", arg_str.join(", ")))
@@ -445,7 +460,7 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<St
                 // we should never get here as we need to handle function pointers explicitly at the typedef level
                 unreachable!()
             } else {
-                unimplemented!("no struct or typedef for {usr}")
+                return Err(Error::FailedToFindTyperef(*usr));
             }
         }
         CTypeRef::Pointer(pointee) => {
@@ -473,12 +488,19 @@ fn generate_function_proto(
 ) -> Result<String> {
     Ok(format!(
         "{}(*{})({})",
-        gen_c_type(&proto.result, c_ast, true)?,
+        gen_c_type(&proto.result, c_ast, true).map_err(|e| Error::FailedToGenerateResultType {
+            source: Box::new(e)
+        })?,
         if let Some(name) = name { name } else { "" },
         proto
             .args
             .iter()
-            .map(|a| gen_c_type(a, c_ast, true))
+            .map(
+                |a| gen_c_type(a, c_ast, true).map_err(|e| Error::FailedToGenerateArgument {
+                    name: a.name().to_string(),
+                    source: Box::new(e)
+                })
+            )
             .collect::<Result<Vec<String>>>()?
             .join(", ")
     ))
@@ -506,17 +528,30 @@ fn generate_typedef(td: &CTypedef, c_ast: &CAST) -> Result<String> {
         if let Some(proto) = c_ast.get_function_proto(*usr) {
             return Ok(format!(
                 "typedef {};",
-                generate_function_proto(proto, c_ast, Some(&td.name_external))?
+                generate_function_proto(proto, c_ast, Some(&td.name_external)).map_err(|e| {
+                    Error::FailedToGenerateFunctionProto {
+                        source: Box::new(e),
+                    }
+                })?
             ));
         }
     } else if let CTypeRef::Pointer(pointee) = td.underlying_type.type_ref() {
         if let CTypeRef::FunctionProto { result, args } = pointee.type_ref() {
             return Ok(format!(
                 "typedef {}(*{})({});",
-                gen_c_type(result.deref(), c_ast, true)?,
+                gen_c_type(result.deref(), c_ast, true).map_err(|e| {
+                    Error::FailedToGenerateResultType {
+                        source: Box::new(e),
+                    }
+                })?,
                 td.name_external,
                 args.iter()
-                    .map(|a| gen_c_type(a, c_ast, true))
+                    .map(|a| gen_c_type(a, c_ast, true).map_err(|e| {
+                        Error::FailedToGenerateArgument {
+                            name: a.name().to_string(),
+                            source: Box::new(e),
+                        }
+                    }))
                     .collect::<Result<Vec<String>>>()?
                     .join(", ")
             ));

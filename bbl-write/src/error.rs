@@ -13,6 +13,14 @@ pub enum Error {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to generate result type")]
+    FailedToGenerateResultType {
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    #[error("Failed to generatefunction prototype")]
+    FailedToGenerateFunctionProto {
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     #[error("Failed to generate typedef \"{name}\"")]
     FailedToGenerateTypedef {
         name: String,
