@@ -71,6 +71,12 @@ impl Debug for NeedsImplicit {
     }
 }
 
+impl NeedsImplicit {
+    pub fn all() -> NeedsImplicit {
+        NeedsImplicit { ctor: true, copy_ctor: true, move_ctor: true, copy_assign: true, move_assign: true, dtor: true }
+    }
+}
+
 #[derive(Default)]
 pub struct ClassDecl {
     pub(crate) usr: USR,
@@ -416,16 +422,22 @@ impl ClassDecl {
             namespaces: Vec::new(),
         };
 
-        // Monomorphize the method here and insert it as a regular method
+        // Delay method specializatioin until later
+        /*
         let mut method_spec = method_decl.clone();
         method_spec.replace_templates(method_decl.template_parameters(), &template_arguments, ast)?;
         method_spec.function.template_parameters = vec![];
         method_spec.function.name = name.into();
-
         self.methods.push(method_spec);
+        */
+
         self.specialized_methods.push(mts);
 
         Ok(id)
+    }
+
+    pub fn needs_implicit(&self) -> &NeedsImplicit {
+        &self.needs_implicit
     }
 }
 

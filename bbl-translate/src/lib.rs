@@ -7,7 +7,7 @@ pub mod error;
 pub mod to_rust;
 
 use bbl_clang::cursor::USR;
-use bbl_extract::ast::Include;
+use bbl_extract::ast::{Include, MonoAST};
 use bbl_extract::index_map::UstrIndexMap;
 use cenum::{translate_enum, CEnum, CEnumId};
 use cfunction::{
@@ -132,7 +132,7 @@ pub fn get_c_names(
     (c_name_public, c_name_private)
 }
 
-pub fn translate_cpp_ast_to_c(ast: &AST) -> Result<CAST> {
+pub fn translate_cpp_ast_to_c(ast: &MonoAST) -> Result<CAST> {
     let mut structs = UstrIndexMap::new();
     let mut typedefs = UstrIndexMap::new();
     let mut functions = UstrIndexMap::new();

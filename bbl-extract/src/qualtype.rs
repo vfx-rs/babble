@@ -176,7 +176,7 @@ impl QualType {
         template_parameters: &[TemplateParameterDecl],
         template_arguments: &[TemplateArgument],
         ast: &AST,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         use TypeRef::*;
         match &mut self.type_ref {
             TemplateTypeParameter(parm_name) => {
@@ -192,7 +192,7 @@ impl QualType {
                     }
                 }
 
-                // It's not an error to not find the parm index. In the case of a tempated method on a templated class, 
+                // It's not an error to not find the parm index. In the case of a tempated method on a templated class,
                 // we'll replace the templates in two phases (once by specializing the method, and the other the class)
                 if let Some(parm_index) = parm_index {
                     match &template_arguments[parm_index] {
@@ -200,6 +200,7 @@ impl QualType {
                             let is_const = self.is_const || qt.is_const;
                             *self = qt.clone();
                             self.is_const = is_const;
+                            return Ok(true);
                         }
                         TemplateArgument::Null => todo!(),
                         TemplateArgument::Declaration => todo!(),
@@ -212,22 +213,29 @@ impl QualType {
                     }
                 }
 
-                Ok(())
+                Ok(false)
             }
-            Builtin(_) => Ok(()),
+            Builtin(_) => Ok(false),
             Ref(usr) => {
                 if let Some(class) = ast.get_class(*usr) {
                     if class.is_templated() {
                         // find the specialization that matches the given template arguments
                         if let Some(usr_spec) = class.get_specialization(template_arguments) {
-                            println!("!!! FOUND SPEC");
                             self.type_ref = TypeRef::Ref(usr_spec);
-                            Ok(())
+                            self.name = format!(
+                                "{}{}",
+                                ast.get_class_template_specialization(usr_spec)
+                                    .unwrap()
+                                    .name(),
+                                if self.is_const { " const" } else { "" }
+                            );
+
+                            Ok(true)
                         } else {
-                            todo!("need to generate specialization here")
+                            todo!("need to generate specialization here?")
                         }
                     } else {
-                        Ok(())
+                        Ok(false)
                     }
                 } else {
                     todo!("Handle type for {usr}")
@@ -240,15 +248,43 @@ impl QualType {
                 })?;
                 if td.underlying_type().is_template(ast) {
                     let mut qt = td.underlying_type().clone();
-                    let is_const = qt.is_const || self.is_const;
                     qt.replace_templates(template_parameters, template_arguments, ast)?;
+                    let is_const = qt.is_const || self.is_const;
                     *self = qt;
                     self.is_const = is_const;
+                    Ok(true)
+                } else {
+                    Ok(false)
                 }
-                Ok(())
             }
-            Pointer(p) | LValueReference(p) | RValueReference(p) => {
-                p.replace_templates(template_parameters, template_arguments, ast)
+            Pointer(p) => {
+                if p.replace_templates(template_parameters, template_arguments, ast)? {
+                    // need to rename the type for display purposes
+                    let name = format!("{}*{}", p.name, if self.is_const { " const" } else { "" });
+                    self.name = name;
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            LValueReference(p) => {
+                if p.replace_templates(template_parameters, template_arguments, ast)? {
+                    // need to rename the type for display purposes
+                    let name = format!("{}&", p.name);
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            RValueReference(p) => {
+                if p.replace_templates(template_parameters, template_arguments, ast)? {
+                    // need to rename the type for display purposes
+                    let name =
+                        format!("{}&&", p.name);
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
             }
             TemplateNonTypeParameter(_) => todo!(),
             FunctionProto { result, args } => todo!(),

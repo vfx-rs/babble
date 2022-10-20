@@ -1,6 +1,6 @@
 use bbl_clang::{cursor::USR, ty::TypeKind};
 use bbl_extract::{
-    ast::AST,
+    ast::{AST, MonoAST},
     class::ClassDecl,
     function::Method,
     index_map::{IndexMapKey, UstrIndexMap},
@@ -38,7 +38,7 @@ impl std::fmt::Debug for RAST {
     }
 }
 
-pub fn translate_cpp_ast_to_rust(ast: &AST, c_ast: &CAST) -> Result<RAST> {
+pub fn translate_cpp_ast_to_rust(ast: &MonoAST, c_ast: &CAST) -> Result<RAST> {
     let mut structs = UstrIndexMap::new();
 
     for class in ast.classes().iter() {
@@ -332,6 +332,8 @@ public:
                 &AllowList::default(),
                 &OverrideList::default(),
             )?;
+
+            let ast = ast.monomorphize()?;
 
             let c_ast = translate_cpp_ast_to_c(&ast)?;
             let rast = translate_cpp_ast_to_rust(&ast, &c_ast)?;

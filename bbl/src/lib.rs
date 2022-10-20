@@ -4,6 +4,7 @@ pub use bbl_clang::{
     cli_args_with, cursor::Cursor, cursor::USR, exception::ExceptionSpecificationKind,
     translation_unit::TranslationUnit, virtual_file::configure_temp_cmake_project,
 };
+use bbl_extract::ast::MonoAST;
 pub use bbl_extract::{class::OverrideList, parse_file_and_extract_ast};
 use bbl_write::{cmake::build_project, gen_c::gen_c, gen_rust_ffi::write_rust_ffi_module};
 
@@ -50,7 +51,7 @@ pub fn bind(
     project_name: &str,
     output_directory: &str,
     copy_to: Option<&str>,
-    ast: &AST,
+    ast: &MonoAST,
     options: &BindOptions,
 ) -> Result<(), Error> {
     let c_ast = translate_cpp_ast_to_c(ast)?;

@@ -2,7 +2,7 @@ use backtrace::Backtrace;
 use std::convert::TryInto;
 use std::fmt::{Debug, Write};
 use std::marker::PhantomData;
-use std::ops::{Index, IndexMut};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 use bbl_clang::cursor::{CurClassTemplate, CurEnumConstant, CurStructDecl, CurTypedef, Cursor};
 use bbl_clang::template_argument::TemplateArgumentKind;
@@ -19,13 +19,37 @@ use crate::index_map::{IndexMapKey, UstrIndexMap};
 use crate::namespace::{self, extract_namespace, Namespace};
 use crate::templates::{
     extract_class_template_specialization, specialize_class_template, ClassTemplateSpecialization,
-    FunctionTemplateSpecialization, TemplateArgument,
+    FunctionTemplateSpecialization, TemplateArgument, TemplateParameterDecl,
 };
 use crate::typedef::{extract_typedef_decl, Typedef};
 use crate::AllowList;
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
+
+/// Monomorphized version of the AST, to be passed to translate functions
+///
+/// Create it by consuming an AST with [`AST::monomorphize`]
+pub struct MonoAST(AST);
+
+impl Debug for MonoAST {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+impl Deref for MonoAST {
+    type Target = AST;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for MonoAST {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 /// Stores all the extracted AST information that we care about in a flat structure.
 ///
@@ -151,6 +175,59 @@ impl AST {
             function_protos: UstrIndexMap::new(),
             includes: Vec::new(),
         }
+    }
+
+    /// Specialize all class and method templates, adding their monomorphizations as concrete AST for translation
+    pub fn monomorphize(self) -> Result<MonoAST> {
+        let mut ast = self;
+        // First do the methods
+        let mut new_methods = Vec::new();
+        for (class_id, class) in ast.classes.iter().enumerate() {
+            for mts in class.specialized_methods() {
+                let method = &class.methods()[mts.specialized_decl().0];
+                let mut method_spec = method.clone();
+                method_spec.replace_templates(
+                    method.template_parameters(),
+                    mts.template_arguments(),
+                    &ast,
+                )?;
+                method_spec.function.template_parameters = vec![];
+                method_spec.function.name = mts.name().to_string();
+                new_methods.push((class_id, method_spec));
+            }
+        }
+
+        // and put them back on the corresponding classes
+        for (class_id, method) in new_methods {
+            ast.classes
+                .index_mut(ClassId(class_id))
+                .methods
+                .push(method);
+        }
+
+        // now specialize the classes
+        let mut new_classes = Vec::new();
+        for cts in ast.class_template_specializations.iter() {
+            let class_template_id = ast
+                .classes
+                .get_id(cts.specialized_decl().as_ref())
+                .map(|id| ClassId(*id))
+                .ok_or(Error::ClassNotFound {
+                    name: cts.specialized_decl().to_string(),
+                    backtrace: backtrace::Backtrace::new(),
+                })?;
+
+            let sd = specialize_class_template(ast.classes().index(class_template_id), cts, &ast)?;
+            new_classes.push(sd);
+        }
+
+        for class in new_classes {
+            ast.insert_class(class);
+        }
+
+        // TODO(AL): Function template specializations
+
+        Ok(MonoAST(ast))
     }
 
     /// Get the list of includes extracted from the translation unit as a slice
@@ -298,13 +375,15 @@ impl AST {
 
             let usr = USR::new(&format!("{}_{name}", class_decl.usr().as_str()));
 
-            let cts = ClassTemplateSpecialization {
-                specialized_decl: class_decl.usr(),
+            let cts = ClassTemplateSpecialization::new(
+                class_decl.usr(),
                 usr,
-                name: name.into(),
-                template_arguments: args.clone(),
-                namespaces: Vec::new(),
-            };
+                name,
+                args.clone(),
+                Vec::new(),
+                class_decl.needs_implicit().clone(), //< TODO(AL): these probably won't be correct
+                class_decl.is_pod(),
+            );
 
             // add the specialization before specialize_class_template as the template will probably refer to itself
             let class_decl = self.classes.index_mut(class_id);

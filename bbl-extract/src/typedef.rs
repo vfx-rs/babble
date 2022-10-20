@@ -106,7 +106,7 @@ mod tests {
     #[test]
     fn extract_typealias_typedef() -> bbl_util::Result<()> {
         bbl_util::run_test(|| {
-            let ast = parse_string_and_extract_ast(
+            let mut ast = parse_string_and_extract_ast(
                 indoc!(
                     r#"
                 template <typename T, int N=4>
@@ -135,6 +135,8 @@ mod tests {
                 &OverrideList::default(),
             )?;
 
+            let ast = ast.monomorphize()?;
+
             println!("{ast:?}");
             bbl_util::compare(
                 &format!("{ast:?}"),
@@ -150,12 +152,12 @@ mod tests {
                     ClassDecl c:@S@B B rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
 
                     ClassDecl c:@S@shared_ptr>#$@S@A#VI4 shared_ptr<A, 4> rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[]
-                    Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
-                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get# get rename=None ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
+                    Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=A* args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get# get rename=None ignore=false return=A* args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
 
                     ClassDecl c:@S@shared_ptr>#$@S@B#VI4 shared_ptr<B, 4> rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[]
-                    Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
-                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get# get rename=None ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
+                    Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=B* args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get# get rename=None ignore=false return=B* args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
 
                     TypeAlias APtr = shared_ptr<A>
                     TypeAlias BPtr = shared_ptr<B>

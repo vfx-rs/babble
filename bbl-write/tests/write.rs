@@ -39,6 +39,7 @@ public:
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -80,6 +81,7 @@ typedef Class<float> ClassFloat;
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -118,6 +120,7 @@ public:
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -158,6 +161,7 @@ void fun(Class c);
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -196,6 +200,7 @@ void fun(Class c);
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -237,6 +242,7 @@ public:
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -282,6 +288,7 @@ public:
         let class = ast.find_class("Test_1_0::A")?;
         ast.class_set_bind_kind(class, ClassBindKind::ValueType)?;
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -330,6 +337,7 @@ public:
         let class = ast.find_class("Test_1_0::A")?;
         ast.class_set_bind_kind(class, ClassBindKind::ValueType)?;
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -367,6 +375,7 @@ fn take_std_string_by_value() -> bbl_util::Result<()> {
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -412,6 +421,7 @@ fn write_take_std_string() -> Result<(), Error> {
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -464,6 +474,7 @@ fn write_implicit_ctor() -> Result<(), Error> {
         let class_id = ast.find_class("Class2")?;
         ast.class_set_bind_kind(class_id, ClassBindKind::OpaquePtr)?;
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -522,6 +533,7 @@ fn write_inherited() -> Result<(), Error> {
             );
             */
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -556,6 +568,7 @@ fn write_take_std_string_fun() -> bbl_util::Result<()> {
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -604,6 +617,7 @@ fn build_take_std_string() -> bbl_util::Result<()> {
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -661,6 +675,7 @@ fn write_enum() -> Result<(), Error> {
     let ns = ast.find_namespace("Test_1_0")?;
     ast.rename_namespace(ns, "Test");
 
+    let ast = ast.monomorphize()?;
     let c_ast = translate_cpp_ast_to_c(&ast)?;
 
     let (c_header, c_source) = gen_c("test", &c_ast)?;
@@ -698,6 +713,7 @@ fn write_vector() -> Result<(), Error> {
     let ns = ast.find_namespace("Test_1_0")?;
     ast.rename_namespace(ns, "Test");
 
+    let ast = ast.monomorphize()?;
     let c_ast = translate_cpp_ast_to_c(&ast)?;
 
     let (c_header, c_source) = gen_c("test", &c_ast)?;
@@ -735,6 +751,7 @@ fn write_unique_ptr() -> Result<(), Error> {
     let ns = ast.find_namespace("Test_1_0")?;
     ast.rename_namespace(ns, "Test");
 
+    let ast = ast.monomorphize()?;
     let c_ast = translate_cpp_ast_to_c(&ast)?;
 
     let (c_header, c_source) = gen_c("test", &c_ast)?;
@@ -768,6 +785,7 @@ fn write_std_function() -> Result<(), bbl_util::Error> {
         let ns = ast.find_namespace("Test_1_0")?;
         ast.rename_namespace(ns, "Test");
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
 
         let (c_header, c_source) = gen_c("test", &c_ast)?;
@@ -808,6 +826,7 @@ fn write_nested_template() -> bbl_util::Result<()> {
             &OverrideList::default(),
         )?;
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -851,6 +870,7 @@ fn write_template_typedef_member() -> bbl_util::Result<()> {
             &OverrideList::default(),
         )?;
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 
@@ -878,6 +898,7 @@ fn write_size_t() -> bbl_util::Result<()> {
             &OverrideList::default(),
         )?;
 
+        let ast = ast.monomorphize()?;
         let c_ast = translate_cpp_ast_to_c(&ast)?;
         println!("{c_ast:?}");
 

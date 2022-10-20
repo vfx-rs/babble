@@ -11,7 +11,7 @@ use tracing::log::{debug, trace};
 
 use crate::{
     ast::{dump_cursor, dump_cursor_until, get_namespaces_for_decl, get_qualified_name, AST},
-    class::{self, extract_class_decl, ClassBindKind, ClassDecl, OverrideList},
+    class::{self, extract_class_decl, ClassBindKind, ClassDecl, NeedsImplicit, OverrideList},
     qualtype::{extract_type, QualType},
     AllowList,
 };
@@ -53,6 +53,17 @@ pub fn extract_class_template_specialization(
     )?;
     let namespaces = get_namespaces_for_decl(c_class_decl.into(), tu, ast, already_visited)?;
 
+    let needs_implicit = NeedsImplicit {
+        ctor: c_class_decl.cxxrecord_needs_implicit_default_constructor(),
+        copy_ctor: c_class_decl.cxxrecord_needs_implicit_copy_constructor(),
+        move_ctor: c_class_decl.cxxrecord_needs_implicit_move_constructor(),
+        copy_assign: c_class_decl.cxxrecord_needs_implicit_copy_assignment(),
+        move_assign: c_class_decl.cxxrecord_needs_implicit_move_assignment(),
+        dtor: c_class_decl.cxxrecord_needs_implicit_destructor(),
+    };
+
+    let is_pod = c_class_decl.ty()?.is_pod();
+
     let specialized_decl: CurClassTemplate = c_class_decl
         .specialized_template()
         .map_err(|_| Error::ClassDeclIsNotSpecialization {
@@ -81,6 +92,8 @@ pub fn extract_class_template_specialization(
         name: c_class_decl.display_name(),
         template_arguments: template_arguments.clone(),
         namespaces,
+        needs_implicit,
+        is_pod,
     };
 
     let class_template = ast
@@ -94,9 +107,9 @@ pub fn extract_class_template_specialization(
         .get_class(specialized_decl.usr())
         .expect("Could not extract just inserted class template");
 
-
-    let sd = specialize_class_template(class_template, &cts, ast)?;
-    ast.insert_class(sd);
+    // Delate the actual specialization until after the user's had a chance to muck with the AST
+    // let sd = specialize_class_template(class_template, &cts, ast)?;
+    // ast.insert_class(sd);
     ast.insert_class_template_specialization(cts);
 
     Ok(c_class_decl.usr())
@@ -116,8 +129,8 @@ pub fn specialize_class_template(
     let namespaces = cts.namespaces().to_vec();
     let template_parameters = class_template.template_parameters().to_vec();
     let template_arguments = cts.template_arguments().to_vec();
-    let is_pod = class_template.is_pod(); // TODO(AL): need to re-evaluate this from the specialization
-    let needs_implicit = class_template.needs_implicit.clone();
+    let is_pod = cts.is_pod(); // TODO(AL): need to re-evaluate this from the specialization
+    let needs_implicit = cts.needs_implicit.clone();
 
     for tmpl_field in class_template.fields() {
         let mut spec_field = tmpl_field.clone();
@@ -203,6 +216,8 @@ pub struct ClassTemplateSpecialization {
     pub(crate) name: String,
     pub(crate) template_arguments: Vec<TemplateArgument>,
     pub(crate) namespaces: Vec<USR>,
+    needs_implicit: NeedsImplicit,
+    is_pod: bool,
 }
 
 impl Debug for ClassTemplateSpecialization {
@@ -224,6 +239,8 @@ impl ClassTemplateSpecialization {
         name: &str,
         template_arguments: Vec<TemplateArgument>,
         namespaces: Vec<USR>,
+        needs_implicit: NeedsImplicit,
+        is_pod: bool,
     ) -> Self {
         ClassTemplateSpecialization {
             specialized_decl,
@@ -231,6 +248,8 @@ impl ClassTemplateSpecialization {
             name: name.to_string(),
             template_arguments,
             namespaces,
+            needs_implicit,
+            is_pod,
         }
     }
 
@@ -265,6 +284,14 @@ impl ClassTemplateSpecialization {
 
     pub fn get_qualified_name(&self, ast: &AST) -> Result<String> {
         get_qualified_name(self.name(), &self.namespaces, ast)
+    }
+
+    pub fn needs_implicit(&self) -> &NeedsImplicit {
+        &self.needs_implicit
+    }
+
+    pub fn is_pod(&self) -> bool {
+        self.is_pod
     }
 }
 
@@ -418,7 +445,7 @@ mod tests {
     #[test]
     fn extract_nested_template() -> bbl_util::Result<()> {
         bbl_util::run_test(|| {
-            let ast = parse_string_and_extract_ast(
+            let mut ast = parse_string_and_extract_ast(
                 indoc!(
                     r#"
                     #include <memory>
@@ -446,6 +473,8 @@ mod tests {
                 &OverrideList::default(),
             )?;
 
+            let ast = ast.monomorphize()?;
+
             println!("{ast:?}");
 
             bbl_util::compare(
@@ -467,10 +496,10 @@ mod tests {
                     ClassDecl c:@N@Test@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@Test]
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@N@Test@S@Class@F@create# create rename=None ignore=false return=ClassHandle args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@Test, c:@N@Test@S@Class]
 
-                    ClassDecl c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_ unique_ptr<Test::Class> rename=None OpaquePtr is_pod=false ignore=false needs=[dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@std]
+                    ClassDecl c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_ unique_ptr<Test::Class> rename=None OpaquePtr is_pod=false ignore=false needs=[mctor mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@std]
                     Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_ctor_default unique_ptr rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
-                    Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_const get rename=Some("get") ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
-                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_mut get rename=Some("get_mut") ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
+                    Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_const get rename=Some("get") ignore=false return=Test::Class* args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_mut get rename=Some("get_mut") ignore=false return=Test::Class* args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
 
                     TypeAlias Handle = std::unique_ptr<Class>
                     TypeAlias ClassHandle = HandleTo<Class>::Handle

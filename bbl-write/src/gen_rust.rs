@@ -122,6 +122,7 @@ public:
                 &OverrideList::default(),
             )?;
 
+            let ast = ast.monomorphize()?;
             let c_ast = translate_cpp_ast_to_c(&ast)?;
             let rast = translate_cpp_ast_to_rust(&ast, &c_ast)?;
 
@@ -163,6 +164,8 @@ public:
                 "method_float",
                 vec![TemplateArgument::Type(QualType::float())],
             )?;
+
+            let ast = ast.monomorphize()?;
 
             println!("{ast:?}");
 

@@ -35,6 +35,9 @@ pub fn main() -> Result<()> {
     let ns = ast.find_namespace("Test_1_0")?;
     ast.rename_namespace(ns, "Test");
 
+    // Next, we monomorphize it to expand any template parameters
+    let ast = ast.monomorphize()?;
+
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let ffi_path = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .join("src")

@@ -39,6 +39,10 @@ where
         self.storage.iter()
     }
 
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, T> {
+        self.storage.iter_mut()
+    }
+
     pub fn get(&self, key: &Ustr) -> Option<&T> {
         self.map.get(key).map(|id| &self.storage[*id])
     }

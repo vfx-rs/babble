@@ -76,6 +76,12 @@ impl From<USR> for Ustr {
     }
 }
 
+impl AsRef<Ustr> for USR {
+    fn as_ref(&self) -> &Ustr {
+        &self.0
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct Cursor {
     pub(crate) inner: CXCursor,
