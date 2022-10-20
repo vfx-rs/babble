@@ -1,12 +1,11 @@
 use bbl_clang::ty::TypeKind;
-use bbl_translate::to_rust::{RAST, RStruct, RMethod, RTypeRef};
-use std::fmt::Write;
+use bbl_translate::to_rust::{RMethod, RStruct, RTypeRef, RAST, Expr};
+use std::{collections::HashSet, fmt::Write};
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub fn write_rust(source: &mut String, rast: &RAST) -> Result<()> {
-
     for st in rast.structs().iter() {
         write_struct(source, st, rast)?;
         writeln!(source)?;
@@ -34,24 +33,34 @@ fn write_struct(source: &mut String, st: &RStruct, rast: &RAST) -> Result<()> {
 }
 
 fn write_method(source: &mut String, method: &RMethod, rast: &RAST) -> Result<()> {
-    let s_args = method.arguments().iter().map(|arg| {
-        let mut s_arg = String::new();
-        if !arg.ty().is_self() {
-            write!(s_arg, "{}: ", arg.name())?;
-        }
-        write_type(&mut s_arg, arg.ty(), rast)?;
-        Ok(s_arg)
-    }).collect::<Result<Vec<String>>>()?;
 
-    write!(source, "    pub fn {}({})", method.name(), s_args.join(", "))?;
+    let s_args = method
+        .arguments()
+        .iter()
+        .map(|arg| {
+            let mut s_arg = String::new();
+            if !arg.ty().is_self() {
+                write!(s_arg, "{}: ", arg.name())?;
+            }
+            write_type(&mut s_arg, arg.ty(), rast)?;
+            Ok(s_arg)
+        })
+        .collect::<Result<Vec<String>>>()?;
+
+    write!(
+        source,
+        "    pub fn {}({})",
+        method.name(),
+        s_args.join(", ")
+    )?;
 
     if let Some(result) = method.result() {
         write!(source, " -> ")?;
         write_type(source, result, rast)?;
     }
 
-    writeln!(source, " {{")?;
-    writeln!(source, "    }}")?;
+    write!(source, " ")?;
+    write_expr(source, method.body(), 1)?;
 
     Ok(())
 }
@@ -64,8 +73,8 @@ fn write_type(source: &mut String, ty: &RTypeRef, rast: &RAST) -> Result<()> {
         Ref(usr) | Typedef(usr) => {
             write!(source, "{}", rast.get_typename(*usr)?)?;
         }
-        Reference{is_mut, pointee} => {
-            write!(source, "&{}", if *is_mut {"mut "} else {""})?;
+        Reference { is_mut, pointee } => {
+            write!(source, "&{}", if *is_mut { "mut " } else { "" })?;
             write_type(source, pointee, rast)?;
         }
     }
@@ -74,13 +83,74 @@ fn write_type(source: &mut String, ty: &RTypeRef, rast: &RAST) -> Result<()> {
 }
 
 fn write_builtin(source: &mut String, tk: TypeKind) -> Result<()> {
-    use TypeKind::*;
     match tk {
-        _ => write!(source, "builtin")?,
+        TypeKind::Bool => write!(source, "bool")?,
+        TypeKind::Char_S => write!(source, "i8")?,
+        TypeKind::Char_U => write!(source, "u8")?,
+        TypeKind::Double => write!(source, "f64")?,
+        TypeKind::Float => write!(source, "f32")?,
+        TypeKind::Int => write!(source, "i32")?,
+        TypeKind::Long => write!(source, "i64")?,
+        TypeKind::LongDouble => write!(source, "f64")?,
+        TypeKind::LongLong => write!(source, "i64")?,
+        TypeKind::Short => write!(source, "i16")?,
+        TypeKind::UChar => write!(source, "u8")?,
+        TypeKind::UInt => write!(source, "u32")?,
+        TypeKind::ULong => write!(source, "u64")?,
+        TypeKind::ULongLong => write!(source, "u64")?,
+        TypeKind::UShort => write!(source, "u16")?,
+        _ => todo!("Unhandled TypeKind for writing: {tk}"),
     }
 
     Ok(())
 }
+
+fn write_expr(body: &mut String, e: &Expr, depth: usize) -> Result<()> {
+    match e {
+        Expr::Token(s) => write!(body, "{s}")?,
+        Expr::Block(stmts) => {
+            writeln!(body, "{{")?;
+            for stmt in stmts {
+                write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
+                write_expr(body, stmt, depth+1)?;
+            }
+            writeln!(body, "{:width$}}}", "", width = depth * 4)?;
+        }
+        Expr::Unsafe(expr) => {
+            write!(body, "unsafe ")?;
+            write_expr(body, expr, depth)?;
+        }
+        Expr::Let { name, value, is_mut } => {
+            write!(body, "let {}{name} = ", if *is_mut { "mut "} else {""})?;
+            write_expr(body, value, depth)?;
+            writeln!(body, ";")?;
+        }
+        Expr::FunctionCall { name, args } => {
+            if args.is_empty() {
+                write!(body, "{name}()")?;
+            } else {
+                writeln!(body, "{name}(")?;
+                for arg in args {
+                    write_expr(body, arg, depth+1)?;
+                    writeln!(body, ",")?;
+                }
+                write!(body, ")")?;
+            }
+        }
+        Expr::Ref { target, is_mut } => {
+            write!(body, "&{}", if *is_mut { "mut "} else {""} )?;
+            write_expr(body, target, depth)?;
+        }
+        Expr::As { src, dst } => {
+            write_expr(body, src, depth)?;
+            write!(body, " as ")?;
+            write_expr(body, dst, depth)?;
+        }
+    }
+
+    Ok(())
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -89,8 +159,8 @@ mod tests {
     use bbl_extract::templates::TemplateArgument;
     use bbl_extract::{class::OverrideList, parse_string_and_extract_ast, AllowList};
 
-    use bbl_translate::translate_cpp_ast_to_c;
     use bbl_translate::to_rust::translate_cpp_ast_to_rust;
+    use bbl_translate::translate_cpp_ast_to_c;
 
     use crate::gen_rust::write_rust;
 
@@ -135,7 +205,6 @@ public:
         })
     }
 
-
     #[test]
     fn write_rust_method_template_ret() -> bbl_util::Result<()> {
         bbl_util::run_test(|| {
@@ -148,6 +217,25 @@ public:
         const T* method_template(const T&);
     };
     }
+
+/*
+pub struct Test_Class {
+    inner: *mut ffi::Test_Class,
+}
+
+impl Test_Class {
+    pub fn method_float(&mut self, arg: &f32) -> &f32 {
+        let mut result = std::ptr::null_mut();
+        unsafe {
+            let _return_code = ffi::Test_Class_method_float(
+                self.inner, 
+                &mut result as *mut f32 as *mut c_float, 
+                arg as *const f32 as *const c_float,
+            );
+        }
+    }
+}
+*/
             "#,
                 &cli_args()?,
                 true,
@@ -194,5 +282,4 @@ public:
             Ok(())
         })
     }
-
 }

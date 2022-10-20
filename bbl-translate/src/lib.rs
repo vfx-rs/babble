@@ -84,6 +84,10 @@ impl CAST {
     pub fn get_function_proto(&self, usr: USR) -> Option<&CFunctionProto> {
         self.function_protos.get(&usr.into())
     }
+
+    pub fn get_function(&self, usr: USR) -> Option<&CFunction> {
+        self.functions.get(&usr.into())
+    }
 }
 
 /// Given a C++ entity name, and a public and private prefix, generate the equivalent names for the C API, possibly

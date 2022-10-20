@@ -1,14 +1,17 @@
+use std::borrow::Cow;
+
 use bbl_clang::{cursor::USR, ty::TypeKind};
 use bbl_extract::{
-    ast::{AST, MonoAST},
+    ast::{MonoAST, AST},
     class::ClassDecl,
-    function::Method,
+    function::{self, Method},
     index_map::{IndexMapKey, UstrIndexMap},
     qualtype::{QualType, TypeRef},
 };
+use hashbrown::HashSet;
 use tracing::warn;
 
-use crate::{error::Error, sanitize_name, CAST};
+use crate::{error::Error, CAST};
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct RAST {
@@ -71,7 +74,10 @@ fn translate_class(class: &ClassDecl, ast: &AST, c_ast: &CAST) -> Result<RStruct
     for method in class.methods().iter() {
         if method.is_templated() {
             if !method.is_specialized() {
-                warn!("Method {} is templated but has no specializations and so will be ignored", method.name());
+                warn!(
+                    "Method {} is templated but has no specializations and so will be ignored",
+                    method.name()
+                );
             }
             continue;
         }
@@ -116,22 +122,99 @@ fn translate_method(method: &Method, ast: &AST, c_ast: &CAST) -> Result<RMethod>
         })
     }
 
+    let has_result = matches!(method.result().type_ref, TypeRef::Builtin(TypeKind::Void));
+
+    let mut c_arg_offset = 0;
+    if !method.is_static() {
+        c_arg_offset += 1;
+    }
+    if has_result {
+        c_arg_offset += 1
+    }
+
+    let mut used_argument_names = HashSet::new();
+    used_argument_names.insert("_return_code".to_string()); //< we'll use this later
+
+    // first generate all the arguments
     for arg in method.arguments() {
+        let arg_name = get_unique_argument_name(arg.name(), &mut used_argument_names);
+
         arguments.push(RArgument {
-            name: arg.name().to_string(),
+            name: arg_name.clone(),
             ty: translate_type(arg.qual_type(), ast).map_err(|e| Error::TranslateArgument {
-                name: arg.name().to_string(),
+                name: arg_name,
                 source: Box::new(e),
             })?,
         })
     }
+
+    let c_fn = c_ast
+        .get_function(method.usr())
+        .ok_or(Error::FunctionNotFound {
+            name: method.usr().to_string(),
+            backtrace: backtrace::Backtrace::new(),
+        })?;
+
+    let mut body = Vec::new();
+    let function_args = Vec::new();
+
+    // now generate the call expressions
+    for arg in &arguments {}
+
+    let call_expr = Expr::FunctionCall {
+        name: format!("ffi::{}", c_fn.name_external),
+        args: function_args,
+    };
+
+    let return_code_expr = Expr::Let {
+        name: "_return_code".to_string(),
+        value: Box::new(call_expr),
+        is_mut: false,
+    };
+
+    body.push(
+        Expr::Unsafe(
+            Box::new(
+                Expr::Block(
+                    vec![
+                        return_code_expr
+                    ]
+                )
+            )
+        )
+    );
 
     Ok(RMethod {
         name,
         usr,
         result,
         arguments,
+        body: Expr::Block(body),
     })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Expr {
+    Token(String),
+    Block(Vec<Expr>),
+    Unsafe(Box<Expr>),
+    Let {
+        name: String,
+        value: Box<Expr>,
+        is_mut: bool,
+    },
+    FunctionCall {
+        name: String,
+        args: Vec<Expr>,
+    },
+    Ref {
+        target: Box<Expr>,
+        is_mut: bool,
+    },
+    As {
+        src: Box<Expr>,
+        dst: Box<Expr>,
+    },
 }
 
 fn translate_type(qt: &QualType, ast: &AST) -> Result<RTypeRef> {
@@ -155,6 +238,37 @@ fn translate_type(qt: &QualType, ast: &AST) -> Result<RTypeRef> {
     };
 
     Ok(result)
+}
+
+fn get_unique_argument_name(name: &str, used_argument_names: &mut HashSet<String>) -> String {
+    let mut result = name.to_string();
+    if result.is_empty() {
+        result = "arg".into();
+    }
+
+    result = sanitize_name(&result).to_string();
+
+    let mut i = 0;
+    while used_argument_names.contains(&result) {
+        result = format!("{name}{i}");
+        i += 1
+    }
+
+    result
+}
+
+pub fn sanitize_name(name: &str) -> Cow<'_, str> {
+    match name {
+        "as" | "break" | "const" | "continue" | "crate" | "else" | "enum" | "extern" | "false"
+        | "fn" | "for" | "if" | "impl" | "in" | "let" | "loop" | "match" | "mod" | "move"
+        | "mut" | "pub" | "ref" | "return" | "self" | "Self" | "static" | "struct" | "super"
+        | "trait" | "true" | "type" | "unsafe" | "use" | "where" | "while" | "async" | "await"
+        | "dyn" | "astract" | "become" | "box" | "do" | "final" | "macro" | "override" | "priv"
+        | "typeof" | "unsized" | "virtual" | "yield" | "try" | "union" => format!("{name}_").into(),
+        _ => regex::Regex::new("(?:[^a-zA-Z0-9])+")
+            .unwrap()
+            .replace_all(name, "_"),
+    }
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -211,6 +325,7 @@ pub struct RMethod {
     usr: USR,
     result: Option<RTypeRef>,
     arguments: Vec<RArgument>,
+    body: Expr,
 }
 
 impl RMethod {
@@ -228,6 +343,10 @@ impl RMethod {
 
     pub fn arguments(&self) -> &[RArgument] {
         self.arguments.as_ref()
+    }
+
+    pub fn body(&self) -> &Expr {
+        &self.body
     }
 }
 
@@ -304,8 +423,8 @@ mod tests {
     use bbl_clang::cli_args;
     use bbl_extract::{class::OverrideList, parse_string_and_extract_ast, AllowList};
 
-    use crate::translate_cpp_ast_to_c;
     use super::translate_cpp_ast_to_rust;
+    use crate::translate_cpp_ast_to_c;
 
     #[test]
     fn translate_rust_pass_class() -> bbl_util::Result<()> {

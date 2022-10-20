@@ -392,7 +392,7 @@ fn write_type(
     Ok(())
 }
 
-fn sanitize_name(name: &str) -> Cow<'_, str> {
+pub fn sanitize_name(name: &str) -> Cow<'_, str> {
     match name {
         "as" | "break" | "const" | "continue" | "crate" | "else" | "enum" | "extern" | "false"
         | "fn" | "for" | "if" | "impl" | "in" | "let" | "loop" | "match" | "mod" | "move"
