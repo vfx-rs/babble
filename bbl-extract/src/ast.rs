@@ -186,13 +186,14 @@ impl AST {
             for mts in class.specialized_methods() {
                 let method = &class.methods()[mts.specialized_decl().0];
                 let mut method_spec = method.clone();
-                method_spec.replace_templates(
+                let unused_arguments = method_spec.replace_templates(
                     method.template_parameters(),
                     mts.template_arguments(),
                     &ast,
                 )?;
                 method_spec.function.template_parameters = vec![];
-                method_spec.function.name = mts.name().to_string();
+                method_spec.function.unused_template_arguments = unused_arguments;
+                method_spec.function.replacement_name = Some(mts.name().to_string());
                 new_methods.push((class_id, method_spec));
             }
         }
@@ -228,6 +229,16 @@ impl AST {
         // TODO(AL): Function template specializations
 
         Ok(MonoAST(ast))
+    }
+
+    pub fn get_typeref_name(&self, usr: USR) -> Option<&str> {
+        if let Some(class) = self.classes.get(usr.as_ref()) {
+            Some(class.name())
+        } else if let Some(td) = self.type_aliases.get(usr.as_ref()) {
+            Some(td.name())
+        } else {
+            None
+        }
     }
 
     /// Get the list of includes extracted from the translation unit as a slice

@@ -131,9 +131,11 @@ fn write_expr(body: &mut String, e: &Expr, depth: usize) -> Result<()> {
             } else {
                 writeln!(body, "{name}(")?;
                 for arg in args {
+                    write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
                     write_expr(body, arg, depth+1)?;
                     writeln!(body, ",")?;
                 }
+                write!(body, "{:width$}", "", width = depth * 4)?;
                 write!(body, ")")?;
             }
         }
@@ -145,6 +147,10 @@ fn write_expr(body: &mut String, e: &Expr, depth: usize) -> Result<()> {
             write_expr(body, src, depth)?;
             write!(body, " as ")?;
             write_expr(body, dst, depth)?;
+        }
+        Expr::Star { is_mut, target } => {
+            write!(body, "*{}", if *is_mut { "mut "} else {"const "})?;
+            write_expr(body, target, depth)?;
         }
     }
 

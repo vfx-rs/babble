@@ -422,10 +422,6 @@ pub fn create_std_unique_ptr(
     let cd = ast.get_class_mut(usr_tmpl).unwrap();
     cd.add_specialization(template_arguments, c.usr());
 
-    // let cd = ast.get_class(usr_tmpl).unwrap();
-    // let sd = specialize_class_template(cd, &cts, ast)?;
-    // ast.insert_class(sd);
-
     let id = ast.insert_class_template_specialization(cts);
 
 

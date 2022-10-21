@@ -47,8 +47,14 @@ pub enum Error {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    FailedToCreateArgumentExpr {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    ImproperPassByValue,
     Extraction(bbl_extract::error::Error),
     Clang(bbl_clang::error::Error),
+    Format(std::fmt::Error),
     ClassNotFound {
         name: String,
         backtrace: Backtrace,
@@ -153,8 +159,15 @@ impl std::fmt::Display for Error {
             Error::FailedToTranslateType { name, .. } => {
                 write!(f, "Failed to translate type {name}")
             }
+            Error::FailedToCreateArgumentExpr { name, .. } => {
+                write!(f, "Failed to create expression for argument {name}")
+            }
+            Error::ImproperPassByValue => {
+                write!(f, "Tried to pass a non-valuetype by value")
+            }
             Error::Extraction(_) => write!(f, "Extraction error"),
             Error::Clang(_) => write!(f, "Clang error"),
+            Error::Format(_) => write!(f, "Format error"),
             Error::ClassNotFound { name, .. } => write!(f, "Could not find class {name}"),
             Error::FunctionNotFound { name, .. } => write!(f, "Could not find function {name}"),
             Error::RefNotFound { usr, .. } => write!(f, "Could not find ref with usr {usr}"),
@@ -207,6 +220,7 @@ impl std::error::Error for Error {
             | TranslateArgument { source, .. }
             | TranslateField { source, .. }
             | FailedToTranslateType { source, .. }
+            | FailedToCreateArgumentExpr { source, .. }
             | FailedToFormatField { source, .. }
             | FailedToFormatArgument { source, .. }
             | FailedToFormatStruct { source, .. }
@@ -256,6 +270,12 @@ impl From<bbl_extract::error::Error> for Error {
 impl From<bbl_clang::error::Error> for Error {
     fn from(e: bbl_clang::error::Error) -> Self {
         Error::Clang(e)
+    }
+}
+
+impl From<std::fmt::Error> for Error {
+    fn from(e: std::fmt::Error) -> Self {
+        Error::Format(e)
     }
 }
 

@@ -7,6 +7,7 @@ use bbl_clang::{
     template_argument::TemplateArgumentKind,
     translation_unit::TranslationUnit,
 };
+use hashbrown::HashSet;
 use tracing::log::{debug, trace};
 
 use crate::{
@@ -135,10 +136,12 @@ pub fn specialize_class_template(
     for tmpl_field in class_template.fields() {
         let mut spec_field = tmpl_field.clone();
 
+        let mut matched_parameters = HashSet::new();
         if spec_field.qual_type.is_template(ast) {
             spec_field.qual_type.replace_templates(
                 &template_parameters,
                 &template_arguments,
+                &mut matched_parameters,
                 ast,
             )?;
         }

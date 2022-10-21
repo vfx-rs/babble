@@ -88,6 +88,18 @@ impl CAST {
     pub fn get_function(&self, usr: USR) -> Option<&CFunction> {
         self.functions.get(&usr.into())
     }
+
+    pub fn get_typeref_name_external(&self, usr: USR) -> Option<&str> {
+        if let Some(st) = self.structs.get(usr.as_ref()) {
+            Some(&st.name_external)
+        } else if let Some(td) = self.typedefs.get(usr.as_ref()) {
+            Some(&td.name_external)
+        } else if let Some(enm) = self.enums.get(usr.as_ref()) {
+            Some(&enm.name_external)
+        } else {
+            None
+        }
+    }
 }
 
 /// Given a C++ entity name, and a public and private prefix, generate the equivalent names for the C API, possibly

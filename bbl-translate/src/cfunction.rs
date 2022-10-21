@@ -29,6 +29,24 @@ pub struct CArgument {
     pub is_result: bool,
 }
 
+impl CArgument {
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+
+    pub fn qual_type(&self) -> &CQualType {
+        &self.qual_type
+    }
+
+    pub fn is_self(&self) -> bool {
+        self.is_self
+    }
+
+    pub fn is_result(&self) -> bool {
+        self.is_result
+    }
+}
+
 impl Display for CArgument {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: {}", self.name, self.qual_type)
@@ -317,6 +335,7 @@ pub fn translate_function(
         source: Box::new(e),
     })?;
 
+    /*
     let mut unused_template_parameters = Vec::new();
     // record which method template parameters are unused in the arguments (if any)
     'outer: for p in function.template_parameters() {
@@ -360,6 +379,24 @@ pub fn translate_function(
                     }),
                 }
             }
+        })
+        .collect::<Result<Vec<Expr>>>()?;
+        */
+
+    let call_template_arguments = function
+        .unused_template_arguments()
+        .iter()
+        .map(|arg| match arg {
+            TemplateArgument::Type(tty) => Ok(Expr::Token(tty.format(
+                ast,
+                &[],
+                Some(template_args),
+            ))),
+            TemplateArgument::Integral(n) => Ok(Expr::Token(format!("{n}"))),
+            _ => Err(Error::InvalidTemplateArgumentKind {
+                name: format!("{arg:?}"),
+                backtrace: Backtrace::new(),
+            }),
         })
         .collect::<Result<Vec<Expr>>>()?;
 
@@ -805,6 +842,7 @@ pub fn translate_method(
     }
 
     // for each unused template parameter, find its matching argument and create a token for it
+    /*
     let call_template_arguments = unused_template_parameters
         .iter()
         .map(|parm| {
@@ -836,6 +874,23 @@ pub fn translate_method(
                     }),
                 }
             }
+        })
+        .collect::<Result<Vec<Expr>>>()?;
+    */
+    let call_template_arguments = method
+        .unused_template_arguments()
+        .iter()
+        .map(|arg| match arg {
+            TemplateArgument::Type(tty) => Ok(Expr::Token(tty.format(
+                ast,
+                class_template_parms,
+                Some(template_args),
+            ))),
+            TemplateArgument::Integral(n) => Ok(Expr::Token(format!("{n}"))),
+            _ => Err(Error::InvalidTemplateArgumentKind {
+                name: format!("{arg:?}"),
+                backtrace: Backtrace::new(),
+            }),
         })
         .collect::<Result<Vec<Expr>>>()?;
 

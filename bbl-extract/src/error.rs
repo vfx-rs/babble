@@ -59,6 +59,11 @@ pub enum Error {
         name: String,
         backtrace: Backtrace,
     },
+    NoMatchingTemplateArgument {
+        name: String,
+        index: usize,
+        backtrace: Backtrace,
+    },
     IoError(std::io::Error),
     FailedToExtractClass {
         usr: USR,

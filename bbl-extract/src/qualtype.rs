@@ -5,6 +5,7 @@ use bbl_clang::{
     translation_unit::TranslationUnit,
     ty::{Type, TypeKind},
 };
+use hashbrown::HashSet;
 use std::{convert::TryInto, fmt::Display};
 use tracing::{debug, error, info, instrument, trace, warn};
 
@@ -175,6 +176,7 @@ impl QualType {
         &mut self,
         template_parameters: &[TemplateParameterDecl],
         template_arguments: &[TemplateArgument],
+        matched_parameters: &mut HashSet<String>,
         ast: &AST,
     ) -> Result<bool> {
         use TypeRef::*;
@@ -185,6 +187,7 @@ impl QualType {
                     match parm {
                         TemplateParameterDecl::Type { name, index } => {
                             if name == parm_name {
+                                matched_parameters.insert(name.clone());
                                 parm_index = Some(*index)
                             }
                         }
@@ -248,7 +251,7 @@ impl QualType {
                 })?;
                 if td.underlying_type().is_template(ast) {
                     let mut qt = td.underlying_type().clone();
-                    qt.replace_templates(template_parameters, template_arguments, ast)?;
+                    qt.replace_templates(template_parameters, template_arguments, matched_parameters, ast)?;
                     let is_const = qt.is_const || self.is_const;
                     *self = qt;
                     self.is_const = is_const;
@@ -258,7 +261,7 @@ impl QualType {
                 }
             }
             Pointer(p) => {
-                if p.replace_templates(template_parameters, template_arguments, ast)? {
+                if p.replace_templates(template_parameters, template_arguments, matched_parameters, ast)? {
                     // need to rename the type for display purposes
                     let name = format!("{}*{}", p.name, if self.is_const { " const" } else { "" });
                     self.name = name;
@@ -268,7 +271,7 @@ impl QualType {
                 }
             }
             LValueReference(p) => {
-                if p.replace_templates(template_parameters, template_arguments, ast)? {
+                if p.replace_templates(template_parameters, template_arguments, matched_parameters, ast)? {
                     // need to rename the type for display purposes
                     let name = format!("{}&", p.name);
                     Ok(true)
@@ -277,7 +280,7 @@ impl QualType {
                 }
             }
             RValueReference(p) => {
-                if p.replace_templates(template_parameters, template_arguments, ast)? {
+                if p.replace_templates(template_parameters, template_arguments, matched_parameters, ast)? {
                     // need to rename the type for display purposes
                     let name =
                         format!("{}&&", p.name);

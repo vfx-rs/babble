@@ -2,6 +2,7 @@ use bbl_clang::cursor::{Cursor, USR};
 use bbl_clang::exception::ExceptionSpecificationKind;
 use bbl_clang::translation_unit::TranslationUnit;
 use bbl_clang::ty::{TypeKind, Type};
+use hashbrown::HashSet;
 use log::*;
 use std::fmt::{Debug, Display};
 use tracing::instrument;
@@ -130,6 +131,7 @@ pub struct Function {
     pub(crate) ignored: bool,
     pub(crate) namespaces: Vec<USR>,
     pub(crate) template_parameters: Vec<TemplateParameterDecl>,
+    pub(crate) unused_template_arguments: Vec<TemplateArgument>,
     pub(crate) specializations: Vec<FunctionTemplateSpecializationId>,
     pub(crate) exception_specification_kind: ExceptionSpecificationKind,
 }
@@ -172,6 +174,7 @@ impl Function {
             ignored: false,
             namespaces,
             template_parameters,
+            unused_template_arguments: Vec::new(),
             specializations: Vec::new(),
             exception_specification_kind,
         }
@@ -281,6 +284,10 @@ impl Function {
 
         s
     }
+
+    pub fn unused_template_arguments(&self) -> &[TemplateArgument] {
+        self.unused_template_arguments.as_ref()
+    }
 }
 
 #[derive(Clone)]
@@ -361,6 +368,10 @@ impl Method {
             is_deleted: is_deleted.0,
             specializations: Vec::new(),
         }
+    }
+
+    pub fn unused_template_arguments(&self) -> &[TemplateArgument] {
+        self.function.unused_template_arguments()
     }
 
     pub fn signature_matches(&self, other: &Method) -> bool {
@@ -513,13 +524,49 @@ impl Method {
         s
     }
 
-    pub(crate) fn replace_templates(&mut self, template_parameters: &[TemplateParameterDecl], template_arguments: &[TemplateArgument], ast: &AST) -> Result<()> {
-        self.function.result.replace_templates(template_parameters, template_arguments, ast)?;
+    pub(crate) fn replace_templates(&mut self, template_parameters: &[TemplateParameterDecl], template_arguments: &[TemplateArgument], ast: &AST) -> Result<Vec<TemplateArgument>> {
+        let mut matched_parameters = HashSet::new();
+        self.function.result.replace_templates(template_parameters, template_arguments, &mut matched_parameters, ast)?;
+        // Don't count matched parameters in the return type as we still need to explcitily specify them at the call site
+        let mut matched_parameters = HashSet::new();
         for arg in &mut self.function.arguments {
-            arg.qual_type.replace_templates(template_parameters, template_arguments, ast)?;
+            arg.qual_type.replace_templates(template_parameters, template_arguments, &mut matched_parameters, ast)?;
         }
 
-        Ok(())
+        // now figure out which template parameters are unmatched. We will use these later when calling the method in
+        // the shim, e.g. `VtValue::GetValue<float>()`.
+        let mut unused_arguments = Vec::new();
+        'outer: for parm in template_parameters {
+            for mparm in matched_parameters.iter() {
+                if mparm == parm.name() {
+                    continue 'outer;
+                }
+            }
+            unused_arguments.push(find_template_argument_for_parameter(parm.name(), template_parameters, template_arguments)?.clone());
+        }
+
+        Ok(unused_arguments)
+    }
+}
+
+fn find_template_argument_for_parameter<'a>(parm: &str, template_parameters: &[TemplateParameterDecl], template_args: &'a [TemplateArgument]) -> Result<&'a TemplateArgument> {
+    let parm_index = 
+        template_parameters
+        .iter()
+        .position(|p| p.name() == parm)
+        .ok_or_else(|| Error::NoMatchingTemplateParameter {
+            name: parm.into(),
+            backtrace: backtrace::Backtrace::new(),
+        })?;
+
+    if parm_index >= template_args.len() {
+        Err(Error::NoMatchingTemplateArgument {
+            name: parm.into(),
+            index: parm_index,
+            backtrace: backtrace::Backtrace::new(),
+        })
+    } else {
+        Ok(&template_args[parm_index])
     }
 }
 

@@ -3,15 +3,21 @@ use std::borrow::Cow;
 use bbl_clang::{cursor::USR, ty::TypeKind};
 use bbl_extract::{
     ast::{MonoAST, AST},
-    class::ClassDecl,
+    class::{ClassBindKind, ClassDecl},
     function::{self, Method},
     index_map::{IndexMapKey, UstrIndexMap},
     qualtype::{QualType, TypeRef},
 };
 use hashbrown::HashSet;
+use std::fmt::Write;
 use tracing::warn;
 
-use crate::{error::Error, CAST};
+use crate::{
+    cfunction::CArgument,
+    ctype::{CQualType, CTypeRef},
+    error::Error,
+    CAST,
+};
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct RAST {
@@ -82,12 +88,12 @@ fn translate_class(class: &ClassDecl, ast: &AST, c_ast: &CAST) -> Result<RStruct
             continue;
         }
 
-        methods.push(
-            translate_method(method, ast, c_ast).map_err(|e| Error::TranslateMethod {
+        methods.push(translate_method(class, method, ast, c_ast).map_err(|e| {
+            Error::TranslateMethod {
                 name: method.name().to_string(),
                 source: Box::new(e),
-            })?,
-        );
+            }
+        })?);
     }
 
     Ok(RStruct {
@@ -97,7 +103,12 @@ fn translate_class(class: &ClassDecl, ast: &AST, c_ast: &CAST) -> Result<RStruct
     })
 }
 
-fn translate_method(method: &Method, ast: &AST, c_ast: &CAST) -> Result<RMethod> {
+fn translate_method(
+    class: &ClassDecl,
+    method: &Method,
+    ast: &AST,
+    c_ast: &CAST,
+) -> Result<RMethod> {
     let name = method.name().to_string();
     let usr = method.usr();
 
@@ -122,7 +133,7 @@ fn translate_method(method: &Method, ast: &AST, c_ast: &CAST) -> Result<RMethod>
         })
     }
 
-    let has_result = matches!(method.result().type_ref, TypeRef::Builtin(TypeKind::Void));
+    let has_result = !matches!(method.result().type_ref, TypeRef::Builtin(TypeKind::Void));
 
     let mut c_arg_offset = 0;
     if !method.is_static() {
@@ -156,14 +167,26 @@ fn translate_method(method: &Method, ast: &AST, c_ast: &CAST) -> Result<RMethod>
         })?;
 
     let mut body = Vec::new();
-    let function_args = Vec::new();
+    let mut rust_call_arguments = arguments.clone();
+    if has_result {
+        rust_call_arguments.insert(
+            1,
+            RArgument {
+                name: "result".to_string(),
+                ty: RTypeRef::Builtin(TypeKind::Void),
+            },
+        )
+    }
+    let mut call_args = Vec::new();
 
     // now generate the call expressions
-    for arg in &arguments {}
+    for (rarg, carg) in rust_call_arguments.iter().zip(c_fn.arguments.iter()) {
+        call_args.push(create_argument_expr(rarg, carg, ast, c_ast)?);
+    }
 
     let call_expr = Expr::FunctionCall {
         name: format!("ffi::{}", c_fn.name_external),
-        args: function_args,
+        args: call_args,
     };
 
     let return_code_expr = Expr::Let {
@@ -172,17 +195,7 @@ fn translate_method(method: &Method, ast: &AST, c_ast: &CAST) -> Result<RMethod>
         is_mut: false,
     };
 
-    body.push(
-        Expr::Unsafe(
-            Box::new(
-                Expr::Block(
-                    vec![
-                        return_code_expr
-                    ]
-                )
-            )
-        )
-    );
+    body.push(Expr::Unsafe(Box::new(Expr::Block(vec![return_code_expr]))));
 
     Ok(RMethod {
         name,
@@ -191,6 +204,142 @@ fn translate_method(method: &Method, ast: &AST, c_ast: &CAST) -> Result<RMethod>
         arguments,
         body: Expr::Block(body),
     })
+}
+
+fn create_argument_expr(
+    rarg: &RArgument,
+    carg: &CArgument,
+    ast: &AST,
+    c_ast: &CAST,
+) -> Result<Expr> {
+    match carg.qual_type().type_ref() {
+        CTypeRef::Builtin(_) => Ok(Expr::Token(rarg.name().to_string())),
+        CTypeRef::Ref(usr) => {
+            let st = c_ast
+                .get_struct(*usr)
+                .ok_or(Error::FailedToCreateArgumentExpr {
+                    name: carg.name().to_string(),
+                    source: Box::new(Error::ClassNotFound {
+                        name: usr.to_string(),
+                        backtrace: backtrace::Backtrace::new(),
+                    }),
+                })?;
+
+            match st.bind_kind {
+                ClassBindKind::ValueType => Ok(Expr::Token(rarg.name().to_string())),
+                _ => Err(Error::FailedToCreateArgumentExpr {
+                    name: carg.name().to_string(),
+                    source: Box::new(Error::ImproperPassByValue),
+                }),
+            }
+        }
+        CTypeRef::Pointer(_) => {
+            let (rstar, cstar) = create_star_exprs(carg.qual_type(), ast, c_ast)?;
+            Ok(Expr::As {
+                src: Box::new(Expr::As {
+                    src: Box::new(Expr::Token(rarg.name().to_string())),
+                    dst: Box::new(rstar),
+                }),
+                dst: Box::new(cstar),
+            })
+        }
+        CTypeRef::FunctionProto { result, args } => todo!(),
+        CTypeRef::Template(_) => todo!(),
+        CTypeRef::Unknown(_) => todo!(),
+    }
+}
+
+// create the pair of nested as exprs needed to cast a rust reference to a C pointer
+fn create_star_exprs(cty: &CQualType, ast: &AST, c_ast: &CAST) -> Result<(Expr, Expr)> {
+    match cty.type_ref() {
+        CTypeRef::Builtin(tk) => {
+            let mut rb = String::new();
+            let mut cb = String::new();
+            write_rust_builtin(&mut rb, *tk)?;
+            write_ffi_builtin(&mut cb, *tk)?;
+
+            Ok((Expr::Token(rb), Expr::Token(cb)))
+        }
+        CTypeRef::Ref(usr) => {
+            let rname = sanitize_name(ast.get_typeref_name(*usr).unwrap());
+            let cname = c_ast.get_typeref_name_external(*usr).unwrap();
+
+            Ok((
+                Expr::Token(rname.to_string()),
+                Expr::Token(cname.to_string()),
+            ))
+        }
+        CTypeRef::Pointer(pointee) => {
+            let is_mut = !pointee.is_const();
+
+            create_star_exprs(pointee, ast, c_ast).map(|(rin, cin)| {
+                (
+                    Expr::Star {
+                        is_mut,
+                        target: Box::new(rin),
+                    },
+                    Expr::Star {
+                        is_mut,
+                        target: Box::new(cin),
+                    },
+                )
+            })
+        }
+        CTypeRef::FunctionProto { result, args } => todo!(),
+        CTypeRef::Template(_) => todo!(),
+        CTypeRef::Unknown(_) => todo!(),
+    }
+}
+
+fn write_rust_builtin(source: &mut String, tk: TypeKind) -> Result<()> {
+    match tk {
+        TypeKind::Bool => write!(source, "bool")?,
+        TypeKind::Char_S => write!(source, "i8")?,
+        TypeKind::Char_U => write!(source, "u8")?,
+        TypeKind::Double => write!(source, "f64")?,
+        TypeKind::Float => write!(source, "f32")?,
+        TypeKind::Int => write!(source, "i32")?,
+        TypeKind::Long => write!(source, "i64")?,
+        TypeKind::LongDouble => write!(source, "f64")?,
+        TypeKind::LongLong => write!(source, "i64")?,
+        TypeKind::Short => write!(source, "i16")?,
+        TypeKind::UChar => write!(source, "u8")?,
+        TypeKind::UInt => write!(source, "u32")?,
+        TypeKind::ULong => write!(source, "u64")?,
+        TypeKind::ULongLong => write!(source, "u64")?,
+        TypeKind::UShort => write!(source, "u16")?,
+        _ => todo!("Unhandled TypeKind for writing: {tk}"),
+    }
+
+    Ok(())
+}
+
+fn write_ffi_builtin(source: &mut String, tk: TypeKind) -> Result<()> {
+    write!(
+        source,
+        "{}",
+        match tk {
+            TypeKind::Bool => "bool",
+            TypeKind::Char_S => "c_char",
+            TypeKind::Char_U => "c_uchar",
+            TypeKind::Double => "c_double",
+            TypeKind::Float => "c_float",
+            TypeKind::Int => "c_int",
+            TypeKind::Long => "c_long",
+            TypeKind::LongDouble => "c_longdouble",
+            TypeKind::LongLong => "c_longlong",
+            TypeKind::Short => "c_short",
+            TypeKind::UChar => "c_uchar",
+            TypeKind::UInt => "c_uint",
+            TypeKind::ULong => "c_ulong",
+            TypeKind::ULongLong => "c_ulonglong",
+            TypeKind::UShort => "c_ushort",
+            TypeKind::Void => "c_void",
+            _ => unimplemented!("need to implement builtin {tk}"),
+        }
+    )?;
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -214,6 +363,10 @@ pub enum Expr {
     As {
         src: Box<Expr>,
         dst: Box<Expr>,
+    },
+    Star {
+        is_mut: bool,
+        target: Box<Expr>,
     },
 }
 
