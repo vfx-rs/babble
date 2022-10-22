@@ -6,7 +6,7 @@ pub use bbl_clang::{
 };
 use bbl_extract::ast::MonoAST;
 pub use bbl_extract::{class::OverrideList, parse_file_and_extract_ast};
-use bbl_write::{cmake::build_project, gen_c::gen_c, gen_rust_ffi::write_rust_ffi_module};
+use bbl_write::{cmake::build_project, gen_rust_ffi::write_rust_ffi_module};
 
 pub use bbl_extract::AllowList;
 pub use bbl_extract::{
@@ -19,7 +19,6 @@ pub use bbl_extract::{
     templates::{ClassTemplateSpecialization, TemplateArgument, TemplateParameterDecl},
 };
 pub use bbl_translate::translate_cpp_ast_to_c;
-use tracing::debug;
 
 pub fn parse(header: &str, options: &BindOptions) -> Result<AST, Error> {
     let (source_filename, mut args) = configure_temp_cmake_project(
@@ -56,7 +55,7 @@ pub fn bind(
 ) -> Result<(), Error> {
     let c_ast = translate_cpp_ast_to_c(ast)?;
 
-    let (c_header, c_source) = gen_c(project_name, &c_ast)?;
+    // let (c_header, c_source) = gen_c(project_name, &c_ast)?;
     // debug!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
 
     build_project(

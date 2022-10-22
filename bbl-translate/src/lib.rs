@@ -17,8 +17,7 @@ use cfunction::{
 use cstruct::{translate_class, CStruct, CStructId};
 use ctype::TypeReplacements;
 use ctypedef::{
-    translate_class_template_specialization, translate_function_template_specialization,
-    translate_typedef, CTypedef, CTypedefId,
+    translate_function_template_specialization, translate_typedef, CTypedef, CTypedefId,
 };
 use hashbrown::HashSet;
 

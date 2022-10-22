@@ -16,7 +16,7 @@ use tracing::{error, instrument, trace};
 use crate::{
     build_namespace_prefix,
     ctype::{translate_qual_type, CQualType, CTypeRef, TypeReplacements},
-    get_c_names, sanitize_name, CAST,
+    get_c_names, sanitize_name,
 };
 
 use crate::error::Error;
@@ -1424,7 +1424,7 @@ fn get_cpp_typename(qt: &CQualType, ast: &AST) -> Result<String> {
                 })
             }
         }
-        CTypeRef::FunctionProto { result, args } => Err(Error::Unsupported {
+        CTypeRef::FunctionProto { .. } => Err(Error::Unsupported {
             description: format!("Cannot cast FunctionProto {qt:?}"),
         }),
         CTypeRef::Template(t) => Err(Error::TriedToTranslateTemplateParmeter { name: t.clone() }),

@@ -1,6 +1,6 @@
 use bbl_clang::ty::TypeKind;
 use bbl_translate::to_rust::{Expr, RMethod, RStruct, RTypeRef, RAST};
-use std::{collections::HashSet, fmt::Write};
+use std::fmt::Write;
 
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;

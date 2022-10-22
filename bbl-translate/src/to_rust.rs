@@ -4,7 +4,7 @@ use bbl_clang::{cursor::USR, ty::TypeKind};
 use bbl_extract::{
     ast::{MonoAST, AST},
     class::{ClassBindKind, ClassDecl},
-    function::{self, Method},
+    function::Method,
     index_map::{IndexMapKey, UstrIndexMap},
     qualtype::{QualType, TypeRef},
 };
@@ -104,7 +104,7 @@ fn translate_class(class: &ClassDecl, ast: &AST, c_ast: &CAST) -> Result<RStruct
 }
 
 fn translate_method(
-    class: &ClassDecl,
+    _class: &ClassDecl,
     method: &Method,
     ast: &AST,
     c_ast: &CAST,
@@ -235,7 +235,7 @@ fn create_argument_expr(
                 dst: Box::new(cstar),
             })
         }
-        CTypeRef::FunctionProto { result, args } => todo!(),
+        CTypeRef::FunctionProto { result: _, args: _ } => todo!(),
         CTypeRef::Template(_) => todo!(),
         CTypeRef::Unknown(_) => todo!(),
     }
@@ -277,7 +277,7 @@ fn create_star_exprs(cty: &CQualType, ast: &AST, c_ast: &CAST) -> Result<(Expr, 
                 )
             })
         }
-        CTypeRef::FunctionProto { result, args } => todo!(),
+        CTypeRef::FunctionProto { result: _, args: _ } => todo!(),
         CTypeRef::Template(_) => todo!(),
         CTypeRef::Unknown(_) => todo!(),
     }

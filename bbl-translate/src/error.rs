@@ -243,9 +243,8 @@ impl std::error::Error for Error {
 impl Error {
     // returns true if the cause of this error is ultimately that there's an unsupported feature
     pub fn is_unsupported(&self) -> bool {
-        match self {
-            crate::Error::Unsupported { .. } => return true,
-            _ => (),
+        if let crate::Error::Unsupported { .. } = self {
+            return true;
         }
 
         use std::error::Error;

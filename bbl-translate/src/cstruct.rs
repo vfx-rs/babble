@@ -17,7 +17,7 @@ use crate::{
     cfunction::{translate_method, CFunction, CFunctionId, CFunctionSource},
     ctype::{translate_qual_type, CQualType, TypeReplacements},
     error::Error,
-    get_c_names, sanitize_name, CAST,
+    get_c_names, sanitize_name,
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
 
