@@ -1026,8 +1026,6 @@ mod tests {
                     Class();
                     float b;
                 };
-                }
-        
             "#
                 ),
                 &cli_args()?,

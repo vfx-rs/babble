@@ -888,7 +888,7 @@ fn write_size_t() -> bbl_util::Result<()> {
             indoc!(
                 r#"
                 #include <stddef.h>
-                size_t void take_size_t(size_t);
+                size_t take_size_t(size_t);
             "#
             ),
             &cli_args()?,
