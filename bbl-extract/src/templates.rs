@@ -85,6 +85,7 @@ pub fn extract_class_template_specialization(
         already_visited,
         allow_list,
         class_overrides,
+        None,
     )?;
 
     let cts = ClassTemplateSpecialization {

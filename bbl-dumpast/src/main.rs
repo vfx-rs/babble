@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
-use bbl_clang::cli_args;
 use bbl_clang::cursor_kind::CursorKind;
+use bbl_clang::{cli_args, cli_args_with};
 use bbl_extract::{ast::dump, *};
 
 use clap::{Parser, ValueEnum};
@@ -29,8 +29,12 @@ struct Args {
     max_depth: usize,
 
     /// Whether to show macro definitions or not
-    #[clap(short, long, value_parser, default_value_t = false)]
+    #[clap(long, value_parser, default_value_t = false)]
     show_macro_definitions: bool,
+
+    /// Args to pass to clang
+    #[clap(short, long, value_parser)]
+    includes: Vec<String>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -46,10 +50,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .init();
     }
 
+    let includes = args
+        .includes
+        .iter()
+        .map(|i| format!("-I{i}"))
+        .collect::<Vec<String>>();
+
+    let cargs = cli_args_with(&includes)?;
+
     let tu = if let Some(filename) = args.filename {
-        parse_file(filename, &cli_args()?, true)?
+        parse_file(filename, &cargs, true)?
     } else if let Some(source) = args.source {
-        parse_string(source, &cli_args()?, true)?
+        parse_string(source, &cargs, true)?
     } else {
         panic!("Must supply either filename or source argument")
     };

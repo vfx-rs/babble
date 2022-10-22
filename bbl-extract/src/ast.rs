@@ -782,13 +782,21 @@ pub fn extract_ast(
     tu: &TranslationUnit,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    // Allow parents to override the namespaces of the children, e.g. UsingDeclarations
+    namespace_override: Option<&[USR]>,
 ) -> Result<()> {
     if depth > max_depth {
         return Ok(());
     }
 
     // build the qualified namespace as a string (not creating new Namespace entries) for checking against the allowlist
-    let namespace_names = get_namespace_names(c)?;
+    let namespace_names = if let Some(ns) = namespace_override {
+        ns.iter()
+            .map(|usr| ast.get_namespace(*usr).unwrap().name().to_string())
+            .collect::<Vec<String>>()
+    } else {
+        get_namespace_names(c)?
+    };
     let mut decl_qualified_name = String::new();
     for ns in namespace_names {
         write!(decl_qualified_name, "{ns}::").unwrap();
@@ -806,7 +814,10 @@ pub fn extract_ast(
                         already_visited,
                         allow_list,
                         class_overrides,
+                        namespace_override,
                     )?;
+                } else {
+                    println!("NOT DEF");
                 }
 
                 return Ok(());
@@ -821,6 +832,7 @@ pub fn extract_ast(
                         already_visited,
                         allow_list,
                         class_overrides,
+                        namespace_override,
                     )?;
                 }
 
@@ -836,6 +848,7 @@ pub fn extract_ast(
                         already_visited,
                         allow_list,
                         class_overrides,
+                        namespace_override,
                     )?;
                 }
 
@@ -897,6 +910,25 @@ pub fn extract_ast(
             CursorKind::EnumDecl => {
                 let _ = extract_enum(c, ast, already_visited, tu)?;
             }
+            CursorKind::UsingDeclaration => {
+                let decl_ref = c.referenced()?;
+                let namespaces = get_namespaces_for_decl(c, tu, ast, already_visited)?;
+                for i in 0..decl_ref.num_overloaded_decls() {
+                    let overload = decl_ref.get_overloaded_decl(i)?;
+                    extract_ast(
+                        overload,
+                        depth + 1,
+                        max_depth,
+                        already_visited,
+                        ast,
+                        tu,
+                        allow_list,
+                        class_overrides,
+                        Some(&namespaces),
+                    )?
+                }
+                return Ok(());
+            }
             _ => (),
         }
     }
@@ -921,6 +953,7 @@ pub fn extract_ast(
             tu,
             allow_list,
             class_overrides,
+            None,
         )?;
     }
 
@@ -1281,6 +1314,7 @@ pub fn extract_ast_from_namespace(
             tu,
             allow_list,
             class_overrides,
+            None,
         )?;
     }
 
@@ -1495,5 +1529,59 @@ impl TypeAliasId {
 impl From<TypeAliasId> for usize {
     fn from(id: TypeAliasId) -> Self {
         id.0
+    }
+}
+
+#[cfg(test)]
+
+mod tests {
+    use bbl_clang::cli_args;
+    use indoc::indoc;
+
+    use crate::{
+        class::{ClassBindKind, OverrideList},
+        error::Error,
+        init_log, parse_string_and_extract_ast, AllowList,
+    };
+
+    #[test]
+    fn extract_using_decl() -> Result<(), Error> {
+        // test that a POD extracts as a valuetype
+        let ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
+            namespace detail {
+                class Class {public: int a;};
+            }
+            namespace Test {
+                using ::detail::Class;
+            }
+        "#
+            ),
+            &cli_args()?,
+            true,
+            Some("Test"),
+            &AllowList::default(),
+            &OverrideList::default(),
+        )?;
+
+        println!("{ast:?}");
+        assert_eq!(
+            format!("{ast:?}"),
+            indoc!(
+                r#"
+        ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+        Field a: int
+        Field b: float
+
+    "#
+            )
+        );
+
+        let class_id = ast.find_class("Class")?;
+        let class = &ast.classes()[class_id];
+        assert!(matches!(class.bind_kind(), ClassBindKind::ValueType));
+
+        Ok(())
     }
 }

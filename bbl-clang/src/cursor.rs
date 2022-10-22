@@ -26,9 +26,10 @@ use clang_sys::{
     clang_getCursorResultType, clang_getCursorSemanticParent, clang_getCursorSpelling,
     clang_getCursorType, clang_getCursorUSR, clang_getEnumConstantDeclUnsignedValue,
     clang_getEnumConstantDeclValue, clang_getEnumDeclIntegerType, clang_getNullCursor,
-    clang_getSpecializedCursorTemplate, clang_getTypedefDeclUnderlyingType,
-    clang_isCursorDefinition, clang_isInvalid, clang_visitChildren, CXChildVisitResult,
-    CXChildVisit_Break, CXChildVisit_Continue, CXChildVisit_Recurse, CXClientData, CXCursor,
+    clang_getNumOverloadedDecls, clang_getOverloadedDecl, clang_getSpecializedCursorTemplate,
+    clang_getTypedefDeclUnderlyingType, clang_isCursorDefinition, clang_isInvalid,
+    clang_visitChildren, CXChildVisitResult, CXChildVisit_Break, CXChildVisit_Continue,
+    CXChildVisit_Recurse, CXClientData, CXCursor,
 };
 use std::{
     convert::TryFrom,
@@ -403,6 +404,14 @@ impl Cursor {
 
     pub fn cxxrecord_needs_implicit_destructor(&self) -> bool {
         unsafe { clang_CXXRecord_needsImplicitDestructor(self.inner) != 0 }
+    }
+
+    pub fn num_overloaded_decls(&self) -> u32 {
+        unsafe { clang_getNumOverloadedDecls(self.inner) }
+    }
+
+    pub fn get_overloaded_decl(&self, i: u32) -> Result<Cursor> {
+        unsafe { cursor(clang_getOverloadedDecl(self.inner, i)) }
     }
 }
 

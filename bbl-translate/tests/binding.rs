@@ -934,3 +934,46 @@ fn translate_nested_template() -> bbl_util::Result<()> {
         )
     })
 }
+
+#[test]
+fn translate_version_inner_namespace() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
+                #define VERSION v1_0
+                namespace Test { namespace VERSION {
+                    class Class{};
+                }}
+            "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::new(vec![r#"^Test::.*$"#.to_string()]),
+            &OverrideList::default(),
+        )?;
+
+        // renaming the namespace to the empty string will cause it to be removed entirely
+        let ns = ast.find_namespace("v1_0")?;
+        ast.rename_namespace(ns, "");
+
+        let ast = ast.monomorphize()?;
+        println!("{ast:?}");
+
+        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        println!("{c_ast:?}");
+
+        bbl_util::compare(
+            &format!("{c_ast:?}"),
+            indoc!(
+                r#"
+                    CStruct c:@N@Test@N@v1_0@S@Class Test_v1_0_Class Test_Class ValueType fields=[]
+                    CFunction Test_v1_0_Class_ctor Test_Class_ctor([result: c:@N@Test@N@v1_0@S@Class*])  -> Int
+                    CFunction Test_v1_0_Class_copy_ctor Test_Class_copy_ctor([result: c:@N@Test@N@v1_0@S@Class*, rhs: c:@N@Test@N@v1_0@S@Class const* const])  -> Int
+                    CFunction Test_v1_0_Class_move_ctor Test_Class_move_ctor([result: c:@N@Test@N@v1_0@S@Class*, rhs: c:@N@Test@N@v1_0@S@Class const*])  -> Int
+        "#
+            ),
+        )
+    })
+}

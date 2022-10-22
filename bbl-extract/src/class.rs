@@ -473,8 +473,15 @@ pub fn extract_class_decl(
     already_visited: &mut Vec<USR>,
     allow_list: &AllowList,
     overrides: &OverrideList,
+    // Allow parents to override the namespaces of the children, e.g. UsingDeclarations
+    namespace_override: Option<&[USR]>,
 ) -> Result<USR> {
-    let namespaces = get_namespaces_for_decl(class_decl.into(), tu, ast, already_visited)?;
+    let namespaces = if let Some(ns) = namespace_override {
+        ns.to_vec()
+    } else {
+        get_namespaces_for_decl(class_decl.into(), tu, ast, already_visited)?
+    };
+
     let class_decl_qualified_name =
         get_qualified_name(&class_decl.display_name(), &namespaces, ast)?;
 
@@ -534,6 +541,7 @@ pub fn extract_class_decl(
         allow_list,
         overrides,
         None,
+        namespace_override,
     )?;
 
     debug!("extract_class_decl: inserting {}", class_decl.usr());
@@ -558,8 +566,14 @@ fn extract_class_decl_inner(
     allow_list: &AllowList,
     class_overrides: &OverrideList,
     qname_override: Option<&str>,
+    namespace_override: Option<&[USR]>,
 ) -> Result<ClassDecl> {
-    let namespaces = get_namespaces_for_decl(class_decl.into(), tu, ast, already_visited)?;
+    let namespaces = if let Some(ns) = namespace_override {
+        ns.to_vec()
+    } else {
+        get_namespaces_for_decl(class_decl.into(), tu, ast, already_visited)?
+    };
+
     let mut class_name = class_decl.display_name();
     let mut class_spelling = class_decl.spelling();
     if class_name.is_empty() {
@@ -599,6 +613,7 @@ fn extract_class_decl_inner(
                         allow_list,
                         class_overrides,
                         qname_override.or(Some(&class_decl_qualified_name)),
+                        None,
                     )?;
                     let access = c_base.cxx_access_specifier()?;
 

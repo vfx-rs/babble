@@ -672,6 +672,7 @@ pub fn extract_type(
                         already_visited,
                         allow_list,
                         class_overrides,
+                        None,
                     )?;
 
                     Ok(QualType {
