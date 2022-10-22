@@ -231,11 +231,14 @@ impl AST {
         Ok(MonoAST(ast))
     }
 
+    /// Get the name of a class, typedef or enum from its USR
     pub fn get_typeref_name(&self, usr: USR) -> Option<&str> {
         if let Some(class) = self.classes.get(usr.as_ref()) {
             Some(class.name())
         } else if let Some(td) = self.type_aliases.get(usr.as_ref()) {
             Some(td.name())
+        } else if let Some(enm) = self.enums.get(usr.as_ref()) {
+            Some(enm.name())
         } else {
             None
         }

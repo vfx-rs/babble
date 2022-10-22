@@ -237,16 +237,11 @@ pub fn translate_arguments(
     used_argument_names: &mut HashSet<String>,
     type_replacements: &TypeReplacements,
     ast: &AST,
-) -> Result<(Vec<CArgument>, Vec<String>), Error> {
+) -> Result<Vec<CArgument>, Error> {
     trace!("Translating arguments {:?}", arguments);
     let mut result = Vec::new();
 
-    let mut used_template_parameters = Vec::new();
     for arg in arguments {
-        if let Some(parm) = arg.qual_type().template_parameter_name() {
-            used_template_parameters.push(parm.to_string());
-        }
-
         let qual_type = translate_qual_type(
             arg.qual_type(),
             ast,
@@ -283,7 +278,7 @@ pub fn translate_arguments(
         });
     }
 
-    Ok((result, used_template_parameters))
+    Ok(result)
 }
 
 #[instrument(skip(ast, functions, used_names), level = "trace")]
@@ -322,7 +317,7 @@ pub fn translate_function(
 
     let mut used_argument_names = HashSet::new();
 
-    let (mut arguments, used_template_parameter_names) = translate_arguments(
+    let mut arguments = translate_arguments(
         function.arguments(),
         function.template_parameters(),
         template_args,
@@ -334,54 +329,6 @@ pub fn translate_function(
         name: function.name().to_string(),
         source: Box::new(e),
     })?;
-
-    /*
-    let mut unused_template_parameters = Vec::new();
-    // record which method template parameters are unused in the arguments (if any)
-    'outer: for p in function.template_parameters() {
-        for n in &used_template_parameter_names {
-            if n == p.name() {
-                continue 'outer;
-            }
-        }
-
-        unused_template_parameters.push(p.name().to_string());
-    }
-
-    // for each unused template parameter, find its matching argument and create a token for it
-    let call_template_arguments = unused_template_parameters
-        .iter()
-        .map(|parm| {
-            let parm_index = function
-                .template_parameters()
-                .iter()
-                .position(|p| p.name() == parm)
-                .ok_or_else(|| Error::TemplateParmNotFound {
-                    name: parm.into(),
-                    backtrace: Backtrace::new(),
-                })?;
-
-            if parm_index >= template_args.len() {
-                Err(Error::TemplateArgNotFound {
-                    name: parm.into(),
-                    backtrace: Backtrace::new(),
-                })
-            } else {
-                match &template_args[parm_index] {
-                    TemplateArgument::Type(tty) => {
-                        // Ok(Expr::Token(tty.name.clone()))
-                        Ok(Expr::Token(tty.format(ast, &[], Some(template_args))))
-                    }
-                    TemplateArgument::Integral(n) => Ok(Expr::Token(format!("{n}"))),
-                    _ => Err(Error::InvalidTemplateArgumentKind {
-                        name: parm.into(),
-                        backtrace: Backtrace::new(),
-                    }),
-                }
-            }
-        })
-        .collect::<Result<Vec<Expr>>>()?;
-        */
 
     let call_template_arguments = function
         .unused_template_arguments()
@@ -444,7 +391,7 @@ pub fn translate_function(
                     TypeRef::LValueReference(_) | TypeRef::RValueReference(_)
                 ) {
                     // pointer converted from a reference - cast and deref
-                    let to_type = get_cpp_cast_expr(&arg.qual_type, ast).map_err(|e| {
+                    let to_type = get_cpp_typename(&arg.qual_type, ast).map_err(|e| {
                         Error::FailedToCastArgument {
                             name: arg.name.clone(),
                             source: Box::new(e),
@@ -459,7 +406,7 @@ pub fn translate_function(
                     });
                 } else {
                     // just a regular pointer
-                    let to_type = get_cpp_cast_expr(&arg.qual_type, ast).map_err(|e| {
+                    let to_type = get_cpp_typename(&arg.qual_type, ast).map_err(|e| {
                         Error::FailedToCastArgument {
                             name: arg.name.clone(),
                             source: Box::new(e),
@@ -484,7 +431,7 @@ pub fn translate_function(
 
                         arg_pass.push(Expr::Deref {
                             value: Box::new(Expr::Cast {
-                                to_type: get_cpp_cast_expr(&arg.qual_type, ast).map_err(|e| {
+                                to_type: get_cpp_typename(&arg.qual_type, ast).map_err(|e| {
                                     Error::FailedToCastArgument {
                                         name: arg.name.clone(),
                                         source: Box::new(e),
@@ -506,7 +453,7 @@ pub fn translate_function(
                             arg.qual_type.clone(),
                             false,
                         );
-                        let to_type = get_cpp_cast_expr(&tmp_qual_type, ast).map_err(|e| {
+                        let to_type = get_cpp_typename(&tmp_qual_type, ast).map_err(|e| {
                             Error::FailedToCastArgument {
                                 name: arg.name.clone(),
                                 source: Box::new(e),
@@ -573,7 +520,7 @@ pub fn translate_function(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
                     Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
@@ -608,7 +555,7 @@ pub fn translate_function(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
                     Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
@@ -655,7 +602,7 @@ pub fn translate_function(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
                     Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
@@ -815,9 +762,7 @@ pub fn translate_method(
 
     let mut used_argument_names = HashSet::new();
 
-    let mut unused_template_parameters = Vec::new();
-
-    let (mut arguments, used_template_parameter_names) = translate_arguments(
+    let mut arguments = translate_arguments(
         method.arguments(),
         &template_parms,
         template_args,
@@ -830,53 +775,6 @@ pub fn translate_method(
         source: Box::new(e),
     })?;
 
-    // record which method template parameters are unused in the arguments (if any)
-    'outer: for p in method.template_parameters() {
-        for n in &used_template_parameter_names {
-            if n == p.name() {
-                continue 'outer;
-            }
-        }
-
-        unused_template_parameters.push(p.name().to_string());
-    }
-
-    // for each unused template parameter, find its matching argument and create a token for it
-    /*
-    let call_template_arguments = unused_template_parameters
-        .iter()
-        .map(|parm| {
-            let parm_index = method
-                .template_parameters()
-                .iter()
-                .position(|p| p.name() == parm)
-                .ok_or_else(|| Error::TemplateParmNotFound {
-                    name: parm.into(),
-                    backtrace: Backtrace::new(),
-                })?;
-
-            if parm_index >= template_args.len() {
-                Err(Error::TemplateArgNotFound {
-                    name: parm.into(),
-                    backtrace: Backtrace::new(),
-                })
-            } else {
-                match &template_args[parm_index] {
-                    TemplateArgument::Type(tty) => Ok(Expr::Token(tty.format(
-                        ast,
-                        class_template_parms,
-                        Some(template_args),
-                    ))),
-                    TemplateArgument::Integral(n) => Ok(Expr::Token(format!("{n}"))),
-                    _ => Err(Error::InvalidTemplateArgumentKind {
-                        name: parm.into(),
-                        backtrace: Backtrace::new(),
-                    }),
-                }
-            }
-        })
-        .collect::<Result<Vec<Expr>>>()?;
-    */
     let call_template_arguments = method
         .unused_template_arguments()
         .iter()
@@ -938,7 +836,7 @@ pub fn translate_method(
                     TypeRef::LValueReference(_) | TypeRef::RValueReference(_)
                 ) {
                     // pointer converted from a reference - cast and deref
-                    let to_type = get_cpp_cast_expr(&arg.qual_type, ast).map_err(|e| {
+                    let to_type = get_cpp_typename(&arg.qual_type, ast).map_err(|e| {
                         Error::FailedToCastArgument {
                             name: arg.name.clone(),
                             source: Box::new(e),
@@ -953,7 +851,7 @@ pub fn translate_method(
                     });
                 } else {
                     // just a regular pointer
-                    let to_type = get_cpp_cast_expr(&arg.qual_type, ast).map_err(|e| {
+                    let to_type = get_cpp_typename(&arg.qual_type, ast).map_err(|e| {
                         Error::FailedToCastArgument {
                             name: arg.name.clone(),
                             source: Box::new(e),
@@ -978,7 +876,7 @@ pub fn translate_method(
 
                         arg_pass.push(Expr::Deref {
                             value: Box::new(Expr::Cast {
-                                to_type: get_cpp_cast_expr(&arg.qual_type, ast).map_err(|e| {
+                                to_type: get_cpp_typename(&arg.qual_type, ast).map_err(|e| {
                                     Error::FailedToCastArgument {
                                         name: arg.name.clone(),
                                         source: Box::new(e),
@@ -1000,7 +898,7 @@ pub fn translate_method(
                             arg.qual_type.clone(),
                             false,
                         );
-                        let to_type = get_cpp_cast_expr(&tmp_qual_type, ast).map_err(|e| {
+                        let to_type = get_cpp_typename(&tmp_qual_type, ast).map_err(|e| {
                             Error::FailedToCastArgument {
                                 name: arg.name.clone(),
                                 source: Box::new(e),
@@ -1068,7 +966,7 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
                     Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
@@ -1103,7 +1001,7 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
                     Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
@@ -1150,7 +1048,7 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
                     Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
@@ -1219,7 +1117,7 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
                     Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
@@ -1268,7 +1166,7 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_cast_expr(&result_qt, ast).map_err(|e| {
+                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
                     Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
@@ -1346,7 +1244,7 @@ pub fn translate_method(
             })),
         };
 
-        let to_type = get_cpp_cast_expr(&qt, ast).map_err(|e| Error::FailedToCastArgument {
+        let to_type = get_cpp_typename(&qt, ast).map_err(|e| Error::FailedToCastArgument {
             name: "[self]".to_string(),
             source: Box::new(e),
         })?;
@@ -1384,7 +1282,7 @@ pub fn translate_method(
             })),
         };
 
-        let to_type = get_cpp_cast_expr(&qt, ast).map_err(|e| Error::FailedToCastArgument {
+        let to_type = get_cpp_typename(&qt, ast).map_err(|e| Error::FailedToCastArgument {
             name: "[self]".to_string(),
             source: Box::new(e),
         })?;
@@ -1494,10 +1392,11 @@ pub fn translate_function_proto(
     Ok(())
 }
 
-fn get_cpp_cast_expr(qt: &CQualType, ast: &AST) -> Result<String> {
+/// Get the C++ type name for the given qualified type
+fn get_cpp_typename(qt: &CQualType, ast: &AST) -> Result<String> {
     let result = match qt.type_ref() {
         CTypeRef::Builtin(tk) => Ok(builtin_spelling(tk)),
-        CTypeRef::Pointer(pointee) => Ok(format!("{}*", get_cpp_cast_expr(pointee, ast)?)),
+        CTypeRef::Pointer(pointee) => Ok(format!("{}*", get_cpp_typename(pointee, ast)?)),
         CTypeRef::Ref(usr) => {
             // ref might be to a class directly, or to a typedef
             if let Some(class) = ast.get_class(*usr) {
@@ -1549,6 +1448,9 @@ fn get_cpp_cast_expr(qt: &CQualType, ast: &AST) -> Result<String> {
     }
 }
 
+/// Get the [`ClassBindKind`] for the type referenced by `usr`.
+/// 
+/// If `usr` refers to a typedef, the bind kind of the underlying type is returned
 fn get_bind_kind(usr: USR, ast: &AST) -> Result<ClassBindKind> {
     if let Some(class) = ast.get_class(usr) {
         Ok(*class.bind_kind())
