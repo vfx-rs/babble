@@ -135,14 +135,6 @@ fn translate_method(
 
     let has_result = !matches!(method.result().type_ref, TypeRef::Builtin(TypeKind::Void));
 
-    let mut c_arg_offset = 0;
-    if !method.is_static() {
-        c_arg_offset += 1;
-    }
-    if has_result {
-        c_arg_offset += 1
-    }
-
     let mut used_argument_names = HashSet::new();
     used_argument_names.insert("_return_code".to_string()); //< we'll use this later
 
