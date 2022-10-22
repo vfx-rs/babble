@@ -1,6 +1,7 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_snake_case)]
 
+use backtrace::Backtrace;
 use bbl_clang::access_specifier::AccessSpecifier;
 use bbl_clang::cli_args;
 use bbl_clang::cursor::{CurClassDecl, Cursor, USR};
@@ -10,15 +11,22 @@ use regex::Regex;
 use std::fmt::{Debug, Display};
 use tracing::instrument;
 use ustr::Ustr;
-use backtrace::Backtrace;
 
-use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, AST, ClassTemplateSpecializationId, dump_cursor, dump_cursor_until, ClassId};
+use crate::ast::{
+    dump_cursor, dump_cursor_until, get_namespaces_for_decl, get_qualified_name, ClassId,
+    ClassTemplateSpecializationId, MethodId, TypeAliasId, AST,
+};
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::index_map::IndexMapKey;
-use crate::{parse_string_and_extract_ast, AllowList, class};
 use crate::qualtype::extract_type;
-use crate::stdlib::{create_std_string, create_std_vector, create_std_unique_ptr, create_std_function, create_std_map};
-use crate::templates::{TemplateParameterDecl, TemplateArgument, extract_class_template_specialization};
+use crate::stdlib::{
+    create_std_function, create_std_map, create_std_string, create_std_unique_ptr,
+    create_std_vector,
+};
+use crate::templates::{
+    extract_class_template_specialization, TemplateArgument, TemplateParameterDecl,
+};
+use crate::{class, parse_string_and_extract_ast, AllowList};
 use crate::{function::Method, qualtype::QualType};
 use bbl_clang::cursor_kind::CursorKind;
 
@@ -60,20 +68,29 @@ pub struct NeedsImplicit {
 
 impl Debug for NeedsImplicit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{}{}{}{}{}{}]",
-            if self.ctor {"ctor "} else {""},
-            if self.copy_ctor {"cctor "} else {""},
-            if self.move_ctor {"mctor "} else {""},
-            if self.copy_assign {"cass "} else {""},
-            if self.move_assign {"mass "} else {""},
-            if self.dtor {"dtor "} else {""},
+        write!(
+            f,
+            "[{}{}{}{}{}{}]",
+            if self.ctor { "ctor " } else { "" },
+            if self.copy_ctor { "cctor " } else { "" },
+            if self.move_ctor { "mctor " } else { "" },
+            if self.copy_assign { "cass " } else { "" },
+            if self.move_assign { "mass " } else { "" },
+            if self.dtor { "dtor " } else { "" },
         )
     }
 }
 
 impl NeedsImplicit {
     pub fn all() -> NeedsImplicit {
-        NeedsImplicit { ctor: true, copy_ctor: true, move_ctor: true, copy_assign: true, move_assign: true, dtor: true }
+        NeedsImplicit {
+            ctor: true,
+            copy_ctor: true,
+            move_ctor: true,
+            copy_assign: true,
+            move_assign: true,
+            dtor: true,
+        }
     }
 }
 
@@ -325,7 +342,10 @@ impl ClassDecl {
                     error!("  {sug}");
                 }
 
-                Err(Error::MethodNotFound{name: signature.to_string(), backtrace: Backtrace::new()})
+                Err(Error::MethodNotFound {
+                    name: signature.to_string(),
+                    backtrace: Backtrace::new(),
+                })
             }
             1 => Ok((MethodId::new(matches[0].0), matches[0].1)),
             _ => {
@@ -338,12 +358,19 @@ impl ClassDecl {
                     );
                 }
 
-                Err(Error::MultipleMatches{name: signature.to_string(), backtrace: Backtrace::new()})
+                Err(Error::MultipleMatches {
+                    name: signature.to_string(),
+                    backtrace: Backtrace::new(),
+                })
             }
         }
     }
 
-    pub fn find_methods(&self, ast: &AST, signature: &str) -> Result<(Vec<MethodId>, Vec<&Method>)> {
+    pub fn find_methods(
+        &self,
+        ast: &AST,
+        signature: &str,
+    ) -> Result<(Vec<MethodId>, Vec<&Method>)> {
         let mut matches = Vec::new();
 
         for (method_id, method) in self.methods.iter().enumerate() {
@@ -375,15 +402,15 @@ impl ClassDecl {
                     error!("  {sug}");
                 }
 
-                Err(Error::MethodNotFound{name: signature.to_string(), backtrace: Backtrace::new()})
+                Err(Error::MethodNotFound {
+                    name: signature.to_string(),
+                    backtrace: Backtrace::new(),
+                })
             }
-            _ => {
-                Ok(
-                    matches.into_iter().map(|m| {
-                        (MethodId::new(m.0), m.1)
-                    }).unzip()
-                )
-            }
+            _ => Ok(matches
+                .into_iter()
+                .map(|m| (MethodId::new(m.0), m.1))
+                .unzip()),
         }
     }
 
@@ -457,7 +484,8 @@ pub fn extract_class_decl(
     overrides: &OverrideList,
 ) -> Result<USR> {
     let namespaces = get_namespaces_for_decl(class_decl.into(), tu, ast, already_visited)?;
-    let class_decl_qualified_name = get_qualified_name(&class_decl.display_name(), &namespaces, ast)?;
+    let class_decl_qualified_name =
+        get_qualified_name(&class_decl.display_name(), &namespaces, ast)?;
 
     // Check for std:: types we're going to extract manually here
     if class_decl.display_name().starts_with("basic_string<") {
@@ -476,14 +504,28 @@ pub fn extract_class_decl(
 
     for over in &overrides.overs {
         if over.0.is_match(&class_decl_qualified_name) {
-            return over.1(class_decl.into(), ast, tu, already_visited, allow_list, overrides);
+            return over.1(
+                class_decl.into(),
+                ast,
+                tu,
+                already_visited,
+                allow_list,
+                overrides,
+            );
         }
     }
 
     if class_decl.specialized_template().is_ok() {
         // this is a class template specialization, handle it separately
         debug!("extract_class_decl: {} is a CTS", class_decl.usr());
-        return extract_class_template_specialization(class_decl, already_visited, ast, tu, allow_list, overrides);
+        return extract_class_template_specialization(
+            class_decl,
+            already_visited,
+            ast,
+            tu,
+            allow_list,
+            overrides,
+        );
     }
 
     if already_visited.contains(&class_decl.usr()) {
@@ -493,11 +535,23 @@ pub fn extract_class_decl(
         already_visited.push(class_decl.usr());
     }
 
-    let cd = extract_class_decl_inner(class_decl, tu, ast, already_visited, allow_list, overrides, None)?;
+    let cd = extract_class_decl_inner(
+        class_decl,
+        tu,
+        ast,
+        already_visited,
+        allow_list,
+        overrides,
+        None,
+    )?;
 
     debug!("extract_class_decl: inserting {}", class_decl.usr());
     if class_decl.kind() == CursorKind::ClassTemplate && cd.template_parameters.is_empty() {
-        error!("class {:?} is a ClassTemplate but has no template parameters. is def: {}", class_decl, class_decl.is_definition());
+        error!(
+            "class {:?} is a ClassTemplate but has no template parameters. is def: {}",
+            class_decl,
+            class_decl.is_definition()
+        );
     }
 
     ast.insert_class(cd);
@@ -506,14 +560,14 @@ pub fn extract_class_decl(
 }
 
 fn extract_class_decl_inner(
-    class_decl: CurClassDecl, 
-    tu: &TranslationUnit, 
-    ast: &mut AST, 
-    already_visited: &mut Vec<USR>, 
-    allow_list: &AllowList, 
-    class_overrides: &OverrideList, 
-    qname_override: Option<&str>) 
--> Result<ClassDecl> {
+    class_decl: CurClassDecl,
+    tu: &TranslationUnit,
+    ast: &mut AST,
+    already_visited: &mut Vec<USR>,
+    allow_list: &AllowList,
+    class_overrides: &OverrideList,
+    qname_override: Option<&str>,
+) -> Result<ClassDecl> {
     let namespaces = get_namespaces_for_decl(class_decl.into(), tu, ast, already_visited)?;
     let mut class_name = class_decl.display_name();
     let mut class_spelling = class_decl.spelling();
@@ -543,10 +597,18 @@ fn extract_class_decl_inner(
         if let Ok(c_base_decl) = c_base.referenced() {
             match c_base_decl.kind() {
                 CursorKind::ClassDecl | CursorKind::StructDecl | CursorKind::ClassTemplate => {
-                    // we pass a class name override through when extracting the base class members. This will turn 
+                    // we pass a class name override through when extracting the base class members. This will turn
                     // Base::method() into Class::method(). Thus the allow list will work as expected, and still allow
                     // us to avoid adding the Base class to the AST while lofting up its members into Class
-                    let base = extract_class_decl_inner(c_base_decl.try_into()?, tu, ast, already_visited, allow_list, class_overrides, qname_override.or(Some(&class_decl_qualified_name)) )?;
+                    let base = extract_class_decl_inner(
+                        c_base_decl.try_into()?,
+                        tu,
+                        ast,
+                        already_visited,
+                        allow_list,
+                        class_overrides,
+                        qname_override.or(Some(&class_decl_qualified_name)),
+                    )?;
                     let access = c_base.cxx_access_specifier()?;
 
                     for method in &base.methods {
@@ -604,13 +666,15 @@ fn extract_class_decl_inner(
         //     continue;
         // }
 
-
         if let Ok(access) = member.cxx_access_specifier() {
             // if access != AccessSpecifier::Public {
             //     continue;
             // }
         } else {
-            warn!("Failed to get access specifier for member {}", member.display_name());
+            warn!(
+                "Failed to get access specifier for member {}",
+                member.display_name()
+            );
             // continue;
             // return Err(Error::FailedToGetAccessSpecifierFor(member.display_name()));
         }
@@ -646,7 +710,9 @@ fn extract_class_decl_inner(
             | CursorKind::Destructor
             | CursorKind::FunctionTemplate => {
                 if let Ok(access) = member.cxx_access_specifier() {
-                    if access == AccessSpecifier::Public && allow_list.allows(&member_qualified_name){
+                    if access == AccessSpecifier::Public
+                        && allow_list.allows(&member_qualified_name)
+                    {
                         match extract_method(
                             member,
                             &template_parameters,
@@ -666,13 +732,16 @@ fn extract_class_decl_inner(
                                     return Err(Error::FailedToExtractMethod {
                                         name: member.display_name(),
                                         source: Box::new(e),
-                                    })
+                                    });
                                 }
                             }
                         }
                     }
                 } else {
-                    return Err(Error::FailedToGetAccessSpecifierFor{name: member.display_name(), backtrace: Backtrace::new()});
+                    return Err(Error::FailedToGetAccessSpecifierFor {
+                        name: member.display_name(),
+                        backtrace: Backtrace::new(),
+                    });
                 }
             }
             CursorKind::FieldDecl => {
@@ -694,16 +763,17 @@ fn extract_class_decl_inner(
                         allow_list,
                         class_overrides,
                     )
-                    .map_err(|e| {
-                        Error::FailedToExtractField {
-                            class: class_name.clone(),
-                            name: member.display_name(),
-                            source: Box::new(e),
-                        }
+                    .map_err(|e| Error::FailedToExtractField {
+                        class: class_name.clone(),
+                        name: member.display_name(),
+                        source: Box::new(e),
                     })?;
                     fields.push(field);
                 } else {
-                    return Err(Error::FailedToGetAccessSpecifierFor{name: member.display_name(), backtrace: Backtrace::new()});
+                    return Err(Error::FailedToGetAccessSpecifierFor {
+                        name: member.display_name(),
+                        backtrace: Backtrace::new(),
+                    });
                 }
             }
             _ => {
@@ -759,7 +829,6 @@ fn extract_class_decl_inner(
         methods.push(base_constructor);
     }
 
-
     let name = class_decl.spelling();
 
     // If this is a template decl we won't be able to get a type from it so just set POD to false
@@ -800,24 +869,28 @@ pub struct OverrideList {
 
 impl OverrideList {
     pub fn new(overs: Vec<(String, Box<ClassExtractionFn>)>) -> Self {
-        let overs = overs.into_iter().map(|(s, c)| {
-            (Regex::new(&s).unwrap(), c)
-        }).collect();
+        let overs = overs
+            .into_iter()
+            .map(|(s, c)| (Regex::new(&s).unwrap(), c))
+            .collect();
 
-        OverrideList {
-            overs
-        }
+        OverrideList { overs }
     }
 }
 
 impl Debug for OverrideList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s: Vec<String> = self.overs.iter().map(|o| o.0.as_str().to_string()).collect();
+        let s: Vec<String> = self
+            .overs
+            .iter()
+            .map(|o| o.0.as_str().to_string())
+            .collect();
         write!(f, "[{}]", s.join(", "))
     }
 }
 
-pub type ClassExtractionFn = fn(Cursor, &mut AST, &TranslationUnit, &mut Vec<USR>, &AllowList, &OverrideList) -> Result<USR>;
+pub type ClassExtractionFn =
+    fn(Cursor, &mut AST, &TranslationUnit, &mut Vec<USR>, &AllowList, &OverrideList) -> Result<USR>;
 
 // TODO(AL): fix these once we've patched libclang
 fn method_is_copy_assignment_operator(method: Cursor, class: Cursor) -> bool {
@@ -910,7 +983,7 @@ pub(crate) fn specialize_template_parameter(
             match arg {
                 TemplateArgument::Type(qt) => return qt.name.clone(),
                 TemplateArgument::Integral(i) => return format!("{i}"),
-                _ => format!("{arg:?}")
+                _ => format!("{arg:?}"),
             };
         } else if let TemplateParameterDecl::Integer {
             default: Some(value),
@@ -931,7 +1004,11 @@ mod tests {
     use bbl_clang::cli_args;
     use indoc::indoc;
 
-    use crate::{class::{ClassBindKind, OverrideList}, error::Error, parse_string_and_extract_ast, AllowList, init_log};
+    use crate::{
+        class::{ClassBindKind, OverrideList},
+        error::Error,
+        init_log, parse_string_and_extract_ast, AllowList,
+    };
 
     #[test]
     fn extract_pod() -> Result<(), Error> {
@@ -991,7 +1068,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::default(),
-            &OverrideList::default(),
+                &OverrideList::default(),
             )?;
 
             println!("{ast:?}");
@@ -1003,7 +1080,7 @@ mod tests {
                     Field b: float
     
         "#
-                )
+                ),
             )?;
 
             let class_id = ast.find_class("Class")?;
@@ -1032,7 +1109,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::default(),
-            &OverrideList::default(),
+                &OverrideList::default(),
             )?;
 
             println!("{ast:?}");
@@ -1046,7 +1123,7 @@ mod tests {
                     Method DefaultConstructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@Class# Class rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
 
         "#
-                )
+                ),
             )?;
 
             let class_id = ast.find_class("Class")?;
@@ -1086,11 +1163,8 @@ mod tests {
                 &cli_args()?,
                 true,
                 None,
-                &AllowList::new(vec![
-                    "^Class$".to_string(),
-                    "^Class.*$".to_string()
-                    ]),
-            &OverrideList::default(),
+                &AllowList::new(vec!["^Class$".to_string(), "^Class.*$".to_string()]),
+                &OverrideList::default(),
             )?;
 
             println!("{ast:?}");
@@ -1110,7 +1184,7 @@ mod tests {
                     Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@N@detail@S@Base@F@Base#I#f# Base rename=Some("ctor") ignore=false return=void args=[a: int, b: float] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@detail, c:@N@detail@S@Base]
 
         "#
-                )
+                ),
             )?;
 
             let class_id = ast.find_class("Class")?;
@@ -1147,7 +1221,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::default(),
-            &OverrideList::default(),
+                &OverrideList::default(),
             )?;
 
             println!("{ast:?}");
@@ -1167,7 +1241,7 @@ mod tests {
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@base_do_thing# base_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
 
         "#
-                )
+                ),
             )?;
 
             let class_id = ast.find_class("Class")?;

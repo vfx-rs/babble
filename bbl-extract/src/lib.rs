@@ -13,6 +13,7 @@ use log::*;
 
 pub mod ast;
 pub mod class;
+pub mod enm;
 pub mod function;
 pub mod index_map;
 pub mod namespace;
@@ -20,7 +21,6 @@ pub mod qualtype;
 pub mod stdlib;
 pub mod templates;
 pub mod typedef;
-pub mod enm;
 use ast::{dump, extract_ast, extract_ast_from_namespace, Include, AST};
 pub mod error;
 use error::Error;
@@ -87,10 +87,7 @@ pub fn parse_file_and_extract_ast<
 }
 
 #[instrument(level = "trace")]
-pub fn parse_string<
-    S1: AsRef<str> + std::fmt::Debug,
-    S: AsRef<str> + std::fmt::Debug,
->(
+pub fn parse_string<S1: AsRef<str> + std::fmt::Debug, S: AsRef<str> + std::fmt::Debug>(
     contents: S1,
     cli_args: &[S],
     log_diagnostics: bool,
@@ -112,7 +109,14 @@ pub fn parse_string_and_extract_ast<
     class_overrides: &OverrideList,
 ) -> Result<AST> {
     let path = virtual_file::write_temp_file(contents.as_ref())?;
-    parse_file_and_extract_ast(&path, cli_args, log_diagnostics, namespace, allow_list, class_overrides)
+    parse_file_and_extract_ast(
+        &path,
+        cli_args,
+        log_diagnostics,
+        namespace,
+        allow_list,
+        class_overrides,
+    )
 }
 
 #[instrument(level = "trace")]
@@ -174,7 +178,6 @@ pub(crate) fn get_test_filename(base: &str) -> String {
         .to_string()
 }
 
-
 pub(crate) fn init_log() {
     use std::io::Write;
 
@@ -203,7 +206,6 @@ pub(crate) fn init_log() {
         .try_init();
 }
 
-
 #[derive(Debug)]
 pub struct AllowList {
     regexes: RegexSet,
@@ -213,19 +215,28 @@ pub struct AllowList {
 
 impl Default for AllowList {
     fn default() -> Self {
-        AllowList { regexes: RegexSet::empty(), allow: false }
+        AllowList {
+            regexes: RegexSet::empty(),
+            allow: false,
+        }
     }
 }
 
 impl AllowList {
     pub fn new(prefixes: Vec<String>) -> AllowList {
         let regexes = RegexSet::new(&prefixes).unwrap();
-        AllowList { regexes, allow: true }
+        AllowList {
+            regexes,
+            allow: true,
+        }
     }
 
     pub fn block_list(prefixes: Vec<String>) -> AllowList {
         let regexes = RegexSet::new(&prefixes).unwrap();
-        AllowList { regexes, allow: false }
+        AllowList {
+            regexes,
+            allow: false,
+        }
     }
 
     pub fn allows(&self, name: &str) -> bool {
@@ -238,6 +249,5 @@ impl AllowList {
         } else {
             !self.allow
         }
-
     }
 }

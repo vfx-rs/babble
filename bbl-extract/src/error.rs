@@ -128,7 +128,7 @@ pub enum Error {
     },
     Unsupported {
         description: String,
-    }
+    },
 }
 
 impl Error {

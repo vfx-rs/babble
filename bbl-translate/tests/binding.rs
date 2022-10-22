@@ -700,7 +700,7 @@ fn translate_enum() -> Result<(), Error> {
     let ns = ast.find_namespace("Test_1_0")?;
     ast.rename_namespace(ns, "Test");
 
-        let ast = ast.monomorphize()?;
+    let ast = ast.monomorphize()?;
     let c_ast = translate_cpp_ast_to_c(&ast)?;
     println!("{c_ast:?}");
     assert_eq!(

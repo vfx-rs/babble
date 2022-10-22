@@ -1,18 +1,21 @@
 use bbl_clang::cursor::{Cursor, USR};
 use bbl_clang::exception::ExceptionSpecificationKind;
 use bbl_clang::translation_unit::TranslationUnit;
-use bbl_clang::ty::{TypeKind, Type};
+use bbl_clang::ty::{Type, TypeKind};
 use hashbrown::HashSet;
 use log::*;
 use std::fmt::{Debug, Display};
 use tracing::instrument;
 
-use crate::AllowList;
-use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, TypeAliasId, FunctionTemplateSpecializationId, dump_cursor_until};
+use crate::ast::{
+    dump_cursor_until, get_namespaces_for_decl, get_qualified_name,
+    FunctionTemplateSpecializationId, MethodId, TypeAliasId,
+};
 use crate::class::{MethodSpecializationId, OverrideList};
 use crate::index_map::IndexMapKey;
-use crate::qualtype::{extract_type};
-use crate::templates::{TemplateParameterDecl, TemplateArgument};
+use crate::qualtype::extract_type;
+use crate::templates::{TemplateArgument, TemplateParameterDecl};
+use crate::AllowList;
 use crate::{ast::AST, qualtype::QualType};
 use bbl_clang::cursor_kind::CursorKind;
 
@@ -25,7 +28,7 @@ pub struct FunctionProto {
     usr: USR,
     result: QualType,
     args: Vec<QualType>,
-    namespaces: Vec<USR>
+    namespaces: Vec<USR>,
 }
 
 impl FunctionProto {
@@ -45,14 +48,30 @@ impl FunctionProto {
         &self.args
     }
 
-    pub fn new(name: String, usr: USR, result: QualType, args: Vec<QualType>, namespaces: Vec<USR>) -> Self {
-        FunctionProto { name, usr, result, args, namespaces }
+    pub fn new(
+        name: String,
+        usr: USR,
+        result: QualType,
+        args: Vec<QualType>,
+        namespaces: Vec<USR>,
+    ) -> Self {
+        FunctionProto {
+            name,
+            usr,
+            result,
+            args,
+            namespaces,
+        }
     }
 }
 
 impl std::fmt::Debug for FunctionProto {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "FunctionProto {} {} ({:?}*)({:?}) namespaces={:?}", self.name, self.usr, self.result, self.args, self.namespaces)
+        write!(
+            f,
+            "FunctionProto {} {} ({:?}*)({:?}) namespaces={:?}",
+            self.name, self.usr, self.result, self.args, self.namespaces
+        )
     }
 }
 
@@ -70,7 +89,6 @@ impl IndexMapKey for FunctionProtoId {
         self.0
     }
 }
-
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Argument {
@@ -181,10 +199,14 @@ impl Function {
     }
 
     /// Does this function's signiature match `other`?
-    /// 
+    ///
     /// In other words, is it identical, except for the USR and the namespaces?
     pub fn signature_matches(&self, other: &Function) -> bool {
-        self.name == other.name && self.result == other.result && self.arguments == other.arguments && self.template_parameters == other.template_parameters && self.exception_specification_kind == other.exception_specification_kind
+        self.name == other.name
+            && self.result == other.result
+            && self.arguments == other.arguments
+            && self.template_parameters == other.template_parameters
+            && self.exception_specification_kind == other.exception_specification_kind
     }
 
     /// Get the name of the function
@@ -262,9 +284,7 @@ impl Function {
         self.format()
     }
 
-    pub fn format(
-        &self,
-    ) -> String {
+    pub fn format(&self) -> String {
         let mut s = self.name.to_string();
 
         let args = self
@@ -276,11 +296,7 @@ impl Function {
             .join(", ");
         s = format!("{s}({})", args);
 
-        s = format!(
-            "{s} -> {}",
-            self.result
-                .name
-        );
+        s = format!("{s} -> {}", self.result.name);
 
         s
     }
@@ -376,8 +392,8 @@ impl Method {
 
     pub fn signature_matches(&self, other: &Method) -> bool {
         self.function.signature_matches(&other.function)
-        && self.kind == other.kind 
-        && self.is_const == other.is_const
+            && self.kind == other.kind
+            && self.is_const == other.is_const
     }
 
     pub fn name(&self) -> &str {
@@ -498,12 +514,8 @@ impl Method {
         self.format()
     }
 
-    pub fn format(
-        &self,
-    ) -> String {
-        let mut s = self
-            .function
-            .format();
+    pub fn format(&self) -> String {
+        let mut s = self.function.format();
 
         if self.is_static() {
             s += " static"
@@ -524,13 +536,28 @@ impl Method {
         s
     }
 
-    pub(crate) fn replace_templates(&mut self, template_parameters: &[TemplateParameterDecl], template_arguments: &[TemplateArgument], ast: &AST) -> Result<Vec<TemplateArgument>> {
+    pub(crate) fn replace_templates(
+        &mut self,
+        template_parameters: &[TemplateParameterDecl],
+        template_arguments: &[TemplateArgument],
+        ast: &AST,
+    ) -> Result<Vec<TemplateArgument>> {
         let mut matched_parameters = HashSet::new();
-        self.function.result.replace_templates(template_parameters, template_arguments, &mut matched_parameters, ast)?;
+        self.function.result.replace_templates(
+            template_parameters,
+            template_arguments,
+            &mut matched_parameters,
+            ast,
+        )?;
         // Don't count matched parameters in the return type as we still need to explcitily specify them at the call site
         let mut matched_parameters = HashSet::new();
         for arg in &mut self.function.arguments {
-            arg.qual_type.replace_templates(template_parameters, template_arguments, &mut matched_parameters, ast)?;
+            arg.qual_type.replace_templates(
+                template_parameters,
+                template_arguments,
+                &mut matched_parameters,
+                ast,
+            )?;
         }
 
         // now figure out which template parameters are unmatched. We will use these later when calling the method in
@@ -542,16 +569,26 @@ impl Method {
                     continue 'outer;
                 }
             }
-            unused_arguments.push(find_template_argument_for_parameter(parm.name(), template_parameters, template_arguments)?.clone());
+            unused_arguments.push(
+                find_template_argument_for_parameter(
+                    parm.name(),
+                    template_parameters,
+                    template_arguments,
+                )?
+                .clone(),
+            );
         }
 
         Ok(unused_arguments)
     }
 }
 
-fn find_template_argument_for_parameter<'a>(parm: &str, template_parameters: &[TemplateParameterDecl], template_args: &'a [TemplateArgument]) -> Result<&'a TemplateArgument> {
-    let parm_index = 
-        template_parameters
+fn find_template_argument_for_parameter<'a>(
+    parm: &str,
+    template_parameters: &[TemplateParameterDecl],
+    template_args: &'a [TemplateArgument],
+) -> Result<&'a TemplateArgument> {
+    let parm_index = template_parameters
         .iter()
         .position(|p| p.name() == parm)
         .ok_or_else(|| Error::NoMatchingTemplateParameter {
@@ -645,8 +682,15 @@ pub fn extract_argument(
     let ty = c_arg.ty()?;
     trace!("  has type {ty:?}");
 
-    let qual_type = 
-        extract_type(ty, template_parameters, already_visited, ast, tu, allow_list, class_overrides)?;
+    let qual_type = extract_type(
+        ty,
+        template_parameters,
+        already_visited,
+        ast,
+        tu,
+        allow_list,
+        class_overrides,
+    )?;
 
     Ok(Argument {
         name: c_arg.spelling(),
@@ -724,20 +768,19 @@ pub fn extract_function(
     let ty_result = c_function.result_ty()?;
     debug!("result type is {:?}", ty_result);
 
-    let result = 
-        extract_type(
-            ty_result.clone(),
-            &string_template_parameters,
-            already_visited,
-            ast,
-            tu,
-            allow_list,
-            class_overrides,
-        )
-        .map_err(|e| Error::FailedToExtractResult {
-            name: format!("{:?}", ty_result),
-            source: Box::new(e),
-        })?;
+    let result = extract_type(
+        ty_result.clone(),
+        &string_template_parameters,
+        already_visited,
+        ast,
+        tu,
+        allow_list,
+        class_overrides,
+    )
+    .map_err(|e| Error::FailedToExtractResult {
+        name: format!("{:?}", ty_result),
+        source: Box::new(e),
+    })?;
 
     let num_arguments = match c_function.num_arguments() {
         Ok(n) => n as usize,
@@ -966,12 +1009,16 @@ mod tests {
     use bbl_clang::cli_args;
     use indoc::indoc;
 
-    use crate::{class::{ClassBindKind, OverrideList}, error::Error, parse_string_and_extract_ast, AllowList};
+    use crate::{
+        class::{ClassBindKind, OverrideList},
+        error::Error,
+        parse_string_and_extract_ast, AllowList,
+    };
 
     #[test]
     fn extract_static_method() -> bbl_util::Result<()> {
         // test that a POD extracts as a valuetype
-        bbl_util::run_test(||{
+        bbl_util::run_test(|| {
             let ast = parse_string_and_extract_ast(
                 indoc!(
                     r#"
@@ -988,7 +1035,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::default(),
-            &OverrideList::default(),
+                &OverrideList::default(),
             )?;
 
             println!("{ast:?}");
@@ -1003,7 +1050,7 @@ mod tests {
                     Method StaticMethod deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#f#S static_method rename=None ignore=false return=float args=[b: float] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
 
                     "#
-                )
+                ),
             )?;
 
             let class_id = ast.find_class("Class")?;
@@ -1034,7 +1081,7 @@ mod tests {
                 true,
                 None,
                 &AllowList::default(),
-            &OverrideList::default(),
+                &OverrideList::default(),
             )?;
 
             println!("{ast:?}");
@@ -1049,7 +1096,7 @@ mod tests {
                     Method StaticMethod deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@static_method#$@S@Class#S static_method rename=None ignore=false return=float args=[c: Class] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
 
                     "#
-                )
+                ),
             )?;
 
             let class_id = ast.find_class("Class")?;

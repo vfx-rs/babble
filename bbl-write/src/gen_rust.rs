@@ -1,5 +1,5 @@
 use bbl_clang::ty::TypeKind;
-use bbl_translate::to_rust::{RMethod, RStruct, RTypeRef, RAST, Expr};
+use bbl_translate::to_rust::{Expr, RMethod, RStruct, RTypeRef, RAST};
 use std::{collections::HashSet, fmt::Write};
 
 use crate::error::Error;
@@ -33,7 +33,6 @@ fn write_struct(source: &mut String, st: &RStruct, rast: &RAST) -> Result<()> {
 }
 
 fn write_method(source: &mut String, method: &RMethod, rast: &RAST) -> Result<()> {
-
     let s_args = method
         .arguments()
         .iter()
@@ -112,7 +111,7 @@ fn write_expr(body: &mut String, e: &Expr, depth: usize) -> Result<()> {
             writeln!(body, "{{")?;
             for stmt in stmts {
                 write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
-                write_expr(body, stmt, depth+1)?;
+                write_expr(body, stmt, depth + 1)?;
             }
             writeln!(body, "{:width$}}}", "", width = depth * 4)?;
         }
@@ -120,8 +119,12 @@ fn write_expr(body: &mut String, e: &Expr, depth: usize) -> Result<()> {
             write!(body, "unsafe ")?;
             write_expr(body, expr, depth)?;
         }
-        Expr::Let { name, value, is_mut } => {
-            write!(body, "let {}{name} = ", if *is_mut { "mut "} else {""})?;
+        Expr::Let {
+            name,
+            value,
+            is_mut,
+        } => {
+            write!(body, "let {}{name} = ", if *is_mut { "mut " } else { "" })?;
             write_expr(body, value, depth)?;
             writeln!(body, ";")?;
         }
@@ -132,7 +135,7 @@ fn write_expr(body: &mut String, e: &Expr, depth: usize) -> Result<()> {
                 writeln!(body, "{name}(")?;
                 for arg in args {
                     write!(body, "{:width$}", "", width = (depth + 1) * 4)?;
-                    write_expr(body, arg, depth+1)?;
+                    write_expr(body, arg, depth + 1)?;
                     writeln!(body, ",")?;
                 }
                 write!(body, "{:width$}", "", width = depth * 4)?;
@@ -140,7 +143,7 @@ fn write_expr(body: &mut String, e: &Expr, depth: usize) -> Result<()> {
             }
         }
         Expr::Ref { target, is_mut } => {
-            write!(body, "&{}", if *is_mut { "mut "} else {""} )?;
+            write!(body, "&{}", if *is_mut { "mut " } else { "" })?;
             write_expr(body, target, depth)?;
         }
         Expr::As { src, dst } => {
@@ -149,14 +152,13 @@ fn write_expr(body: &mut String, e: &Expr, depth: usize) -> Result<()> {
             write_expr(body, dst, depth)?;
         }
         Expr::Star { is_mut, target } => {
-            write!(body, "*{}", if *is_mut { "mut "} else {"const "})?;
+            write!(body, "*{}", if *is_mut { "mut " } else { "const " })?;
             write_expr(body, target, depth)?;
         }
     }
 
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {

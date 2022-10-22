@@ -16,7 +16,6 @@ use std::{borrow::Cow, fmt::Write};
 
 use indoc::indoc;
 
-
 pub fn write_rust_ffi_module(module_path: &str, c_ast: &CAST) -> Result<(), Error> {
     // write the rust ffi module
     let mut ffi_source = String::new();
@@ -373,11 +372,14 @@ fn write_type(
             let mut s_result = String::new();
             write_type(&mut s_result, result, c_ast, external_names)?;
 
-            let s_args = args.iter().map(|a| {
-                let mut s_a = String::new();
-                write_type(&mut s_a, a, c_ast, external_names)?;
-                Ok(s_a)
-            }).collect::<Result<Vec<String>>>()?;
+            let s_args = args
+                .iter()
+                .map(|a| {
+                    let mut s_a = String::new();
+                    write_type(&mut s_a, a, c_ast, external_names)?;
+                    Ok(s_a)
+                })
+                .collect::<Result<Vec<String>>>()?;
 
             write!(source, "extern fn({}) -> {}", s_args.join(", "), s_result)?;
 

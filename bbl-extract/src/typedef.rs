@@ -5,13 +5,13 @@ use std::convert::TryInto;
 use std::fmt::Display;
 use tracing::{debug, error, info, instrument, trace, warn};
 
-use crate::AllowList;
 use crate::ast::{dump_cursor, get_namespaces_for_decl, get_qualified_name, TypeAliasId, AST};
 use crate::class::{extract_class_decl, OverrideList};
 use crate::namespace::extract_namespace;
 use crate::qualtype::{extract_type, QualType};
 use crate::stdlib::create_std_string;
 use crate::templates::{TemplateArgument, TemplateParameterDecl};
+use crate::AllowList;
 use bbl_clang::cursor::{CurClassDecl, CurClassTemplate, CurTemplateRef, CurTypedef, Cursor, USR};
 use bbl_clang::ty::{Type, TypeKind};
 use std::fmt::Debug;
@@ -101,7 +101,10 @@ mod tests {
     use indoc::indoc;
     use log::Level;
 
-    use crate::{class::{ClassBindKind, OverrideList}, parse_string_and_extract_ast, AllowList};
+    use crate::{
+        class::{ClassBindKind, OverrideList},
+        parse_string_and_extract_ast, AllowList,
+    };
 
     #[test]
     fn extract_typealias_typedef() -> bbl_util::Result<()> {
@@ -166,7 +169,7 @@ mod tests {
                     ClassTemplateSpecialization c:@S@shared_ptr>#$@S@A#VI4 shared_ptr<A, 4> specialized_decl=c:@ST>2#T#NI@shared_ptr template_arguments=[A, 4] namespaces=[]
                     ClassTemplateSpecialization c:@S@shared_ptr>#$@S@B#VI4 shared_ptr<B, 4> specialized_decl=c:@ST>2#T#NI@shared_ptr template_arguments=[B, 4] namespaces=[]
                 "#
-                )
+                ),
             )
         })
     }
@@ -203,7 +206,7 @@ mod tests {
                     Function c:@F@take_class#&1$@S@Class_# take_class rename=None ignore=false return=void args=[c: Class &] noexcept=None template_parameters=[] specializations=[] namespaces=[]
                     TypeAlias Class = Class_ const
                     "#
-                )
+                ),
             )
         })
     }

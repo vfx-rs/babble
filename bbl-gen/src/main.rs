@@ -1,5 +1,8 @@
-use std::{fmt::Display, path::{PathBuf, Path}};
 use anyhow::Result;
+use std::{
+    fmt::Display,
+    path::{Path, PathBuf},
+};
 
 use bbl::*;
 
@@ -98,7 +101,11 @@ fn main() -> Result<()> {
 
     let find_packages: Vec<&str> = args.packages.iter().map(|p| p.as_str()).collect();
     let link_libraries: Vec<&str> = args.link_libraries.iter().map(|p| p.as_str()).collect();
-    let compile_definitions: Vec<&str> = args.compile_definitions.iter().map(|p| p.as_str()).collect();
+    let compile_definitions: Vec<&str> = args
+        .compile_definitions
+        .iter()
+        .map(|p| p.as_str())
+        .collect();
     let allow_list = AllowList::new(args.allow_list.clone());
     println!("ALLOW LIST: {:?}", allow_list);
 
@@ -121,7 +128,7 @@ fn main() -> Result<()> {
     // parse the given cpp snippet, which just includes the header of the library we want to bind, giving us an AST
     let ast = if let Some(_filename) = args.filename {
         unimplemented!()
-    } else if let Some(source) = args.source { 
+    } else if let Some(source) = args.source {
         parse(&source, &options)?
     } else {
         panic!("need filename or source");

@@ -334,11 +334,9 @@ pub fn translate_function(
         .unused_template_arguments()
         .iter()
         .map(|arg| match arg {
-            TemplateArgument::Type(tty) => Ok(Expr::Token(tty.format(
-                ast,
-                &[],
-                Some(template_args),
-            ))),
+            TemplateArgument::Type(tty) => {
+                Ok(Expr::Token(tty.format(ast, &[], Some(template_args))))
+            }
             TemplateArgument::Integral(n) => Ok(Expr::Token(format!("{n}"))),
             _ => Err(Error::InvalidTemplateArgumentKind {
                 name: format!("{arg:?}"),
@@ -520,12 +518,11 @@ pub fn translate_function(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
-                    Error::FailedToCastArgument {
+                let to_type =
+                    get_cpp_typename(&result_qt, ast).map_err(|e| Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
-                    }
-                })?;
+                    })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -555,12 +552,11 @@ pub fn translate_function(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
-                    Error::FailedToCastArgument {
+                let to_type =
+                    get_cpp_typename(&result_qt, ast).map_err(|e| Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
-                    }
-                })?;
+                    })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -602,12 +598,11 @@ pub fn translate_function(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
-                    Error::FailedToCastArgument {
+                let to_type =
+                    get_cpp_typename(&result_qt, ast).map_err(|e| Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
-                    }
-                })?;
+                    })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -966,12 +961,11 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
-                    Error::FailedToCastArgument {
+                let to_type =
+                    get_cpp_typename(&result_qt, ast).map_err(|e| Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
-                    }
-                })?;
+                    })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -1001,12 +995,11 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
-                    Error::FailedToCastArgument {
+                let to_type =
+                    get_cpp_typename(&result_qt, ast).map_err(|e| Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
-                    }
-                })?;
+                    })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -1048,12 +1041,11 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
-                    Error::FailedToCastArgument {
+                let to_type =
+                    get_cpp_typename(&result_qt, ast).map_err(|e| Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
-                    }
-                })?;
+                    })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -1117,12 +1109,11 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
-                    Error::FailedToCastArgument {
+                let to_type =
+                    get_cpp_typename(&result_qt, ast).map_err(|e| Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
-                    }
-                })?;
+                    })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -1166,12 +1157,11 @@ pub fn translate_method(
                     is_const: false,
                 };
 
-                let to_type = get_cpp_typename(&result_qt, ast).map_err(|e| {
-                    Error::FailedToCastArgument {
+                let to_type =
+                    get_cpp_typename(&result_qt, ast).map_err(|e| Error::FailedToCastArgument {
                         name: "[result]".to_string(),
                         source: Box::new(e),
-                    }
-                })?;
+                    })?;
                 let result_expr = Expr::Deref {
                     value: Box::new(Expr::Cast {
                         to_type,
@@ -1449,7 +1439,7 @@ fn get_cpp_typename(qt: &CQualType, ast: &AST) -> Result<String> {
 }
 
 /// Get the [`ClassBindKind`] for the type referenced by `usr`.
-/// 
+///
 /// If `usr` refers to a typedef, the bind kind of the underlying type is returned
 fn get_bind_kind(usr: USR, ast: &AST) -> Result<ClassBindKind> {
     if let Some(class) = ast.get_class(usr) {

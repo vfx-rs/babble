@@ -14,8 +14,8 @@ use crate::{
     namespace,
     qualtype::{extract_type, QualType, TypeRef},
     templates::{
-        extract_class_template_specialization, ClassTemplateSpecialization, TemplateArgument,
-        TemplateParameterDecl, specialize_class_template,
+        extract_class_template_specialization, specialize_class_template,
+        ClassTemplateSpecialization, TemplateArgument, TemplateParameterDecl,
     },
     AllowList,
 };
@@ -234,7 +234,6 @@ pub fn create_std_vector(
 
     let id = ast.insert_class_template_specialization(cts);
 
-
     Ok(c.usr())
 }
 
@@ -423,7 +422,6 @@ pub fn create_std_unique_ptr(
     cd.add_specialization(template_arguments, c.usr());
 
     let id = ast.insert_class_template_specialization(cts);
-
 
     Ok(c.usr())
 }
