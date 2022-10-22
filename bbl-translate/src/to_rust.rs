@@ -237,7 +237,6 @@ fn create_argument_expr(
         }
         CTypeRef::FunctionProto { result: _, args: _ } => todo!(),
         CTypeRef::Template(_) => todo!(),
-        CTypeRef::Unknown(_) => todo!(),
     }
 }
 
@@ -279,7 +278,6 @@ fn create_star_exprs(cty: &CQualType, ast: &AST, c_ast: &CAST) -> Result<(Expr, 
         }
         CTypeRef::FunctionProto { result: _, args: _ } => todo!(),
         CTypeRef::Template(_) => todo!(),
-        CTypeRef::Unknown(_) => todo!(),
     }
 }
 

@@ -388,7 +388,6 @@ fn write_type(
         CTypeRef::Template(parm) => {
             panic!("Unexpanded template {parm}")
         }
-        CTypeRef::Unknown(tk) => unimplemented!("unknown typekind in write_type: {tk}"),
     }
 
     Ok(())

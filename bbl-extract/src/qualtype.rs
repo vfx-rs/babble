@@ -34,7 +34,6 @@ pub enum TypeRef {
         result: Box<QualType>,
         args: Vec<QualType>,
     },
-    Unknown(TypeKind),
 }
 
 impl TypeRef {
@@ -105,8 +104,7 @@ impl TypeRef {
         match self {
             TypeRef::Builtin(_)
             | TypeRef::TemplateNonTypeParameter(_)
-            | TypeRef::TemplateTypeParameter(_)
-            | TypeRef::Unknown(_) => false,
+            | TypeRef::TemplateTypeParameter(_) => false,
             TypeRef::LValueReference(p) | TypeRef::Pointer(p) | TypeRef::RValueReference(p) => {
                 p.type_ref.refers_to_std_function(ast)
             }
@@ -170,14 +168,6 @@ impl std::fmt::Debug for QualType {
 }
 
 impl QualType {
-    pub fn unknown(tk: TypeKind) -> Self {
-        QualType {
-            name: "UNKNOWN".to_string(),
-            is_const: false,
-            type_ref: TypeRef::Unknown(tk),
-        }
-    }
-
     pub fn is_template(&self, ast: &AST) -> bool {
         self.type_ref.is_template(ast)
     }
@@ -321,7 +311,6 @@ impl QualType {
             }
             TemplateNonTypeParameter(_) => todo!(),
             FunctionProto { result, args } => todo!(),
-            Unknown(_) => todo!(),
         }
     }
 
@@ -438,7 +427,6 @@ impl QualType {
             TypeRef::Builtin(_)
             | TypeRef::Ref(_)
             | TypeRef::Typedef(_)
-            | TypeRef::Unknown(_)
             | TypeRef::FunctionProto { .. } => None,
             TypeRef::Pointer(p) | TypeRef::LValueReference(p) | TypeRef::RValueReference(p) => {
                 p.template_parameter_name()
@@ -507,9 +495,6 @@ impl QualType {
                         .collect::<Vec<String>>()
                         .join(", ")
                 )
-            }
-            TypeRef::Unknown(tk) => {
-                format!("{result}UNKNOWN({})", tk.spelling())
             }
         };
 
@@ -590,9 +575,6 @@ impl Display for QualType {
             }
             TypeRef::Typedef(usr) => {
                 write!(f, "Typedef({})", usr)
-            }
-            TypeRef::Unknown(tk) => {
-                write!(f, "UNKNOWN({})", tk.spelling())
             }
         }
     }
@@ -809,11 +791,7 @@ pub fn extract_type(
             TypeKind::FunctionProto => {
                 extract_function_pointer(ty, ast, already_visited, tu, allow_list, class_overrides)
             }
-            _ => {
-                error!("Unhandled {:?}", ty);
-                error!("{:?}", backtrace::Backtrace::new());
-                Ok(QualType::unknown(ty.kind()))
-            }
+            _ => unimplemented!("Unimplemented extraction for {ty:?}"),
         }
     }
 }

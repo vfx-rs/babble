@@ -206,7 +206,6 @@ fn gen_cast(qual_type: &CQualType, ast: &AST, c_ast: &CAST) -> Result<Option<Str
         CTypeRef::Template(parm) => {
             panic!("Unexpanded template {parm}")
         }
-        CTypeRef::Unknown(tk) => Err(TypeError::UnknownType(*tk)),
     }
 }
 

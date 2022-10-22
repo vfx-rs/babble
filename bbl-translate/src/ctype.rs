@@ -27,7 +27,6 @@ pub enum CTypeRef {
         args: Vec<CQualType>,
     },
     Template(String),
-    Unknown(TypeKind),
 }
 
 impl CTypeRef {
@@ -86,15 +85,6 @@ impl CQualType {
         &self.cpp_type_ref
     }
 
-    pub fn unknown(tk: TypeKind) -> Self {
-        CQualType {
-            name: "UNKNOWN".to_string(),
-            is_const: false,
-            type_ref: CTypeRef::Unknown(tk),
-            cpp_type_ref: TypeRef::Unknown(tk),
-        }
-    }
-
     pub fn is_template(&self, c_ast: &CAST) -> bool {
         self.type_ref.is_template(c_ast)
     }
@@ -145,9 +135,6 @@ impl Display for CQualType {
             CTypeRef::Template(parm) => {
                 write!(f, "{parm}{const_}")
             }
-            CTypeRef::Unknown(tk) => {
-                write!(f, "UNKNOWN({})", tk.spelling())
-            }
         }
     }
 }
@@ -173,9 +160,6 @@ impl std::fmt::Debug for CQualType {
             }
             CTypeRef::Template(parm) => {
                 write!(f, "{parm}{const_}")
-            }
-            CTypeRef::Unknown(tk) => {
-                write!(f, "UNKNOWN({})", tk.spelling())
             }
         }
     }

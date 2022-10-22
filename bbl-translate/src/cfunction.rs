@@ -474,9 +474,6 @@ pub fn translate_function(
                     arg.name
                 )
             }
-            CTypeRef::Unknown(tk) => {
-                panic!("unknown type {tk} when converting argument {}", arg.name);
-            }
         }
     }
 
@@ -623,9 +620,6 @@ pub fn translate_function(
                     "Unexpanded template parameter {parm} on {} result",
                     function.name()
                 )
-            }
-            CTypeRef::Unknown(tk) => {
-                panic!("Unkown type {tk} while converting result")
             }
         };
 
@@ -917,9 +911,6 @@ pub fn translate_method(
                     arg.name
                 )
             }
-            CTypeRef::Unknown(tk) => {
-                panic!("unknown type {tk} when converting argument {}", arg.name);
-            }
         }
     }
 
@@ -1067,9 +1058,6 @@ pub fn translate_method(
                     class.name(),
                     method.name()
                 )
-            }
-            CTypeRef::Unknown(tk) => {
-                panic!("Unkown type {tk} while converting result")
             }
         };
 
@@ -1428,7 +1416,6 @@ fn get_cpp_typename(qt: &CQualType, ast: &AST) -> Result<String> {
             description: format!("Cannot cast FunctionProto {qt:?}"),
         }),
         CTypeRef::Template(t) => Err(Error::TriedToTranslateTemplateParmeter { name: t.clone() }),
-        _ => unreachable!("Got unreachable type for cast {qt:?}"),
     }?;
 
     if qt.is_const() {
