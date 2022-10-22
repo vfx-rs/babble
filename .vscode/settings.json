@@ -2,5 +2,6 @@
     "files.associations": {
         "string": "cpp",
         "xstring": "cpp"
-    }
+    },
+    "editor.formatOnSave": true
 }
