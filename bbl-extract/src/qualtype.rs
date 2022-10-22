@@ -38,6 +38,7 @@ pub enum TypeRef {
 }
 
 impl TypeRef {
+    /// Returns `true` if type (or the type pointed to if this is a pointer or reference) is a builtin
     pub fn is_builtin(&self) -> bool {
         use TypeRef::*;
         match self {
@@ -49,6 +50,7 @@ impl TypeRef {
         }
     }
 
+    /// Returns `true` if type (or the type pointed to if this is a pointer or reference) is bound as a value type
     pub fn is_valuetype(&self, ast: &AST) -> Result<bool> {
         use TypeRef::*;
         let result = match self {
@@ -69,6 +71,7 @@ impl TypeRef {
         Ok(result)
     }
 
+    /// Get the bind kind for this type (or the type pointed to if this is a pointer or reference)
     pub fn get_bind_kind(&self, ast: &AST) -> Result<ClassBindKind> {
         use TypeRef::*;
         match self {
@@ -97,6 +100,7 @@ impl TypeRef {
         }
     }
 
+    /// Does this type refer (or point to) a std::function?
     pub fn refers_to_std_function(&self, ast: &AST) -> bool {
         match self {
             TypeRef::Builtin(_)
@@ -124,6 +128,7 @@ impl TypeRef {
         }
     }
 
+    /// Is the type (or the type that it points to) templated?
     pub fn is_template(&self, ast: &AST) -> bool {
         match self {
             TypeRef::TemplateTypeParameter(_) => true,
@@ -140,10 +145,16 @@ impl TypeRef {
     }
 }
 
+/// Represents a reference to a (maybe) const-qualified type in the AST.
+///
+/// Forms a tree of references to represent typedefs, pointer chains etc.
 #[derive(Clone, PartialEq, Eq)]
 pub struct QualType {
+    /// Used for display purposes only
     pub name: String,
+    /// Is the type const?
     pub is_const: bool,
+    /// The referenced type
     pub type_ref: TypeRef,
 }
 
