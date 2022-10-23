@@ -293,7 +293,8 @@ impl AST {
     /// * [`Error::NamespaceNotFound`] if no [`Namespace`] with name `name` exists
     pub fn find_namespace(&self, name: &str) -> Result<NamespaceId> {
         for namespace in self.namespaces.iter() {
-            if namespace.name == name {
+            let qname = get_qualified_name(namespace.name(), namespace.namespaces(), self)?;
+            if qname == name {
                 return self
                     .namespaces
                     .get_id(&namespace.usr().into())

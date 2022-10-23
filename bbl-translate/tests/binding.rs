@@ -955,7 +955,7 @@ fn translate_version_inner_namespace() -> bbl_util::Result<()> {
         )?;
 
         // renaming the namespace to the empty string will cause it to be removed entirely
-        let ns = ast.find_namespace("v1_0")?;
+        let ns = ast.find_namespace("Test::v1_0")?;
         ast.rename_namespace(ns, "");
 
         let ast = ast.monomorphize()?;
