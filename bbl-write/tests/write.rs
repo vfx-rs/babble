@@ -610,6 +610,7 @@ fn build_take_std_string() -> bbl_util::Result<()> {
             Some("Test_1_0"),
             &AllowList::default(),
             &OverrideList::default(),
+            contents,
         )?;
 
         println!("{ast:?}");

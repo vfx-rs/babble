@@ -792,6 +792,14 @@ pub fn extract_type(
             TypeKind::FunctionProto => {
                 extract_function_pointer(ty, ast, already_visited, tu, allow_list, class_overrides)
             }
+            TypeKind::Elaborated => {
+                println!("elaborated");
+                let named = ty.named_type()?;
+                println!("named: {named:?}");
+                let decl = named.type_declaration()?;
+                println!("decl: {decl:?}");
+                panic!();
+            }
             _ => unimplemented!("Unimplemented extraction for {ty:?}"),
         }
     }

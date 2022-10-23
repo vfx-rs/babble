@@ -35,6 +35,7 @@ pub struct CAST {
     pub enums: UstrIndexMap<CEnum, CEnumId>,
     pub function_protos: UstrIndexMap<CFunctionProto, CFunctionProtoId>,
     pub includes: Vec<Include>,
+    pub header_string: String,
 }
 
 impl Debug for CAST {
@@ -268,6 +269,7 @@ pub fn translate_cpp_ast_to_c(ast: &MonoAST) -> Result<CAST> {
         enums,
         function_protos,
         includes: ast.includes().to_vec(),
+        header_string: ast.header_string().to_string(),
     })
 }
 

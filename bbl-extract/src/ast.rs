@@ -66,6 +66,7 @@ pub struct AST {
     pub(crate) enums: UstrIndexMap<Enum, EnumId>,
     pub(crate) function_protos: UstrIndexMap<FunctionProto, FunctionProtoId>,
     pub(crate) includes: Vec<Include>,
+    pub(crate) header_string: String,
 }
 
 impl Debug for AST {
@@ -174,6 +175,7 @@ impl AST {
             enums: UstrIndexMap::new(),
             function_protos: UstrIndexMap::new(),
             includes: Vec::new(),
+            header_string: String::new(),
         }
     }
 
@@ -746,6 +748,10 @@ impl AST {
             })
         }
     }
+
+    pub fn header_string(&self) -> &str {
+        self.header_string.as_ref()
+    }
 }
 
 pub fn get_qualified_name(decl: &str, namespaces: &[USR], ast: &AST) -> Result<String> {
@@ -868,7 +874,7 @@ pub fn extract_ast(
                 return Ok(());
             }
             CursorKind::Namespace => {
-                let usr = extract_namespace(c, depth, tu, ast);
+                let usr = extract_namespace(c, depth, tu, ast, already_visited)?;
                 let name = ast
                     .get_namespace(usr)
                     .ok_or_else(|| Error::NamespaceNotFound {
@@ -1275,6 +1281,7 @@ pub fn extract_ast_from_namespace(
     tu: &TranslationUnit,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    header_str: &str,
 ) -> Result<AST> {
     let ns = if let Some(name) = name {
         if name.is_empty() {
@@ -1319,6 +1326,8 @@ pub fn extract_ast_from_namespace(
         )?;
     }
 
+    ast.header_string = header_str.to_string();
+
     Ok(ast)
 }
 
@@ -1333,7 +1342,7 @@ pub fn walk_namespaces(
     if let Ok(c) = c {
         if c.kind() != CursorKind::TranslationUnit {
             if ast.get_namespace(c.usr()).is_none() {
-                extract_namespace(c, 0, tu, ast);
+                extract_namespace(c, 0, tu, ast, already_visited)?;
             }
 
             namespaces.push(c.usr());
@@ -1571,11 +1580,12 @@ mod tests {
             format!("{ast:?}"),
             indoc!(
                 r#"
-        ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
-        Field a: int
-        Field b: float
+Namespace c:@N@Test Test None
+ClassDecl c:@N@detail@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@Test]
+Field a: int
 
-    "#
+
+"#
             )
         );
 

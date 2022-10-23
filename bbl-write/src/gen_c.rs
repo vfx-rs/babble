@@ -27,13 +27,20 @@ pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
     header = format!("{header}#define __{}_H__\n\n", module_name_upper);
     header = format!("{header}#ifdef __cplusplus\nextern \"C\" {{\n#endif\n\n");
 
-    let mut source = c_ast
-        .includes
-        .iter()
-        .map(|i| i.get_statement())
-        .collect::<Vec<_>>()
-        .join("\n");
+    // let mut source = c_ast
+    //     .includes
+    //     .iter()
+    //     .map(|i| i.get_statement())
+    //     .collect::<Vec<_>>()
+    //     .join("\n");
 
+    let mut source = format!(
+        r#"/* Inserted from binding includes */
+{}
+/* End insert from binding includes */
+"#,
+        c_ast.header_string
+    );
     writeln!(&mut source, "\n\n#include <utility>")?;
     writeln!(&mut source, "#include <exception>\n")?;
 
