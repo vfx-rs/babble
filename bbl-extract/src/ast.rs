@@ -1340,12 +1340,22 @@ pub fn walk_namespaces(
     already_visited: &mut Vec<USR>,
 ) -> Result<()> {
     if let Ok(c) = c {
-        if c.kind() != CursorKind::TranslationUnit {
+        // The semantic parent for decls can be hung underneath any other part of the AST (e.g. when a type is being used
+        // as a template argument), so stop as soon as we get to something that we don't want to consider as a namespace
+        if matches!(
+            c.kind(),
+            CursorKind::Namespace
+                | CursorKind::ClassDecl
+                | CursorKind::ClassTemplate
+                | CursorKind::ClassTemplatePartialSpecialization
+                | CursorKind::StructDecl
+        ) {
             if ast.get_namespace(c.usr()).is_none() {
                 extract_namespace(c, 0, tu, ast, already_visited)?;
             }
 
             namespaces.push(c.usr());
+
             walk_namespaces(c.semantic_parent(), namespaces, tu, ast, already_visited);
         }
     }

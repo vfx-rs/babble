@@ -26,6 +26,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 pub fn create_std_string(
     class: Cursor,
     ast: &mut AST,
+    tu: &TranslationUnit,
     already_visited: &mut Vec<USR>,
 ) -> Result<USR> {
     if already_visited.contains(&class.usr()) {
@@ -34,6 +35,7 @@ pub fn create_std_string(
         already_visited.push(class.usr());
     }
 
+    let namespaces = get_namespaces_for_decl(class, tu, ast, already_visited)?;
     let u_std = ast
         .find_namespace("std")
         .map(|id| ast.namespaces()[id].usr())
