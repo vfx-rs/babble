@@ -1,26 +1,23 @@
-use backtrace::Backtrace;
 use bbl_util::Trace;
 use std::convert::TryInto;
 use std::fmt::{Debug, Write};
-use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
-use bbl_clang::cursor::{CurClassTemplate, CurEnumConstant, CurStructDecl, CurTypedef, Cursor};
+use bbl_clang::cursor::{CurClassTemplate, CurStructDecl, CurTypedef, Cursor};
 use bbl_clang::template_argument::TemplateArgumentKind;
 use bbl_clang::ty::Type;
 use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::TranslationUnit};
-use tracing::{debug, error, info, instrument, trace, warn};
-use ustr::{Ustr, UstrMap};
+use tracing::{debug, error, instrument, trace, warn};
 
 use crate::class::{extract_class_decl, OverrideList};
 use crate::class::{ClassBindKind, ClassDecl, MethodSpecializationId};
 use crate::enm::{extract_enum, Enum};
 use crate::function::{extract_function, Function, FunctionProto, FunctionProtoId, Method};
 use crate::index_map::{IndexMapKey, UstrIndexMap};
-use crate::namespace::{self, extract_namespace, Namespace};
+use crate::namespace::{extract_namespace, Namespace};
 use crate::templates::{
     specialize_class_template, ClassTemplateSpecialization, FunctionTemplateSpecialization,
-    TemplateArgument, TemplateParameterDecl,
+    TemplateArgument,
 };
 use crate::typedef::{extract_typedef_decl, Typedef};
 use crate::AllowList;
@@ -464,7 +461,7 @@ impl AST {
         let mut matches = Vec::new();
 
         for (function_id, function) in self.functions.iter().enumerate() {
-            if function.signature(self, &[], None).contains(signature) {
+            if function.signature().contains(signature) {
                 matches.push((function_id, function));
             }
         }
@@ -473,7 +470,7 @@ impl AST {
             0 => {
                 let mut distances = Vec::with_capacity(self.functions.len());
                 for function in self.functions.iter() {
-                    let sig = function.signature(self, &[], None);
+                    let sig = function.signature();
                     let dist = levenshtein::levenshtein(&sig, signature);
                     distances.push((dist, sig));
                 }
@@ -499,7 +496,7 @@ impl AST {
                 error!("Multiple matches found for signature \"{signature}\":");
 
                 for (_, function) in matches {
-                    error!("  {}", function.signature(self, &[], None));
+                    error!("  {}", function.signature());
                 }
 
                 Err(Error::MultipleMatches {
@@ -568,7 +565,7 @@ impl AST {
     /// * [`Error::MethodNotFound`] if no [`Method`] with name `name` exists
     pub fn find_method(&self, class_id: ClassId, signature: &str) -> Result<MethodId> {
         let class = self.classes.index(class_id);
-        class.find_method(self, signature).map(|t| t.0)
+        class.find_method(signature).map(|t| t.0)
     }
 
     /// Find all methods on the class with id `class_id` that match on the name and return their ids, which can then be
@@ -583,7 +580,7 @@ impl AST {
         signature: &str,
     ) -> Result<(Vec<MethodId>, Vec<&Method>)> {
         let class = self.classes.index(class_id);
-        class.find_methods(self, signature)
+        class.find_methods(signature)
     }
 
     /// Add a specialization for the template [`Method`] with id `method_id` on the [`ClassDecl`] with id `class_id`.
@@ -809,7 +806,7 @@ pub fn extract_ast(
     for ns in namespace_names {
         write!(decl_qualified_name, "{ns}::").unwrap();
     }
-    write!(decl_qualified_name, "{}", c.display_name());
+    write!(decl_qualified_name, "{}", c.display_name()).unwrap();
 
     if allow_list.allows(&decl_qualified_name) {
         match c.kind() {
@@ -875,7 +872,7 @@ pub fn extract_ast(
                 return Ok(());
             }
             CursorKind::Namespace => {
-                let usr = extract_namespace(c, depth, tu, ast, already_visited)?;
+                let usr = extract_namespace(c, tu, ast, already_visited)?;
                 let name = ast
                     .get_namespace(usr)
                     .ok_or_else(|| Error::NamespaceNotFound {
@@ -995,7 +992,7 @@ fn get_template_args(c: Cursor) -> String {
                     }
                 }
                 Ok(k) => args.push(format!("{k:?}")),
-                Err(e) => args.push("Invalid".to_string()),
+                Err(_) => args.push("Invalid".to_string()),
             };
         }
 
@@ -1296,7 +1293,7 @@ pub fn extract_ast_from_namespace(
 
     let mut ast = AST::new();
 
-    tu.get_inclusions(|file, locations| {
+    tu.get_inclusions(|_file, locations| {
         if locations.len() == 1 {
             for location in locations {
                 let name = tu.get_cursor_at_location(location).unwrap().display_name();
@@ -1352,12 +1349,12 @@ pub fn walk_namespaces(
                 | CursorKind::StructDecl
         ) {
             if ast.get_namespace(c.usr()).is_none() {
-                extract_namespace(c, 0, tu, ast, already_visited)?;
+                extract_namespace(c, tu, ast, already_visited)?;
             }
 
             namespaces.push(c.usr());
 
-            walk_namespaces(c.semantic_parent(), namespaces, tu, ast, already_visited);
+            walk_namespaces(c.semantic_parent(), namespaces, tu, ast, already_visited)?;
         }
     }
 
@@ -1369,9 +1366,16 @@ pub fn walk_namespaces_for_names(
     namespaces: &mut Vec<String>,
 ) -> Result<()> {
     if let Ok(c) = c {
-        if c.kind() != CursorKind::TranslationUnit {
+        if matches!(
+            c.kind(),
+            CursorKind::Namespace
+                | CursorKind::ClassDecl
+                | CursorKind::ClassTemplate
+                | CursorKind::ClassTemplatePartialSpecialization
+                | CursorKind::StructDecl
+        ) {
             namespaces.push(c.display_name());
-            walk_namespaces_for_names(c.semantic_parent(), namespaces);
+            walk_namespaces_for_names(c.semantic_parent(), namespaces)?;
         }
     }
 
@@ -1391,14 +1395,14 @@ pub fn get_namespaces_for_decl(
         tu,
         ast,
         already_visited,
-    );
+    )?;
     namespaces.reverse();
     Ok(namespaces)
 }
 
 pub fn get_namespace_names(c: Cursor) -> Result<Vec<String>> {
     let mut namespaces = Vec::new();
-    walk_namespaces_for_names(c.semantic_parent(), &mut namespaces);
+    walk_namespaces_for_names(c.semantic_parent(), &mut namespaces)?;
     namespaces.reverse();
     Ok(namespaces)
 }
@@ -1562,7 +1566,7 @@ mod tests {
     use crate::{
         class::{ClassBindKind, OverrideList},
         error::Error,
-        init_log, parse_string_and_extract_ast, AllowList,
+        parse_string_and_extract_ast, AllowList,
     };
 
     #[test]

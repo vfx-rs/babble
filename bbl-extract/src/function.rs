@@ -1,7 +1,6 @@
 use bbl_clang::cursor::{Cursor, USR};
 use bbl_clang::exception::ExceptionSpecificationKind;
 use bbl_clang::translation_unit::TranslationUnit;
-use bbl_clang::ty::{Type, TypeKind};
 use bbl_util::Trace;
 use hashbrown::HashSet;
 use log::*;
@@ -9,8 +8,7 @@ use std::fmt::{Debug, Display};
 use tracing::instrument;
 
 use crate::ast::{
-    dump_cursor_until, get_namespaces_for_decl, get_qualified_name,
-    FunctionTemplateSpecializationId, MethodId, TypeAliasId,
+    get_namespaces_for_decl, get_qualified_name, FunctionTemplateSpecializationId, MethodId,
 };
 use crate::class::{MethodSpecializationId, OverrideList};
 use crate::index_map::IndexMapKey;
@@ -281,12 +279,7 @@ impl Function {
     }
 
     /// Get the function's signature
-    pub fn signature(
-        &self,
-        ast: &AST,
-        outer_template_parameters: &[TemplateParameterDecl],
-        template_args: Option<&[TemplateArgument]>,
-    ) -> String {
+    pub fn signature(&self) -> String {
         self.format()
     }
 
@@ -367,7 +360,6 @@ impl Method {
         template_parameters: Vec<TemplateParameterDecl>,
         exception_specification_kind: ExceptionSpecificationKind,
         is_const: Const,
-        is_static: Static,
         is_virtual: Virtual,
         is_pure_virtual: PureVirtual,
         is_deleted: Deleted,
@@ -386,7 +378,7 @@ impl Method {
             kind,
             is_const: is_const.0,
             is_virtual: is_virtual.0,
-            is_pure_virtual: is_virtual.0,
+            is_pure_virtual: is_pure_virtual.0,
             is_deleted: is_deleted.0,
             specializations: Vec::new(),
         }
@@ -511,12 +503,7 @@ impl Method {
         self.function.ignore();
     }
 
-    pub fn signature(
-        &self,
-        ast: &AST,
-        class_template_parameters: &[TemplateParameterDecl],
-        class_template_args: Option<&[TemplateArgument]>,
-    ) -> String {
+    pub fn signature(&self) -> String {
         self.format()
     }
 
@@ -682,7 +669,6 @@ pub fn extract_argument(
     allow_list: &AllowList,
     class_overrides: &OverrideList,
 ) -> Result<Argument> {
-    let children = c_arg.children();
     trace!("extracting arg {c_arg:?}");
 
     let ty = c_arg.ty()?;
@@ -769,13 +755,13 @@ pub fn extract_function(
         .collect::<Vec<_>>();
     debug!("string template parameters {string_template_parameters:?}");
 
-    let mut skip = c_template_parameters.len();
+    let skip = c_template_parameters.len();
 
     let ty_result = c_function.result_ty()?;
     debug!("result type is {:?}", ty_result);
 
     let result = extract_type(
-        ty_result.clone(),
+        ty_result,
         &string_template_parameters,
         already_visited,
         ast,
@@ -794,7 +780,7 @@ pub fn extract_function(
     };
     let mut arguments: Vec<Argument> = Vec::with_capacity(num_arguments);
     let mut i = 0;
-    let mut it = children.iter().skip(skip);
+    let it = children.iter().skip(skip);
     for c_arg in it {
         debug!("    arg: {}", c_arg.display_name());
 
@@ -1017,7 +1003,6 @@ mod tests {
 
     use crate::{
         class::{ClassBindKind, OverrideList},
-        error::Error,
         parse_string_and_extract_ast, AllowList,
     };
 

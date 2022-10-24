@@ -3,7 +3,6 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use backtrace::Backtrace;
 use bbl_clang::{cursor::USR, ty::TypeKind};
 use bbl_extract::{
     ast::AST,

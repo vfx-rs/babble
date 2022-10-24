@@ -1,6 +1,5 @@
-use backtrace::Backtrace;
 use bbl_clang::{
-    cursor::{CurTypedef, Cursor, USR},
+    cursor::{CurTypedef, USR},
     cursor_kind::CursorKind,
     translation_unit::TranslationUnit,
     ty::{Type, TypeKind},
@@ -8,7 +7,7 @@ use bbl_clang::{
 use bbl_util::Trace;
 use hashbrown::HashSet;
 use std::{convert::TryInto, fmt::Display};
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{debug, error, instrument, trace, warn};
 
 use crate::{
     ast::AST,
@@ -83,9 +82,9 @@ impl TypeRef {
                     Ok(*class.bind_kind())
                 } else if let Some(cts) = ast.get_class_template_specialization(*usr) {
                     cts.bind_kind(ast)
-                } else if let Some(proto) = ast.get_function_proto(*usr) {
+                } else if ast.get_function_proto(*usr).is_some() {
                     Ok(ClassBindKind::ValueType)
-                } else if let Some(td) = ast.get_type_alias(*usr) {
+                } else if ast.get_type_alias(*usr).is_some() {
                     todo!()
                 } else {
                     Err(Error::ClassNotFound {
@@ -295,6 +294,7 @@ impl QualType {
                 )? {
                     // need to rename the type for display purposes
                     let name = format!("{}&", p.name);
+                    self.name = name;
                     Ok(true)
                 } else {
                     Ok(false)
@@ -309,13 +309,14 @@ impl QualType {
                 )? {
                     // need to rename the type for display purposes
                     let name = format!("{}&&", p.name);
+                    self.name = name;
                     Ok(true)
                 } else {
                     Ok(false)
                 }
             }
             TemplateNonTypeParameter(_) => todo!(),
-            FunctionProto { result, args } => todo!(),
+            FunctionProto { .. } => todo!(),
         }
     }
 
@@ -481,7 +482,7 @@ impl QualType {
             TypeRef::Typedef(usr) => {
                 let name = ast
                     .get_type_alias(*usr)
-                    .map(|r| "TYPEDEF".to_string())
+                    .map(|_| "TYPEDEF".to_string())
                     .unwrap_or_else(|| usr.to_string());
                 format!("{result}{}", name)
             }

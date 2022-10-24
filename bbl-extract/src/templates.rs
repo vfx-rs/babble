@@ -1,7 +1,6 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_snake_case)]
 
-use backtrace::{self, Backtrace};
 use bbl_clang::{
     cursor::{CurClassDecl, CurClassTemplate, USR},
     template_argument::TemplateArgumentKind,
@@ -9,11 +8,11 @@ use bbl_clang::{
 };
 use bbl_util::Trace;
 use hashbrown::HashSet;
-use tracing::log::{debug, trace};
+use tracing::log::debug;
 
 use crate::{
-    ast::{dump_cursor, dump_cursor_until, get_namespaces_for_decl, get_qualified_name, AST},
-    class::{self, extract_class_decl, ClassBindKind, ClassDecl, NeedsImplicit, OverrideList},
+    ast::{dump_cursor_until, get_namespaces_for_decl, get_qualified_name, AST},
+    class::{extract_class_decl, ClassBindKind, ClassDecl, NeedsImplicit, OverrideList},
     qualtype::{extract_type, QualType},
     AllowList,
 };
@@ -21,10 +20,7 @@ use crate::{
 use super::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-use std::{
-    convert::TryFrom,
-    fmt::{Debug, Display},
-};
+use std::fmt::{Debug, Display};
 
 pub fn extract_class_template_specialization(
     c_class_decl: CurClassDecl,
@@ -107,12 +103,7 @@ pub fn extract_class_template_specialization(
         .get_class_mut(specialized_decl.usr())
         .expect("Could not extract just inserted class template");
 
-    // we must add the specialization now as we may refer to it during specialize_class_template() below
     class_template.add_specialization(template_arguments, c_class_decl.usr());
-
-    let class_template = ast
-        .get_class(specialized_decl.usr())
-        .expect("Could not extract just inserted class template");
 
     // Delay the actual specialization until after the user's had a chance to muck with the AST
     ast.insert_class_template_specialization(cts);
@@ -443,16 +434,12 @@ mod tests {
     use bbl_clang::cli_args;
     use indoc::indoc;
 
-    use crate::{
-        class::{ClassBindKind, OverrideList},
-        error::Error,
-        parse_string_and_extract_ast, AllowList,
-    };
+    use crate::{class::OverrideList, parse_string_and_extract_ast, AllowList};
 
     #[test]
     fn extract_nested_template() -> bbl_util::Result<()> {
         bbl_util::run_test(|| {
-            let mut ast = parse_string_and_extract_ast(
+            let ast = parse_string_and_extract_ast(
                 indoc!(
                     r#"
                     #include <memory>

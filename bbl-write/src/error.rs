@@ -1,4 +1,4 @@
-use bbl_clang::{cursor::USR, ty::TypeKind};
+use bbl_clang::cursor::USR;
 use bbl_util::Trace;
 
 #[derive(Debug, thiserror::Error)]

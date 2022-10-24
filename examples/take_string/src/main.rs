@@ -36,6 +36,12 @@ impl CppString {
     }
 }
 
+impl Default for CppString {
+    fn default() -> Self {
+        CppString::new()
+    }
+}
+
 impl Drop for CppString {
     fn drop(&mut self) {
         unsafe { ffi::std_string_dtor(self.inner) }

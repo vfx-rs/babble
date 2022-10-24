@@ -1,19 +1,11 @@
-use bbl_clang::cursor_kind::CursorKind;
-use bbl_clang::template_argument::TemplateArgumentKind;
 use bbl_clang::translation_unit::TranslationUnit;
-use std::convert::TryInto;
-use std::fmt::Display;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{instrument, trace, warn};
 
-use crate::ast::{dump_cursor, get_namespaces_for_decl, get_qualified_name, TypeAliasId, AST};
-use crate::class::{extract_class_decl, OverrideList};
-use crate::namespace::extract_namespace;
+use crate::ast::{get_namespaces_for_decl, get_qualified_name, AST};
+use crate::class::OverrideList;
 use crate::qualtype::{extract_type, QualType};
-use crate::stdlib::create_std_string;
-use crate::templates::{TemplateArgument, TemplateParameterDecl};
 use crate::AllowList;
-use bbl_clang::cursor::{CurClassDecl, CurClassTemplate, CurTemplateRef, CurTypedef, Cursor, USR};
-use bbl_clang::ty::{Type, TypeKind};
+use bbl_clang::cursor::{CurTypedef, USR};
 use std::fmt::Debug;
 
 use crate::error::Error;
@@ -85,7 +77,7 @@ pub fn extract_typedef_decl<'a>(
         class_overrides,
     )?;
 
-    let id = ast.insert_type_alias(Typedef {
+    let _ = ast.insert_type_alias(Typedef {
         name,
         usr,
         namespaces,
@@ -99,17 +91,13 @@ pub fn extract_typedef_decl<'a>(
 mod tests {
     use bbl_clang::cli_args;
     use indoc::indoc;
-    use log::Level;
 
-    use crate::{
-        class::{ClassBindKind, OverrideList},
-        parse_string_and_extract_ast, AllowList,
-    };
+    use crate::{class::OverrideList, parse_string_and_extract_ast, AllowList};
 
     #[test]
     fn extract_typealias_typedef() -> bbl_util::Result<()> {
         bbl_util::run_test(|| {
-            let mut ast = parse_string_and_extract_ast(
+            let ast = parse_string_and_extract_ast(
                 indoc!(
                     r#"
                 template <typename T, int N=4>

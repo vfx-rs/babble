@@ -24,8 +24,8 @@ impl std::fmt::Debug for Enum {
         for var in &self.variants {
             write!(f, "{}={} ", var.0, var.1)?;
         }
-        write!(f, "]");
-        write!(f, " namespaces={:?}", self.namespaces);
+        write!(f, "]")?;
+        write!(f, " namespaces={:?}", self.namespaces)?;
         Ok(())
     }
 }
@@ -69,7 +69,6 @@ pub fn extract_enum(
     let name = c_enum.spelling();
     let ty = c_enum.enum_decl_integer_type()?;
     let namespaces = get_namespaces_for_decl(c_enum, tu, ast, already_visited)?;
-    let enum_decl_qualified_name = get_qualified_name(&name, &namespaces, ast)?;
 
     let mut variants = Vec::new();
     for child in c_enum.children_of_kind(CursorKind::EnumConstantDecl, false) {
@@ -93,11 +92,7 @@ mod tests {
     use bbl_clang::cli_args;
     use indoc::indoc;
 
-    use crate::{
-        class::{ClassBindKind, OverrideList},
-        error::Error,
-        parse_string_and_extract_ast, AllowList,
-    };
+    use crate::{class::OverrideList, parse_string_and_extract_ast, AllowList};
 
     #[test]
     fn extract_enum() -> bbl_util::Result<()> {

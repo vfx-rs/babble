@@ -1,5 +1,4 @@
 use bbl_clang::{
-    access_specifier::AccessSpecifier,
     cursor::{CurClassDecl, Cursor, USR},
     exception::ExceptionSpecificationKind,
     translation_unit::TranslationUnit,
@@ -9,14 +8,10 @@ use bbl_clang::{
 use crate::{
     ast::{get_namespaces_for_decl, AST},
     class::{ClassDecl, NeedsImplicit, OverrideList},
-    function::{Argument, Const, PureVirtual, Static, Virtual},
+    function::{Argument, Const, PureVirtual, Virtual},
     function::{Deleted, FunctionProto, Method, MethodKind},
-    namespace,
     qualtype::{extract_type, QualType, TypeRef},
-    templates::{
-        extract_class_template_specialization, specialize_class_template,
-        ClassTemplateSpecialization, TemplateArgument, TemplateParameterDecl,
-    },
+    templates::{ClassTemplateSpecialization, TemplateArgument, TemplateParameterDecl},
     AllowList,
 };
 
@@ -35,7 +30,7 @@ pub fn create_std_string(
         already_visited.push(class.usr());
     }
 
-    let namespaces = get_namespaces_for_decl(class, tu, ast, already_visited)?;
+    let _ = get_namespaces_for_decl(class, tu, ast, already_visited)?; // just to make sure they're in the AST
     let u_std = ast
         .find_namespace("std")
         .map(|id| ast.namespaces()[id].usr())
@@ -55,7 +50,6 @@ pub fn create_std_string(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -74,7 +68,6 @@ pub fn create_std_string(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -90,7 +83,6 @@ pub fn create_std_string(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -112,7 +104,6 @@ pub fn create_std_string(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -134,7 +125,6 @@ pub fn create_std_string(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -158,7 +148,6 @@ pub fn create_std_string(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(true),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -234,7 +223,7 @@ pub fn create_std_vector(
     // let sd = specialize_class_template(cd, &cts, ast)?;
     // ast.insert_class(sd);
 
-    let id = ast.insert_class_template_specialization(cts);
+    let _ = ast.insert_class_template_specialization(cts);
 
     Ok(c.usr())
 }
@@ -252,7 +241,7 @@ fn create_std_vector_tmpl(
     }
 
     // get the namespaces for std::vector<> as we might not have found them already
-    let namespaces = get_namespaces_for_decl(c_tmpl, tu, ast, already_visited)?;
+    let _ = get_namespaces_for_decl(c_tmpl, tu, ast, already_visited)?;
 
     let u_std = ast
         .find_namespace("std")
@@ -273,7 +262,6 @@ fn create_std_vector_tmpl(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -298,7 +286,6 @@ fn create_std_vector_tmpl(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -314,7 +301,6 @@ fn create_std_vector_tmpl(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(true),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -330,7 +316,6 @@ fn create_std_vector_tmpl(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -346,7 +331,6 @@ fn create_std_vector_tmpl(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(true),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -423,7 +407,7 @@ pub fn create_std_unique_ptr(
     let cd = ast.get_class_mut(usr_tmpl).unwrap();
     cd.add_specialization(template_arguments, c.usr());
 
-    let id = ast.insert_class_template_specialization(cts);
+    let _ = ast.insert_class_template_specialization(cts);
 
     Ok(c.usr())
 }
@@ -441,7 +425,7 @@ fn create_std_unique_ptr_tmpl(
     }
 
     // get the namespaces for std::vector<> as we might not have found them already
-    let namespaces = get_namespaces_for_decl(c_tmpl, tu, ast, already_visited)?;
+    let _ = get_namespaces_for_decl(c_tmpl, tu, ast, already_visited)?;
 
     let u_std = ast
         .find_namespace("std")
@@ -462,7 +446,6 @@ fn create_std_unique_ptr_tmpl(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -478,7 +461,6 @@ fn create_std_unique_ptr_tmpl(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(true),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -494,7 +476,6 @@ fn create_std_unique_ptr_tmpl(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -639,7 +620,7 @@ pub fn create_std_map(
     // let sd = specialize_class_template(cd, &cts, ast)?;
     // ast.insert_class(sd);
 
-    let id = ast.insert_class_template_specialization(cts);
+    let _ = ast.insert_class_template_specialization(cts);
 
     Ok(c.usr())
 }
@@ -657,7 +638,7 @@ fn create_std_map_tmpl(
     }
 
     // get the namespaces for std::vector<> as we might not have found them already
-    let namespaces = get_namespaces_for_decl(c_tmpl, tu, ast, already_visited)?;
+    let _ = get_namespaces_for_decl(c_tmpl, tu, ast, already_visited)?;
 
     let u_std = ast
         .find_namespace("std")
@@ -678,7 +659,6 @@ fn create_std_map_tmpl(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -700,7 +680,6 @@ fn create_std_map_tmpl(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(true),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -722,7 +701,6 @@ fn create_std_map_tmpl(
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),

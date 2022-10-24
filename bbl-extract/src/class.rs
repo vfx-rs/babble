@@ -1,34 +1,26 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_snake_case)]
 
-use backtrace::Backtrace;
 use bbl_clang::access_specifier::AccessSpecifier;
-use bbl_clang::cli_args;
 use bbl_clang::cursor::{CurClassDecl, Cursor, USR};
-use bbl_clang::template_argument::TemplateArgumentKind;
 use bbl_clang::translation_unit::TranslationUnit;
 use bbl_util::Trace;
 use log::*;
 use regex::Regex;
 use std::fmt::{Debug, Display};
 use tracing::instrument;
-use ustr::Ustr;
 
 use crate::ast::{
-    dump_cursor, dump_cursor_until, get_namespaces_for_decl, get_qualified_name, ClassId,
-    ClassTemplateSpecializationId, MethodId, TypeAliasId, AST,
+    dump_cursor, dump_cursor_until, get_namespaces_for_decl, get_qualified_name, MethodId, AST,
 };
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::index_map::IndexMapKey;
 use crate::qualtype::extract_type;
-use crate::stdlib::{
-    create_std_function, create_std_map, create_std_string, create_std_unique_ptr,
-    create_std_vector,
-};
+use crate::stdlib::{create_std_map, create_std_string, create_std_unique_ptr, create_std_vector};
 use crate::templates::{
     extract_class_template_specialization, TemplateArgument, TemplateParameterDecl,
 };
-use crate::{class, parse_string_and_extract_ast, AllowList};
+use crate::AllowList;
 use crate::{function::Method, qualtype::QualType};
 use bbl_clang::cursor_kind::CursorKind;
 
@@ -285,7 +277,7 @@ impl ClassDecl {
         &self.specialized_methods
     }
 
-    pub fn set_ignore(&mut self, ignore: bool) {
+    pub fn set_ignore(&mut self, _ignore: bool) {
         self.ignore = true;
     }
 
@@ -316,14 +308,11 @@ impl ClassDecl {
         format!("{ns_string}::{}{template}", self.name)
     }
 
-    pub fn find_method(&self, ast: &AST, signature: &str) -> Result<(MethodId, &Method)> {
+    pub fn find_method(&self, signature: &str) -> Result<(MethodId, &Method)> {
         let mut matches = Vec::new();
 
         for (method_id, method) in self.methods.iter().enumerate() {
-            if method
-                .signature(ast, &self.template_parameters, None)
-                .contains(signature)
-            {
+            if method.signature().contains(signature) {
                 matches.push((method_id, method));
             }
         }
@@ -332,7 +321,7 @@ impl ClassDecl {
             0 => {
                 let mut distances = Vec::with_capacity(self.methods.len());
                 for method in self.methods.iter() {
-                    let sig = method.signature(ast, &self.template_parameters, None);
+                    let sig = method.signature();
                     let dist = levenshtein::levenshtein(&sig, signature);
                     distances.push((dist, sig));
                 }
@@ -358,10 +347,7 @@ impl ClassDecl {
                 error!("Multiple matches found for signature \"{signature}\":");
 
                 for (_, method) in matches {
-                    error!(
-                        "  {}",
-                        method.signature(ast, &self.template_parameters, None)
-                    );
+                    error!("  {}", method.signature());
                 }
 
                 Err(Error::MultipleMatches {
@@ -372,18 +358,11 @@ impl ClassDecl {
         }
     }
 
-    pub fn find_methods(
-        &self,
-        ast: &AST,
-        signature: &str,
-    ) -> Result<(Vec<MethodId>, Vec<&Method>)> {
+    pub fn find_methods(&self, signature: &str) -> Result<(Vec<MethodId>, Vec<&Method>)> {
         let mut matches = Vec::new();
 
         for (method_id, method) in self.methods.iter().enumerate() {
-            if method
-                .signature(ast, &self.template_parameters, None)
-                .contains(signature)
-            {
+            if method.signature().contains(signature) {
                 matches.push((method_id, method));
             }
         }
@@ -392,7 +371,7 @@ impl ClassDecl {
             0 => {
                 let mut distances = Vec::with_capacity(self.methods.len());
                 for method in self.methods.iter() {
-                    let sig = method.signature(ast, &self.template_parameters, None);
+                    let sig = method.signature();
                     let dist = levenshtein::levenshtein(&sig, signature);
                     distances.push((dist, sig));
                 }
@@ -437,7 +416,7 @@ impl ClassDecl {
         method_id: MethodId,
         name: &str,
         template_arguments: Vec<TemplateArgument>,
-        ast: &AST,
+        _ast: &AST,
     ) -> Result<MethodSpecializationId> {
         let method_decl = &mut self.methods[method_id.get()];
 
@@ -504,7 +483,7 @@ pub fn extract_class_decl(
         return create_std_map(class_decl, ast, already_visited, tu, allow_list, overrides);
     } else if class_decl.display_name().starts_with("function<") {
         unreachable!("std::function should have been extracted in type extraction");
-        return create_std_function(class_decl, ast, already_visited, tu, allow_list, overrides);
+        // return create_std_function(class_decl, ast, already_visited, tu, allow_list, overrides);
     }
 
     for over in &overrides.overs {
@@ -645,7 +624,7 @@ fn extract_class_decl_inner(
                             // we store constructors regardless of their access since we want to know about private constructors
                             // in order to not generate implicit versions for them
                             base_constructors.push(method.clone());
-                        } else if (!method.is_destructor()) {
+                        } else if !method.is_destructor() {
                             if access == AccessSpecifier::Public {
                                 base_methods.push(method.clone());
                             } else {
@@ -693,25 +672,10 @@ fn extract_class_decl_inner(
         };
 
         debug!("member {}", member_qualified_name);
-        // always allow template parameters so we don't have to explicitly allow them
-        // if !allow_list.allows(&member_qualified_name) && !matches!(member.kind(), CursorKind::TemplateTemplateParameter | CursorKind::TemplateTypeParameter | CursorKind::NonTypeTemplateParameter) {
-        //     debug!("  denied");
-        //     continue;
-        // }
 
-        if let Ok(access) = member.cxx_access_specifier() {
-            // if access != AccessSpecifier::Public {
-            //     continue;
-            // }
-        } else {
-            warn!("Failed to get access specifier for member {member:?}",);
-            // continue;
-            // return Err(Error::FailedToGetAccessSpecifierFor(member.display_name()));
-        }
         match member.kind() {
             CursorKind::TemplateTypeParameter => {
                 let name = member.display_name();
-                println!("{class_decl_qualified_name} got template type parameter {name}");
                 template_parameters.push(TemplateParameterDecl::Type { name, index });
                 index += 1;
             }
@@ -721,8 +685,6 @@ fn extract_class_decl_inner(
                     match child.kind() {
                         CursorKind::IntegerLiteral => {
                             let name = member.display_name();
-
-                            for lit_child in &child.children() {}
 
                             template_parameters.push(TemplateParameterDecl::Integer {
                                 name,
@@ -860,7 +822,7 @@ fn extract_class_decl_inner(
         methods.push(base_constructor);
     }
 
-    let name = class_decl.spelling();
+    let _name = class_decl.spelling();
 
     // If this is a template decl we won't be able to get a type from it so just set POD to false
     // Note that we have a slightly different definition of POD from cpp: we do not consider records with private fields
@@ -870,7 +832,7 @@ fn extract_class_decl_inner(
     let is_pod = if template_parameters.is_empty() {
         match class_decl.ty() {
             Ok(ty) => ty.is_pod() && !has_private_fields,
-            Err(e) => {
+            Err(_) => {
                 error!("Could not get type from {class_decl:?}");
                 false
             }
@@ -924,6 +886,7 @@ pub type ClassExtractionFn =
     fn(Cursor, &mut AST, &TranslationUnit, &mut Vec<USR>, &AllowList, &OverrideList) -> Result<USR>;
 
 // TODO(AL): fix these once we've patched libclang
+/*
 fn method_is_copy_assignment_operator(method: Cursor, class: Cursor) -> bool {
     false
 }
@@ -931,6 +894,7 @@ fn method_is_copy_assignment_operator(method: Cursor, class: Cursor) -> bool {
 fn method_is_move_assignment_operator(method: Cursor, class: Cursor) -> bool {
     false
 }
+*/
 
 pub fn extract_field(
     c_field: Cursor,
@@ -988,20 +952,6 @@ impl Field {
     pub fn qual_type(&self) -> &QualType {
         &self.qual_type
     }
-
-    fn format(
-        &self,
-        ast: &AST,
-        class_template_parameters: &[TemplateParameterDecl],
-        class_template_args: Option<&[TemplateArgument]>,
-    ) -> String {
-        format!(
-            "{}: {}",
-            self.name,
-            self.qual_type
-                .format(ast, class_template_parameters, class_template_args)
-        )
-    }
 }
 
 /// Choose the type replacement for the give `TemplateParameterDecl`
@@ -1038,7 +988,7 @@ mod tests {
     use crate::{
         class::{ClassBindKind, OverrideList},
         error::Error,
-        init_log, parse_string_and_extract_ast, AllowList,
+        parse_string_and_extract_ast, AllowList,
     };
 
     #[test]

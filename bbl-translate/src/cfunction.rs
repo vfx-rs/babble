@@ -1,6 +1,5 @@
 use std::fmt::Display;
 
-use backtrace::Backtrace;
 use bbl_clang::{cursor::USR, ty::TypeKind};
 use bbl_extract::{
     ast::{ClassId, FunctionId, MethodId, AST},

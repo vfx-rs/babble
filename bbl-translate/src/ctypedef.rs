@@ -1,4 +1,3 @@
-use backtrace::Backtrace;
 use bbl_clang::cursor::USR;
 use bbl_extract::{
     ast::{ClassId, FunctionId, AST},

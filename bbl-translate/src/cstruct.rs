@@ -4,7 +4,7 @@ use bbl_clang::{cursor::USR, exception::ExceptionSpecificationKind};
 use bbl_extract::{
     ast::{ClassId, MethodId, AST},
     class::{ClassBindKind, ClassDecl, MethodSpecializationId},
-    function::{Argument, Const, Deleted, Method, MethodKind, PureVirtual, Static, Virtual},
+    function::{Argument, Const, Deleted, Method, MethodKind, PureVirtual, Virtual},
     index_map::{IndexMapKey, UstrIndexMap},
     qualtype::QualType,
     templates::{ClassTemplateSpecialization, TemplateArgument},
@@ -150,7 +150,7 @@ pub fn translate_class(
             if !method.is_specialized() {
                 warn!(
                     "method {} is templated but has no specializations and so will be ignored",
-                    method.signature(ast, class.template_parameters(), None)
+                    method.signature()
                 );
             }
             continue;
@@ -413,7 +413,6 @@ fn generate_implicit_methods(class: &ClassDecl) -> Vec<Method> {
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -440,7 +439,6 @@ fn generate_implicit_methods(class: &ClassDecl) -> Vec<Method> {
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -467,7 +465,6 @@ fn generate_implicit_methods(class: &ClassDecl) -> Vec<Method> {
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),
@@ -490,7 +487,6 @@ fn generate_implicit_methods(class: &ClassDecl) -> Vec<Method> {
             Vec::new(),
             ExceptionSpecificationKind::None,
             Const(false),
-            Static(false),
             Virtual(false),
             PureVirtual(false),
             Deleted(false),

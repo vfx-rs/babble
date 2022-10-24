@@ -34,7 +34,7 @@ pub fn parse(header: &str, options: &BindOptions) -> Result<AST, Error> {
 
     let clang_args = cli_args_with(&args)?;
 
-    let mut ast = parse_file_and_extract_ast(
+    let ast = parse_file_and_extract_ast(
         &source_filename,
         &clang_args,
         options.log_diagnostics,

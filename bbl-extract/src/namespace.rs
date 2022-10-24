@@ -1,13 +1,8 @@
 use crate::{
     ast::{get_namespaces_for_decl, AST},
     error::Error,
-    index_map::UstrIndexMap,
 };
-use bbl_clang::{
-    cursor::Cursor,
-    cursor::{CurNamespace, USR},
-    translation_unit::TranslationUnit,
-};
+use bbl_clang::{cursor::Cursor, cursor::USR, translation_unit::TranslationUnit};
 use std::fmt::Debug;
 use tracing::instrument;
 
@@ -46,10 +41,9 @@ impl Namespace {
     }
 }
 
-#[instrument(skip(depth, tu), level = "trace")]
+#[instrument(skip(tu), level = "trace")]
 pub fn extract_namespace(
     c_namespace: Cursor,
-    depth: usize,
     tu: &TranslationUnit,
     ast: &mut AST,
     already_visited: &mut Vec<USR>,

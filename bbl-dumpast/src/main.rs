@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
+use bbl_clang::cli_args_with;
 use bbl_clang::cursor_kind::CursorKind;
-use bbl_clang::{cli_args, cli_args_with};
 use bbl_extract::{ast::dump, *};
 
 use clap::{Parser, ValueEnum};

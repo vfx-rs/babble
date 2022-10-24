@@ -3,7 +3,6 @@
 
 use std::fmt::{Debug, Display};
 
-use bbl_util::Trace;
 use clang_sys::*;
 
 use crate::{cursor::cursor, cursor::Cursor, string::CXStringEx};
