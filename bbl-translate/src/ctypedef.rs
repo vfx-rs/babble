@@ -6,6 +6,7 @@ use bbl_extract::{
     templates::{ClassTemplateSpecialization, FunctionTemplateSpecialization},
     typedef::Typedef,
 };
+use bbl_util::Trace;
 use hashbrown::HashSet;
 use tracing::{debug, error, instrument};
 
@@ -31,7 +32,7 @@ pub fn translate_function_template_specialization(
         .map(|id| FunctionId::new(*id))
         .ok_or_else(|| Error::FunctionNotFound {
             name: fts.specialized_decl().to_string(),
-            backtrace: Backtrace::new(),
+            source: Trace::new(),
         })?;
     let function = &ast.functions()[function_id];
 
@@ -65,7 +66,7 @@ pub fn translate_class_template_specialization(
         .map(|id| ClassId::new(*id))
         .ok_or_else(|| Error::ClassNotFound {
             name: cts.specialized_decl().as_str().to_string(),
-            backtrace: Backtrace::new(),
+            source: Trace::new(),
         })?;
     let class = &ast.classes()[class_id];
 

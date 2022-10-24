@@ -5,7 +5,9 @@ use backtrace::Backtrace;
 use bbl_clang::access_specifier::AccessSpecifier;
 use bbl_clang::cli_args;
 use bbl_clang::cursor::{CurClassDecl, Cursor, USR};
+use bbl_clang::template_argument::TemplateArgumentKind;
 use bbl_clang::translation_unit::TranslationUnit;
+use bbl_util::Trace;
 use log::*;
 use regex::Regex;
 use std::fmt::{Debug, Display};
@@ -116,18 +118,22 @@ pub struct ClassDecl {
 
 impl std::fmt::Debug for ClassDecl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "ClassDecl {usr} {name} rename={rename:?} {bind_kind:?} is_pod={pod} ignore={ignore} needs={needs:?} template_parameters={template_parameters:?} specializations={specializations:?} namespaces={namespaces:?}", 
-            usr=self.usr, 
-            name=self.name(),
-            rename = self.rename,
-            bind_kind = self.bind_kind(),
-            pod = self.is_pod,
-            ignore = self.ignore,
-            needs = self.needs_implicit,
-            specializations = self.specializations,
-            template_parameters = self.template_parameters(),
-            namespaces = self.namespaces(),
+        write!(
+            f,
+            "ClassDecl {usr} {name}",
+            usr = self.usr,
+            name = self.name(),
         )?;
+
+        write!(f, " rename={:?}", self.rename)?;
+        write!(f, " {:?}", self.bind_kind())?;
+        write!(f, " is_pod={}", self.is_pod)?;
+        write!(f, " ignore={}", self.ignore)?;
+        write!(f, " needs={:?}", self.needs_implicit())?;
+        write!(f, " template_parameters={:?}", self.template_parameters())?;
+        write!(f, " specializations={:?}", self.specializations)?;
+        write!(f, " namespaces={:?}", self.namespaces())?;
+        writeln!(f)?;
 
         for field in self.fields() {
             writeln!(f, "Field {:?}", field)?;
@@ -344,7 +350,7 @@ impl ClassDecl {
 
                 Err(Error::MethodNotFound {
                     name: signature.to_string(),
-                    backtrace: Backtrace::new(),
+                    source: Trace::new(),
                 })
             }
             1 => Ok((MethodId::new(matches[0].0), matches[0].1)),
@@ -360,7 +366,7 @@ impl ClassDecl {
 
                 Err(Error::MultipleMatches {
                     name: signature.to_string(),
-                    backtrace: Backtrace::new(),
+                    source: Trace::new(),
                 })
             }
         }
@@ -404,7 +410,7 @@ impl ClassDecl {
 
                 Err(Error::MethodNotFound {
                     name: signature.to_string(),
-                    backtrace: Backtrace::new(),
+                    source: Trace::new(),
                 })
             }
             _ => Ok(matches
@@ -494,6 +500,7 @@ pub fn extract_class_decl(
     } else if class_decl.display_name().starts_with("unique_ptr<") {
         return create_std_unique_ptr(class_decl, ast, already_visited, tu, allow_list, overrides);
     } else if class_decl.display_name().starts_with("map<") {
+        debug!("manually extracting std::map {class_decl:?}");
         return create_std_map(class_decl, ast, already_visited, tu, allow_list, overrides);
     } else if class_decl.display_name().starts_with("function<") {
         unreachable!("std::function should have been extracted in type extraction");
@@ -523,7 +530,11 @@ pub fn extract_class_decl(
             tu,
             allow_list,
             overrides,
-        );
+        )
+        .map_err(|e| Error::FailedToExtractClassTemplateSpecialization {
+            name: class_decl.usr().to_string(),
+            source: Box::new(e),
+        });
     }
 
     if already_visited.contains(&class_decl.usr()) {
@@ -542,7 +553,11 @@ pub fn extract_class_decl(
         overrides,
         None,
         namespace_override,
-    )?;
+    )
+    .map_err(|e| Error::FailedToExtractClass {
+        usr: class_decl.usr(),
+        source: Box::new(e),
+    })?;
 
     debug!("extract_class_decl: inserting {}", class_decl.usr());
     if class_decl.kind() == CursorKind::ClassTemplate && cd.template_parameters.is_empty() {
@@ -589,14 +604,16 @@ fn extract_class_decl_inner(
 
     let class_decl_qualified_name = get_qualified_name(&class_name, &namespaces, ast)?;
 
-    debug!(
-        "extract_class_decl({}) {}",
+    println!(
+        "extract_class_decl({}) {} {}",
         class_decl.usr(),
         class_decl_qualified_name,
+        class_decl.num_template_arguments(),
     );
 
     // First, trawl the bases for all their methods we'll want to inherit
     let mut base_methods = Vec::new();
+    let mut base_private_methods = Vec::new();
     let mut base_constructors = Vec::new();
     for c_base in class_decl.children_of_kind(CursorKind::CXXBaseSpecifier, false) {
         if let Ok(c_base_decl) = c_base.referenced() {
@@ -606,7 +623,7 @@ fn extract_class_decl_inner(
                     // Base::method() into Class::method(). Thus the allow list will work as expected, and still allow
                     // us to avoid adding the Base class to the AST while lofting up its members into Class
                     let base = extract_class_decl_inner(
-                        c_base_decl.try_into()?,
+                        c_base_decl.canonical()?.try_into()?,
                         tu,
                         ast,
                         already_visited,
@@ -614,7 +631,13 @@ fn extract_class_decl_inner(
                         class_overrides,
                         qname_override.or(Some(&class_decl_qualified_name)),
                         None,
-                    )?;
+                    )
+                    .map_err(|e| Error::FailedToExtractBaseClass {
+                        base: c_base_decl.usr(),
+                        usr: class_decl.usr(),
+                        source: Box::new(e),
+                    })?;
+
                     let access = c_base.cxx_access_specifier()?;
 
                     for method in &base.methods {
@@ -622,8 +645,12 @@ fn extract_class_decl_inner(
                             // we store constructors regardless of their access since we want to know about private constructors
                             // in order to not generate implicit versions for them
                             base_constructors.push(method.clone());
-                        } else if (!method.is_destructor() && access == AccessSpecifier::Public) {
-                            base_methods.push(method.clone());
+                        } else if (!method.is_destructor()) {
+                            if access == AccessSpecifier::Public {
+                                base_methods.push(method.clone());
+                            } else {
+                                base_private_methods.push(method.clone())
+                            }
                         }
                     }
                 }
@@ -677,16 +704,14 @@ fn extract_class_decl_inner(
             //     continue;
             // }
         } else {
-            warn!(
-                "Failed to get access specifier for member {}",
-                member.display_name()
-            );
+            warn!("Failed to get access specifier for member {member:?}",);
             // continue;
             // return Err(Error::FailedToGetAccessSpecifierFor(member.display_name()));
         }
         match member.kind() {
             CursorKind::TemplateTypeParameter => {
                 let name = member.display_name();
+                println!("{class_decl_qualified_name} got template type parameter {name}");
                 template_parameters.push(TemplateParameterDecl::Type { name, index });
                 index += 1;
             }
@@ -746,7 +771,7 @@ fn extract_class_decl_inner(
                 } else {
                     return Err(Error::FailedToGetAccessSpecifierFor {
                         name: member.display_name(),
-                        backtrace: Backtrace::new(),
+                        source: Trace::new(),
                     });
                 }
             }
@@ -778,7 +803,7 @@ fn extract_class_decl_inner(
                 } else {
                     return Err(Error::FailedToGetAccessSpecifierFor {
                         name: member.display_name(),
-                        backtrace: Backtrace::new(),
+                        source: Trace::new(),
                     });
                 }
             }

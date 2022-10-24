@@ -8,8 +8,9 @@ use bbl_translate::{
     ctypedef::CTypedef,
     CAST,
 };
+use bbl_util::Trace;
 
-use crate::error::{Error, TypeError};
+use crate::error::Error;
 use tracing::instrument;
 
 use std::{fmt::Write, ops::Deref};
@@ -180,7 +181,7 @@ fn gen_function_declaration(fun: &CFunction, c_ast: &CAST) -> Result<String, Err
 
 /// Generate the cast expression for converting the c type to its cpp counterpart
 #[instrument(level = "trace", skip(ast, c_ast))]
-fn gen_cast(qual_type: &CQualType, ast: &AST, c_ast: &CAST) -> Result<Option<String>, TypeError> {
+fn gen_cast(qual_type: &CQualType, ast: &AST, c_ast: &CAST) -> Result<Option<String>> {
     match qual_type.type_ref() {
         CTypeRef::Builtin(_) | CTypeRef::FunctionProto { .. } => Ok(None),
         CTypeRef::Pointer(pointee_qt) => {
@@ -194,20 +195,23 @@ fn gen_cast(qual_type: &CQualType, ast: &AST, c_ast: &CAST) -> Result<Option<Str
             // ref might be to a class directly, or to a typedef
             if let Some(class) = ast.get_class(*usr) {
                 Ok(Some(class.get_qualified_name(ast).map_err(|source| {
-                    TypeError::FailedToGetQualifiedName {
+                    Error::FailedToGetQualifiedName {
                         name: class.name().to_string(),
                         source,
                     }
                 })?))
             } else if let Some(cts) = ast.get_type_alias(*usr) {
                 Ok(Some(cts.get_qualified_name(ast).map_err(|source| {
-                    TypeError::FailedToGetQualifiedName {
+                    Error::FailedToGetQualifiedName {
                         name: cts.name().to_string(),
                         source,
                     }
                 })?))
             } else {
-                Err(TypeError::TypeRefNotFound(*usr))
+                Err(Error::FailedToFindTyperef {
+                    usr: *usr,
+                    source: Trace::new(),
+                })
             }
         }
         CTypeRef::Template(parm) => {
@@ -466,7 +470,10 @@ fn gen_c_type(qt: &CQualType, c_ast: &CAST, use_public_names: bool) -> Result<St
                 // we should never get here as we need to handle function pointers explicitly at the typedef level
                 unreachable!()
             } else {
-                return Err(Error::FailedToFindTyperef(*usr));
+                return Err(Error::FailedToFindTyperef {
+                    usr: *usr,
+                    source: Trace::new(),
+                });
             }
         }
         CTypeRef::Pointer(pointee) => {

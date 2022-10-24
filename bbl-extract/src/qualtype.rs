@@ -5,6 +5,7 @@ use bbl_clang::{
     translation_unit::TranslationUnit,
     ty::{Type, TypeKind},
 };
+use bbl_util::Trace;
 use hashbrown::HashSet;
 use std::{convert::TryInto, fmt::Display};
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -55,10 +56,12 @@ impl TypeRef {
         let result = match self {
             Builtin(_) => true,
             Ref(usr) => {
-                let class = ast.get_class(*usr).ok_or(Error::ClassOrNamespaceNotFound {
-                    usr: *usr,
-                    backtrace: Backtrace::new(),
-                })?;
+                let class = ast
+                    .get_class(*usr)
+                    .ok_or_else(|| Error::ClassOrNamespaceNotFound {
+                        usr: *usr,
+                        source: Trace::new(),
+                    })?;
                 *class.bind_kind() == ClassBindKind::ValueType
             }
             Pointer(p) => p.type_ref.is_valuetype(ast)?,
@@ -87,7 +90,7 @@ impl TypeRef {
                 } else {
                     Err(Error::ClassNotFound {
                         name: usr.to_string(),
-                        backtrace: Backtrace::new(),
+                        source: Trace::new(),
                     })
                 }
             }
@@ -246,10 +249,12 @@ impl QualType {
                 }
             }
             Typedef(usr) => {
-                let td = ast.get_type_alias(*usr).ok_or(Error::TypeAliasNotFound {
-                    usr: *usr,
-                    backtrace: backtrace::Backtrace::new(),
-                })?;
+                let td = ast
+                    .get_type_alias(*usr)
+                    .ok_or_else(|| Error::TypedefNotFound {
+                        usr: *usr,
+                        source: Trace::new(),
+                    })?;
                 if td.underlying_type().is_template(ast) {
                     let mut qt = td.underlying_type().clone();
                     qt.replace_templates(
@@ -410,7 +415,7 @@ impl QualType {
                 ast.get_class(usr)
                     .ok_or_else(|| Error::ClassNotFound {
                         name: usr.as_str().to_string(),
-                        backtrace: Backtrace::new()
+                        source: Trace::new(),
                     })?
                     .bind_kind(),
                 ClassBindKind::ValueType
@@ -607,6 +612,7 @@ pub fn extract_type(
     if name.contains("std::enable_if") {
         return Err(Error::Unsupported {
             description: "std::enable_if is unsupported".to_string(),
+            source: Trace::new(),
         });
     }
 
@@ -655,7 +661,11 @@ pub fn extract_type(
                         allow_list,
                         class_overrides,
                         template_parameters,
-                    )?;
+                    )
+                    .map_err(|e| Error::FailedToExtractTypedef {
+                        usr: c_decl.usr(),
+                        source: Box::new(e),
+                    })?;
 
                     Ok(QualType {
                         name,
@@ -673,7 +683,11 @@ pub fn extract_type(
                         allow_list,
                         class_overrides,
                         None,
-                    )?;
+                    )
+                    .map_err(|e| Error::FailedToExtractClass {
+                        usr: c_decl.usr(),
+                        source: Box::new(e),
+                    })?;
 
                     Ok(QualType {
                         name,
@@ -682,7 +696,12 @@ pub fn extract_type(
                     })
                 }
                 CursorKind::EnumDecl => {
-                    let u_ref = extract_enum(c_decl, ast, already_visited, tu)?;
+                    let u_ref = extract_enum(c_decl, ast, already_visited, tu).map_err(|e| {
+                        Error::FailedToExtractEnum {
+                            usr: c_decl.usr(),
+                            source: Box::new(e),
+                        }
+                    })?;
                     Ok(QualType {
                         name,
                         is_const,
@@ -705,7 +724,11 @@ pub fn extract_type(
                     tu,
                     allow_list,
                     class_overrides,
-                )?;
+                )
+                .map_err(|e| Error::FailedToExtractType {
+                    name: pointee.spelling(),
+                    source: Box::new(e),
+                })?;
                 Ok(QualType {
                     name,
                     is_const,
@@ -746,7 +769,12 @@ pub fn extract_type(
                     tu,
                     allow_list,
                     class_overrides,
-                )?;
+                )
+                .map_err(|e| Error::FailedToExtractType {
+                    name: pointee.spelling(),
+                    source: Box::new(e),
+                })?;
+
                 Ok(QualType {
                     name,
                     is_const,
@@ -763,7 +791,12 @@ pub fn extract_type(
                     tu,
                     allow_list,
                     class_overrides,
-                )?;
+                )
+                .map_err(|e| Error::FailedToExtractType {
+                    name: pointee.spelling(),
+                    source: Box::new(e),
+                })?;
+
                 Ok(QualType {
                     name,
                     is_const,
@@ -785,7 +818,7 @@ pub fn extract_type(
                     println!("NARGS: {}", ty.num_template_arguments());
                     Err(Error::NoMatchingTemplateParameter {
                         name,
-                        backtrace: Backtrace::new(),
+                        source: Trace::new(),
                     })
                 }
             }

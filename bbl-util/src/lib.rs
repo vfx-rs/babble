@@ -188,3 +188,30 @@ impl<'a> Iterator for SourceIter<'a> {
         current
     }
 }
+
+#[derive(Debug)]
+pub struct Trace(pub backtrace::Backtrace);
+
+impl Trace {
+    pub fn new() -> Trace {
+        Trace(backtrace::Backtrace::new())
+    }
+}
+
+impl Default for Trace {
+    fn default() -> Self {
+        Trace::new()
+    }
+}
+
+impl std::fmt::Display for Trace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Backtrace:\n{:?}", self.0)
+    }
+}
+
+impl std::error::Error for Trace {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}

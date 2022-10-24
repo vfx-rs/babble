@@ -7,6 +7,7 @@ use bbl_clang::{
     template_argument::TemplateArgumentKind,
     translation_unit::TranslationUnit,
 };
+use bbl_util::Trace;
 use hashbrown::HashSet;
 use tracing::log::{debug, trace};
 
@@ -69,7 +70,7 @@ pub fn extract_class_template_specialization(
         .specialized_template()
         .map_err(|_| Error::ClassDeclIsNotSpecialization {
             usr: c_class_decl.usr(),
-            backtrace: Backtrace::new(),
+            source: Trace::new(),
         })?
         .try_into()
         .map_err(|e| {
@@ -86,7 +87,11 @@ pub fn extract_class_template_specialization(
         allow_list,
         class_overrides,
         None,
-    )?;
+    )
+    .map_err(|e| Error::FailedToExtractClassTemplate {
+        usr: specialized_decl.usr(),
+        source: Box::new(e),
+    })?;
 
     let cts = ClassTemplateSpecialization {
         specialized_decl: specialized_decl.usr(),
@@ -109,9 +114,7 @@ pub fn extract_class_template_specialization(
         .get_class(specialized_decl.usr())
         .expect("Could not extract just inserted class template");
 
-    // Delate the actual specialization until after the user's had a chance to muck with the AST
-    // let sd = specialize_class_template(class_template, &cts, ast)?;
-    // ast.insert_class(sd);
+    // Delay the actual specialization until after the user's had a chance to muck with the AST
     ast.insert_class_template_specialization(cts);
 
     Ok(c_class_decl.usr())
@@ -186,7 +189,7 @@ pub fn extract_template_args(
         return Err(Error::TooFewTemplateArguments {
             usr: c_class_decl.usr(),
             num: num_template_args,
-            backtrace: Backtrace::new(),
+            source: Trace::new(),
         });
     }
 
@@ -280,9 +283,9 @@ impl ClassTemplateSpecialization {
     pub fn bind_kind(&self, ast: &AST) -> Result<ClassBindKind> {
         ast.get_class(self.specialized_decl)
             .map(|class| *class.bind_kind())
-            .ok_or(Error::ClassNotFound {
+            .ok_or_else(|| Error::ClassNotFound {
                 name: self.specialized_decl.to_string(),
-                backtrace: Backtrace::new(),
+                source: Trace::new(),
             })
     }
 

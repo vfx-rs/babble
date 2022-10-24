@@ -2,6 +2,7 @@ use bbl_clang::cursor::{Cursor, USR};
 use bbl_clang::exception::ExceptionSpecificationKind;
 use bbl_clang::translation_unit::TranslationUnit;
 use bbl_clang::ty::{Type, TypeKind};
+use bbl_util::Trace;
 use hashbrown::HashSet;
 use log::*;
 use std::fmt::{Debug, Display};
@@ -156,18 +157,23 @@ pub struct Function {
 
 impl Debug for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Function {usr} {name} rename={rename:?} ignore={ignore} return={result:?} args={args:?} noexcept={noexcept:?} template_parameters={template_parameters:?} specializations={specializations:?} namespaces={namespaces:?}", 
-            usr = self.usr, 
+        write!(
+            f,
+            "Function {usr} {name}",
+            usr = self.usr,
             name = self.name(),
-            rename = self.replacement_name,
-            ignore = self.ignored,
-            result=self.result(),
-            args = self.arguments(),
-            noexcept=self.exception_specification_kind,
-            template_parameters = self.template_parameters(),
-            specializations = self.specializations,
-            namespaces = self.namespaces,
-        )
+        )?;
+
+        write!(f, " rename={:?}", self.replacement_name())?;
+        write!(f, " ignore={}", self.ignored)?;
+        write!(f, " return={:?}", self.result())?;
+        write!(f, " args={:?}", self.arguments())?;
+        write!(f, " noexcept={:?}", self.exception_specification_kind)?;
+        write!(f, " template_parameters={:?}", self.template_parameters())?;
+        write!(f, " specializations={:?}", self.specializations)?;
+        write!(f, " namespaces={:?}", self.namespaces)?;
+
+        Ok(())
     }
 }
 
@@ -593,14 +599,14 @@ fn find_template_argument_for_parameter<'a>(
         .position(|p| p.name() == parm)
         .ok_or_else(|| Error::NoMatchingTemplateParameter {
             name: parm.into(),
-            backtrace: backtrace::Backtrace::new(),
+            source: Trace::new(),
         })?;
 
     if parm_index >= template_args.len() {
         Err(Error::NoMatchingTemplateArgument {
             name: parm.into(),
             index: parm_index,
-            backtrace: backtrace::Backtrace::new(),
+            source: Trace::new(),
         })
     } else {
         Ok(&template_args[parm_index])

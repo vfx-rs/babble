@@ -8,6 +8,7 @@ use bbl_extract::{
     index_map::{IndexMapKey, UstrIndexMap},
     qualtype::{QualType, TypeRef},
 };
+use bbl_util::Trace;
 use hashbrown::HashSet;
 use std::fmt::Write;
 use tracing::warn;
@@ -33,7 +34,10 @@ impl RAST {
         self.structs
             .get(&usr.into())
             .map(|st| st.name())
-            .ok_or(Error::FailedToGetClassFromRef(usr))
+            .ok_or_else(|| Error::FailedToGetClassFromRef {
+                usr,
+                source: Trace::new(),
+            })
     }
 }
 
@@ -153,9 +157,9 @@ fn translate_method(
 
     let c_fn = c_ast
         .get_function(method.usr())
-        .ok_or(Error::FunctionNotFound {
+        .ok_or_else(|| Error::FunctionNotFound {
             name: method.usr().to_string(),
-            backtrace: backtrace::Backtrace::new(),
+            source: Trace::new(),
         })?;
 
     let mut body = Vec::new();
@@ -209,11 +213,11 @@ fn create_argument_expr(
         CTypeRef::Ref(usr) => {
             let st = c_ast
                 .get_struct(*usr)
-                .ok_or(Error::FailedToCreateArgumentExpr {
+                .ok_or_else(|| Error::FailedToCreateArgumentExpr {
                     name: carg.name().to_string(),
                     source: Box::new(Error::ClassNotFound {
                         name: usr.to_string(),
-                        backtrace: backtrace::Backtrace::new(),
+                        source: Trace::new(),
                     }),
                 })?;
 
@@ -221,7 +225,7 @@ fn create_argument_expr(
                 ClassBindKind::ValueType => Ok(Expr::Token(rarg.name().to_string())),
                 _ => Err(Error::FailedToCreateArgumentExpr {
                     name: carg.name().to_string(),
-                    source: Box::new(Error::ImproperPassByValue),
+                    source: Box::new(Error::ImproperPassByValue(Trace::new())),
                 }),
             }
         }
@@ -376,6 +380,7 @@ fn translate_type(qt: &QualType, ast: &AST) -> Result<RTypeRef> {
         _ => {
             return Err(Error::TriedToTranslateTemplateParmeter {
                 name: qt.name.clone(),
+                source: Trace::new(),
             })
         }
     };

@@ -1,4 +1,5 @@
 use backtrace::Backtrace;
+use bbl_util::Trace;
 use std::convert::TryInto;
 use std::fmt::{Debug, Write};
 use std::marker::PhantomData;
@@ -18,8 +19,8 @@ use crate::function::{extract_function, Function, FunctionProto, FunctionProtoId
 use crate::index_map::{IndexMapKey, UstrIndexMap};
 use crate::namespace::{self, extract_namespace, Namespace};
 use crate::templates::{
-    extract_class_template_specialization, specialize_class_template, ClassTemplateSpecialization,
-    FunctionTemplateSpecialization, TemplateArgument, TemplateParameterDecl,
+    specialize_class_template, ClassTemplateSpecialization, FunctionTemplateSpecialization,
+    TemplateArgument, TemplateParameterDecl,
 };
 use crate::typedef::{extract_typedef_decl, Typedef};
 use crate::AllowList;
@@ -215,9 +216,9 @@ impl AST {
                 .classes
                 .get_id(cts.specialized_decl().as_ref())
                 .map(|id| ClassId(*id))
-                .ok_or(Error::ClassNotFound {
+                .ok_or_else(|| Error::ClassNotFound {
                     name: cts.specialized_decl().to_string(),
-                    backtrace: backtrace::Backtrace::new(),
+                    source: Trace::new(),
                 })?;
 
             let sd = specialize_class_template(ast.classes().index(class_template_id), cts, &ast)?;
@@ -303,14 +304,14 @@ impl AST {
                     .map(|i| NamespaceId(*i))
                     .ok_or_else(|| Error::NamespaceNotFound {
                         name: name.to_string(),
-                        backtrace: Backtrace::new(),
+                        source: Trace::new(),
                     });
             }
         }
 
         Err(Error::NamespaceNotFound {
             name: name.to_string(),
-            backtrace: Backtrace::new(),
+            source: Trace::new(),
         })
     }
 
@@ -361,7 +362,7 @@ impl AST {
 
                 Err(Error::ClassNotFound {
                     name: name.into(),
-                    backtrace: Backtrace::new(),
+                    source: Trace::new(),
                 })
             }
             1 => Ok(ClassId::new(matches[0].0)),
@@ -374,7 +375,7 @@ impl AST {
 
                 Err(Error::MultipleMatches {
                     name: name.to_string(),
-                    backtrace: Backtrace::new(),
+                    source: Trace::new(),
                 })
             }
         }
@@ -448,7 +449,7 @@ impl AST {
         } else {
             Err(Error::ClassCannotBeValueType {
                 name: class_decl.name().to_string(),
-                backtrace: Backtrace::new(),
+                source: Trace::new(),
             })
         }
     }
@@ -490,7 +491,7 @@ impl AST {
 
                 Err(Error::FunctionNotFound {
                     name: signature.into(),
-                    backtrace: Backtrace::new(),
+                    source: Trace::new(),
                 })
             }
             1 => Ok(FunctionId(matches[0].0)),
@@ -503,7 +504,7 @@ impl AST {
 
                 Err(Error::MultipleMatches {
                     name: signature.to_string(),
-                    backtrace: Backtrace::new(),
+                    source: Trace::new(),
                 })
             }
         }
@@ -744,7 +745,7 @@ impl AST {
         } else {
             Err(Error::ClassOrNamespaceNotFound {
                 usr,
-                backtrace: Backtrace::new(),
+                source: Trace::new(),
             })
         }
     }
@@ -764,7 +765,7 @@ pub fn get_qualified_name(decl: &str, namespaces: &[USR], ast: &AST) -> Result<S
         } else {
             return Err(Error::ClassOrNamespaceNotFound {
                 usr: *uns,
-                backtrace: Backtrace::new(),
+                source: Trace::new(),
             });
         }
     }
@@ -879,7 +880,7 @@ pub fn extract_ast(
                     .get_namespace(usr)
                     .ok_or_else(|| Error::NamespaceNotFound {
                         name: usr.to_string(),
-                        backtrace: Backtrace::new(),
+                        source: Trace::new(),
                     })?
                     .name();
 

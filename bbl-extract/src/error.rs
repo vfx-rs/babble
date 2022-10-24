@@ -3,132 +3,127 @@
 
 use bbl_clang::cursor::USR;
 
-use backtrace::Backtrace;
+use bbl_util::Trace;
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
-    ClangError(bbl_clang::error::Error),
-    ClassNotFound {
-        name: String,
-        backtrace: Backtrace,
-    },
-    NamespaceNotFound {
-        name: String,
-        backtrace: Backtrace,
-    },
-    MethodNotFound {
-        name: String,
-        backtrace: Backtrace,
-    },
-    MultipleMatches {
-        name: String,
-        backtrace: Backtrace,
-    },
-    FunctionNotFound {
-        name: String,
-        backtrace: Backtrace,
-    },
-    TypeAliasNotFound {
-        usr: USR,
-        backtrace: Backtrace,
-    },
-    ClassOrNamespaceNotFound {
-        usr: USR,
-        backtrace: Backtrace,
-    },
-    FailedToGetTemplateRefFrom {
-        name: String,
-        backtrace: Backtrace,
-    },
-    FailedToGetTypeFrom {
-        name: String,
-        backtrace: Backtrace,
-    },
-    FailedToGetNamespaceRefFrom {
-        name: String,
-        backtrace: Backtrace,
-    },
-    FailedToGetCursor {
-        backtrace: Backtrace,
-    },
-    TemplateArgExtraction {
-        name: String,
-        backtrace: Backtrace,
-    },
-    NoMatchingTemplateParameter {
-        name: String,
-        backtrace: Backtrace,
-    },
+    #[error("bbl-clang error")]
+    ClangError(#[from] bbl_clang::error::Error),
+    #[error("Could not find class \"{name}\"")]
+    ClassNotFound { name: String, source: Trace },
+    #[error("Could not find namespace \"{name}\"")]
+    NamespaceNotFound { name: String, source: Trace },
+    #[error("Could not find method \"{name}\"")]
+    MethodNotFound { name: String, source: Trace },
+    #[error("Found multiple matches for \"{name}\"")]
+    MultipleMatches { name: String, source: Trace },
+    #[error("Could not find function \"{name}\"")]
+    FunctionNotFound { name: String, source: Trace },
+    #[error("Could not find typedef \"{usr}\"")]
+    TypedefNotFound { usr: USR, source: Trace },
+    #[error("Could not find a class or namespace with USR \"{usr}\"")]
+    ClassOrNamespaceNotFound { usr: USR, source: Trace },
+    #[error("Failed to get a template ref from \"{name}\"")]
+    FailedToGetTemplateRefFrom { name: String, source: Trace },
+    #[error("Failed to get type from \"{name}\"")]
+    FailedToGetTypeFrom { name: String, source: Trace },
+    #[error("Failed to get a namespace ref from \"{name}\"")]
+    FailedToGetNamespaceRefFrom { name: String, source: Trace },
+    #[error("Failed to get cursor")]
+    FailedToGetCursor { source: Trace },
+    #[error("Failed to extract template arguments from \"{name}\"")]
+    TemplateArgExtraction { name: String, source: Trace },
+    #[error("No matching template parameter for argument \"{name}\"")]
+    NoMatchingTemplateParameter { name: String, source: Trace },
+    #[error("No matching template argument for parameter \"{name}\" as index {index}")]
     NoMatchingTemplateArgument {
         name: String,
         index: usize,
-        backtrace: Backtrace,
+        source: Trace,
     },
-    IoError(std::io::Error),
+    #[error("I/O error")]
+    IoError(#[from] std::io::Error),
+    #[error("Failed to extract class \"{usr}\"")]
     FailedToExtractClass {
         usr: USR,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to extract class template \"{usr}\"")]
+    FailedToExtractClassTemplate {
+        usr: USR,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    #[error("Failed to extract base class {base} of {usr}")]
+    FailedToExtractBaseClass {
+        base: USR,
+        usr: USR,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    #[error("Failed to extract enum \"{usr}\"")]
+    FailedToExtractEnum {
+        usr: USR,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
+    #[error("Failed to extract class template specialization \"{name}\"")]
     FailedToExtractClassTemplateSpecialization {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to extract argument \"{name}\"")]
     FailedToExtractArgument {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to extract return value \"{name}\"")]
     FailedToExtractResult {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to extract template arguments")]
     FailedToExtractTemplateArgs {
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to extract function \"{name}\"")]
     FailedToExtractFunction {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to extract method \"{name}\"")]
     FailedToExtractMethod {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to extract typedef \"{usr}\"")]
     FailedToExtractTypedef {
         usr: USR,
-        backtrace: Backtrace,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
-    FailedToExtractTypeAlias {
+    #[error("Failed to extract type \"{name}\"")]
+    FailedToExtractType {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to get qualified name for \"{name}\"")]
     FailedToGetQualifiedNameFor {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
-    ClassCannotBeValueType {
-        name: String,
-        backtrace: Backtrace,
-    },
-    FailedToGetAccessSpecifierFor {
-        name: String,
-        backtrace: Backtrace,
-    },
-    ClassDeclIsNotSpecialization {
-        usr: USR,
-        backtrace: Backtrace,
-    },
-    TooFewTemplateArguments {
-        usr: USR,
-        num: i32,
-        backtrace: Backtrace,
-    },
+    #[error("Tried to make class \"{name}\" a value type but it cannot be")]
+    ClassCannotBeValueType { name: String, source: Trace },
+    #[error("Failed to get access specifier for \"{name}\"")]
+    FailedToGetAccessSpecifierFor { name: String, source: Trace },
+    #[error("Class decl \"{usr}\" is not a specialization")]
+    ClassDeclIsNotSpecialization { usr: USR, source: Trace },
+    #[error("Too few template arguments ({num}) on \"{usr}\"")]
+    TooFewTemplateArguments { usr: USR, num: i32, source: Trace },
+    #[error("Failed to extract field \"{name}\" on \"{class}\"")]
     FailedToExtractField {
         class: String,
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
-    Unsupported {
-        description: String,
-    },
+    #[error("Unsupported construct: {description}")]
+    Unsupported { description: String, source: Trace },
 }
 
 impl Error {
@@ -151,41 +146,41 @@ impl Error {
     }
 }
 
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use Error::*;
-        match self {
-            FailedToExtractClass { source, .. }
-            | FailedToExtractClassTemplateSpecialization { source, .. }
-            | FailedToExtractArgument { source, .. }
-            | FailedToExtractResult { source, .. }
-            | FailedToExtractTemplateArgs { source, .. }
-            | FailedToExtractFunction { source, .. }
-            | FailedToExtractMethod { source, .. }
-            | FailedToExtractTypeAlias { source, .. }
-            | FailedToGetQualifiedNameFor { source, .. }
-            | FailedToExtractField { source, .. } => Some(source.as_ref()),
-            ClangError(e) => Some(e),
-            IoError(e) => Some(e),
-            _ => None,
-        }
-    }
-}
+// impl std::error::Error for Error {
+//     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+//         use Error::*;
+//         match self {
+//             FailedToExtractClass { source, .. }
+//             | FailedToExtractClassTemplateSpecialization { source, .. }
+//             | FailedToExtractArgument { source, .. }
+//             | FailedToExtractResult { source, .. }
+//             | FailedToExtractTemplateArgs { source, .. }
+//             | FailedToExtractFunction { source, .. }
+//             | FailedToExtractMethod { source, .. }
+//             | FailedToExtractTypeAlias { source, .. }
+//             | FailedToGetQualifiedNameFor { source, .. }
+//             | FailedToExtractField { source, .. } => Some(source.as_ref()),
+//             ClangError(e) => Some(e),
+//             IoError(e) => Some(e),
+//             _ => None,
+//         }
+//     }
+// }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
+// impl std::fmt::Display for Error {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "{self:?}")
+//     }
+// }
 
-impl From<bbl_clang::error::Error> for Error {
-    fn from(e: bbl_clang::error::Error) -> Self {
-        Error::ClangError(e)
-    }
-}
+// impl From<bbl_clang::error::Error> for Error {
+//     fn from(e: bbl_clang::error::Error) -> Self {
+//         Error::ClangError(e)
+//     }
+// }
 
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Error::IoError(e)
-    }
-}
+// impl From<std::io::Error> for Error {
+//     fn from(e: std::io::Error) -> Self {
+//         Error::IoError(e)
+//     }
+// }

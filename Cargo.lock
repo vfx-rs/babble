@@ -114,7 +114,7 @@ dependencies = [
 name = "bbl-clang"
 version = "0.1.0"
 dependencies = [
- "backtrace",
+ "bbl-util",
  "clang-sys",
  "env_logger",
  "log",
@@ -192,6 +192,7 @@ name = "bbl-util"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "backtrace",
  "colored",
  "env_logger",
  "log",

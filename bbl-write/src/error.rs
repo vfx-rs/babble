@@ -1,4 +1,5 @@
 use bbl_clang::{cursor::USR, ty::TypeKind};
+use bbl_util::Trace;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -41,6 +42,11 @@ pub enum Error {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to generate field \"{name}\"")]
+    FailedToGenerateField {
+        name: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     #[error("String formatting error while generating")]
     FormatError(#[from] std::fmt::Error),
     #[error("Failed to generate cmake project")]
@@ -55,46 +61,11 @@ pub enum Error {
     FailedToBuildCMake { stdout: String, stderr: String },
     #[error("CMake installation failed: \n{stdout}\n\n{stderr}")]
     FailedToInstallCMake { stdout: String, stderr: String },
-    #[error("Failed to find type from USR {0}")]
-    FailedToFindTyperef(USR),
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum TypeError {
-    #[error("Could not find type ref from \"{0}\"")]
-    TypeRefNotFound(USR),
-    #[error("Unknown type \"{0:?}\"")]
-    UnknownType(TypeKind),
+    #[error("Failed to find type from USR {usr}")]
+    FailedToFindTyperef { usr: USR, source: Trace },
     #[error("Failed to get qualified name from class \"{name}\"")]
     FailedToGetQualifiedName {
         name: String,
         source: bbl_extract::error::Error,
     },
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum ArgumentError {
-    #[error("Error resolving type")]
-    TypeError(#[from] TypeError),
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum StructGenerationError {
-    #[error("Failed to generate field \"{name}\"")]
-    FailedToGenerateField {
-        name: String,
-        source: Box<dyn std::error::Error + 'static + Send + Sync>,
-    },
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum FunctionGenerationError {
-    #[error("Failed to generate function signature")]
-    FailedToGenerateSignature(TypeError),
-    #[error("Failed to generate cpp function call")]
-    FailedToGenerateCall(TypeError),
-    #[error("Failed to function argument \"{name}\"")]
-    FailedToGenerateArg { name: String, source: ArgumentError },
-    #[error("String formatting error while generating")]
-    FormatError(#[from] std::fmt::Error),
 }

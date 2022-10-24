@@ -3,6 +3,7 @@
 
 use std::fmt::{Debug, Display};
 
+use bbl_util::Trace;
 use clang_sys::*;
 
 use crate::{cursor::cursor, cursor::Cursor, string::CXStringEx};
@@ -10,7 +11,7 @@ use crate::{cursor::cursor, cursor::Cursor, string::CXStringEx};
 use super::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Type {
     inner: CXType,
 }
@@ -119,7 +120,7 @@ impl Debug for Type {
 
 pub fn to_type(cx: CXType) -> Result<Type> {
     if cx.kind == CXType_Invalid {
-        Err(Error::InvalidType(backtrace::Backtrace::new()))
+        Err(Error::InvalidType)
     } else {
         Ok(Type { inner: cx })
     }

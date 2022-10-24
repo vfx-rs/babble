@@ -6,6 +6,7 @@ use crate::{
 
 use super::cursor_kind::CursorKind;
 use super::string::CXStringEx;
+use bbl_util::Trace;
 use clang_sys::{
     clang_CXXConstructor_isConvertingConstructor, clang_CXXConstructor_isCopyConstructor,
     clang_CXXConstructor_isDefaultConstructor, clang_CXXConstructor_isMoveConstructor,
@@ -492,7 +493,7 @@ impl TryFrom<Cursor> for CurClassDecl {
             Err(Error::FailedToConvertCursorKind {
                 from: c.kind(),
                 to: CursorKind::ClassDecl,
-                backtrace: backtrace::Backtrace::new(),
+                source: Trace::new(),
             })
         }
     }
@@ -530,7 +531,7 @@ impl TryFrom<Cursor> for CurStructDecl {
             Err(Error::FailedToConvertCursorKind {
                 from: c.kind(),
                 to: CursorKind::StructDecl,
-                backtrace: backtrace::Backtrace::new(),
+                source: Trace::new(),
             })
         }
     }
@@ -564,7 +565,7 @@ impl TryFrom<Cursor> for CurClassTemplate {
             Err(Error::FailedToConvertCursorKind {
                 from: c.kind(),
                 to: CursorKind::ClassTemplate,
-                backtrace: backtrace::Backtrace::new(),
+                source: Trace::new(),
             })
         }
     }
@@ -607,7 +608,7 @@ impl TryFrom<Cursor> for CurTypedef {
             Err(Error::FailedToConvertCursorKind {
                 from: c.kind(),
                 to: CursorKind::TypedefDecl,
-                backtrace: backtrace::Backtrace::new(),
+                source: Trace::new(),
             })
         }
     }
@@ -639,7 +640,7 @@ impl TryFrom<Cursor> for CurNamespace {
             Err(Error::FailedToConvertCursorKind {
                 from: c.kind(),
                 to: CursorKind::Namespace,
-                backtrace: backtrace::Backtrace::new(),
+                source: Trace::new(),
             })
         }
     }

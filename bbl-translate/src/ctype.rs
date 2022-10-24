@@ -10,6 +10,7 @@ use bbl_extract::{
     qualtype::{QualType, TypeRef},
     templates::{TemplateArgument, TemplateParameterDecl},
 };
+use bbl_util::Trace;
 use tracing::{error, instrument};
 
 use crate::error::Error;
@@ -353,7 +354,7 @@ fn expand_template(
             }
             _ => Err(Error::InvalidTemplateArgumentKind {
                 name: parm_name.into(),
-                backtrace: Backtrace::new(),
+                source: Trace::new(),
             }),
         }
     }

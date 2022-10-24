@@ -1,243 +1,135 @@
 use backtrace::Backtrace;
 use bbl_clang::cursor::USR;
 
-#[derive(Debug)]
+use bbl_util::Trace;
+
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("Failed to translate class \"{name}\"")]
     FailedToTranslateClass {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to translate class template specialization \"{name}\"")]
     FailedToTranslateClassTemplateSpecialization {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to translate enum \"{name}\"")]
     FailedToTranslateEnum {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to translate function prototype \"{name}\"")]
     FailedToTranslateFunctionProto {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to translate function \"{name}\"")]
     TranslateFunction {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to translate return type")]
     TranslateResult {
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to translate argument \"{name}\"")]
     TranslateArgument {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to translate method \"{name}\"")]
     TranslateMethod {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to translate specialized method \"{name}\"")]
     TranslateSpecializedMethod {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to translate field \"{name}\"")]
     TranslateField {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
-    FailedToGetClassFromRef(USR),
+    #[error("Failed to get class from USR {usr}")]
+    FailedToGetClassFromRef { usr: USR, source: Trace },
+    #[error("Failed to translate type \"{name}\"")]
     FailedToTranslateType {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to create expression for argument \"{name}\"")]
     FailedToCreateArgumentExpr {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
-    ImproperPassByValue,
-    Extraction(bbl_extract::error::Error),
-    Clang(bbl_clang::error::Error),
-    Format(std::fmt::Error),
-    ClassNotFound {
-        name: String,
-        backtrace: Backtrace,
-    },
-    FunctionNotFound {
-        name: String,
-        backtrace: Backtrace,
-    },
-    RefNotFound {
-        usr: USR,
-        backtrace: Backtrace,
-    },
+    #[error("Tried to pass a type by value that could not be")]
+    ImproperPassByValue(Trace),
+    #[error("bbl-extract error")]
+    Extraction(#[from] bbl_extract::error::Error),
+    #[error("bbl-clang error")]
+    Clang(#[from] bbl_clang::error::Error),
+    #[error("formatting error")]
+    Format(#[from] std::fmt::Error),
+    #[error("Could not find class \"{name}\"")]
+    ClassNotFound { name: String, source: Trace },
+    #[error("Could not find function \"{name}\"")]
+    FunctionNotFound { name: String, source: Trace },
+    #[error("Could not find ref \"{usr}\"")]
+    RefNotFound { usr: USR, source: Trace },
+    #[error("Failed to format field \"{name}\"")]
     FailedToFormatField {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to format struct \"{name}\"")]
     FailedToFormatStruct {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to format function \"{name}\"")]
     FailedToFormatFunction {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to cast argument \"{name}\"")]
     FailedToCastArgument {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to format argument \"{name}\"")]
     FailedToFormatArgument {
         name: String,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to get qualified name for {usr}")]
     FailedToGetQualifiedName {
         usr: USR,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to get bind kind for {usr}")]
     FailedToGetBindKind {
         usr: USR,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
+    #[error("Failed to translate typedef {usr}")]
     FailedToTranslateTypedef {
         usr: USR,
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
-    TemplateParmNotFound {
-        name: String,
-        backtrace: Backtrace,
-    },
-    TemplateArgNotFound {
-        name: String,
-        backtrace: Backtrace,
-    },
-    InvalidTemplateArgumentKind {
-        name: String,
-        backtrace: Backtrace,
-    },
-    Unsupported {
-        description: String,
-    },
-    TriedToTranslateTemplateParmeter {
-        name: String,
-    },
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::FailedToTranslateClass { name, .. } => {
-                write!(f, "Failed to translate class {name}")
-            }
-            Error::FailedToTranslateClassTemplateSpecialization { name, .. } => {
-                write!(
-                    f,
-                    "Failed to translate class template specialization {name}"
-                )
-            }
-            Error::FailedToTranslateEnum { name, .. } => {
-                write!(f, "Failed to translate enum {name}")
-            }
-            Error::FailedToTranslateFunctionProto { name, .. } => {
-                write!(f, "Failed to translate function proto {name}")
-            }
-            Error::TranslateFunction { name, .. } => {
-                write!(f, "Failed to translate function {name}")
-            }
-            Error::TranslateResult { .. } => {
-                write!(f, "Failed to translate result")
-            }
-            Error::TranslateArgument { name, .. } => {
-                write!(f, "Failed to translate argument {name}")
-            }
-            Error::TranslateMethod { name, .. } => {
-                write!(f, "Failed to translate method {name}")
-            }
-            Error::TranslateSpecializedMethod { name, .. } => {
-                write!(f, "Failed to translate specialized method {name}")
-            }
-            Error::TranslateField { name, .. } => write!(f, "Failed to translate field {name}"),
-            Error::FailedToGetClassFromRef(usr) => {
-                write!(f, "Failed to get a class with USR {usr}")
-            }
-            Error::FailedToTranslateType { name, .. } => {
-                write!(f, "Failed to translate type {name}")
-            }
-            Error::FailedToCreateArgumentExpr { name, .. } => {
-                write!(f, "Failed to create expression for argument {name}")
-            }
-            Error::ImproperPassByValue => {
-                write!(f, "Tried to pass a non-valuetype by value")
-            }
-            Error::Extraction(_) => write!(f, "Extraction error"),
-            Error::Clang(_) => write!(f, "Clang error"),
-            Error::Format(_) => write!(f, "Format error"),
-            Error::ClassNotFound { name, .. } => write!(f, "Could not find class {name}"),
-            Error::FunctionNotFound { name, .. } => write!(f, "Could not find function {name}"),
-            Error::RefNotFound { usr, .. } => write!(f, "Could not find ref with usr {usr}"),
-            Error::FailedToFormatField { name, .. } => write!(f, "Failed to format field {name}"),
-            Error::FailedToFormatStruct { name, .. } => write!(f, "Failed to format struct {name}"),
-            Error::FailedToFormatFunction { name, .. } => {
-                write!(f, "Failed to format function {name}")
-            }
-            Error::FailedToFormatArgument { name, .. } => {
-                write!(f, "Failed to format argument {name}")
-            }
-            Error::FailedToCastArgument { name, .. } => {
-                write!(f, "Failed to cast argument {name}")
-            }
-            Error::FailedToGetQualifiedName { usr, .. } => {
-                write!(f, "Failed to get qualified name from usr {usr}")
-            }
-            Error::FailedToGetBindKind { usr, .. } => {
-                write!(f, "Failed to get bind kind from usr {usr}")
-            }
-            Error::FailedToTranslateTypedef { usr, .. } => {
-                write!(f, "Failed to translate typedef from usr {usr}")
-            }
-            Error::TemplateParmNotFound { name, .. } => {
-                write!(f, "Could not find template parameter {name}")
-            }
-            Error::TemplateArgNotFound { name, .. } => {
-                write!(f, "Could not find template argument {name}")
-            }
-            Error::InvalidTemplateArgumentKind { name, .. } => {
-                write!(f, "Invalid template argument kind {name}")
-            }
-            Error::Unsupported { description } => {
-                write!(f, "Unsupported: {description}")
-            }
-            Error::TriedToTranslateTemplateParmeter { name } => {
-                write!(f, "Tried to translate a template parameter: {name}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use Error::*;
-        match self {
-            TranslateFunction { source, .. }
-            | TranslateMethod { source, .. }
-            | TranslateSpecializedMethod { source, .. }
-            | TranslateArgument { source, .. }
-            | TranslateField { source, .. }
-            | FailedToTranslateType { source, .. }
-            | FailedToCreateArgumentExpr { source, .. }
-            | FailedToFormatField { source, .. }
-            | FailedToFormatArgument { source, .. }
-            | FailedToFormatStruct { source, .. }
-            | FailedToFormatFunction { source, .. }
-            | FailedToGetQualifiedName { source, .. }
-            | FailedToGetBindKind { source, .. }
-            | FailedToCastArgument { source, .. }
-            | FailedToTranslateClass { source, .. }
-            | FailedToTranslateClassTemplateSpecialization { source, .. }
-            | FailedToTranslateEnum { source, .. }
-            | FailedToTranslateFunctionProto { source, .. }
-            | FailedToTranslateTypedef { source, .. } => Some(source.as_ref()),
-            Extraction(e) => Some(e),
-            Clang(e) => Some(e),
-            _ => None,
-        }
-    }
+    #[error("Could not find template parameter \"{name}\"")]
+    TemplateParmNotFound { name: String, source: Trace },
+    #[error("Could not find template argument \"{name}\"")]
+    TemplateArgNotFound { name: String, source: Trace },
+    #[error("Invalid kind on template argument \"{name}\"")]
+    InvalidTemplateArgumentKind { name: String, source: Trace },
+    #[error("Unsupported feature: \"{description}\"")]
+    Unsupported { description: String, source: Trace },
+    #[error("Tried to translate an unspecialized template parameter \"{name}\"")]
+    TriedToTranslateTemplateParmeter { name: String, source: Trace },
 }
 
 impl Error {
@@ -257,24 +149,6 @@ impl Error {
         } else {
             false
         }
-    }
-}
-
-impl From<bbl_extract::error::Error> for Error {
-    fn from(e: bbl_extract::error::Error) -> Self {
-        Error::Extraction(e)
-    }
-}
-
-impl From<bbl_clang::error::Error> for Error {
-    fn from(e: bbl_clang::error::Error) -> Self {
-        Error::Clang(e)
-    }
-}
-
-impl From<std::fmt::Error> for Error {
-    fn from(e: std::fmt::Error) -> Self {
-        Error::Format(e)
     }
 }
 

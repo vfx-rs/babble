@@ -1,63 +1,63 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_snake_case)]
 
+use crate::{compilation_database::CompilationDatabaseError, cursor_kind::CursorKind};
+use bbl_util::Trace;
 use clang_sys::{CXErrorCode, CXError_Success};
 
-use crate::{compilation_database::CompilationDatabaseError, cursor_kind::CursorKind};
-
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("libclang returned an invalid cursor")]
     InvalidCursor,
+    #[error("Could not convert cursor from \"{from}\" to \"{to}\"")]
     FailedToConvertCursorKind {
         from: CursorKind,
         to: CursorKind,
-        backtrace: backtrace::Backtrace,
+        source: Trace,
     },
-    InvalidType(backtrace::Backtrace),
+    #[error("libclang returned an invalid type\n")]
+    InvalidType,
+    #[error("Invalid template argument kind")]
     InvalidTemplateArgumentKind,
+    #[error("Invalid access specifier")]
     InvalidAccessSpecifier,
+    #[error("Invalid exception specification kind")]
     InvalidExceptionSpecificationKind,
+    #[error("Type unexposed")]
     TypeUnexposed,
+    #[error("libclang failure")]
     Failure,
+    #[error("libclang crashed")]
     Crashed,
+    #[error("libclang invalid arguments")]
     InvalidArguments,
+    #[error("libclang AST read error")]
     ASTReadError,
-    NulError(std::ffi::NulError),
+    #[error("Null bytes in C string")]
+    NulError(#[from] std::ffi::NulError),
+    #[error("Invalid path")]
     InvalidPath,
-    IoError(std::io::Error),
+    #[error("I/O Error")]
+    IoError(#[from] std::io::Error),
+    #[error("Parsing error")]
     ParseError,
+    #[error("Could not find clang binary")]
     ClangBinaryNotFound,
+    #[error("Failed to run clang process")]
     FailedToRunClang(std::io::Error),
+    #[error("Failed to run cmake process")]
     FailedToRunCMake(std::io::Error),
-    NonUTF8Output(std::string::FromUtf8Error),
+    #[error("Tried to create a String from invalid UTF-8")]
+    NonUTF8Output(#[from] std::string::FromUtf8Error),
+    #[error("Failed to parse process output")]
     FailedToParseOutput(String),
-    CMakeError {
-        stdout: String,
-        stderr: String,
-    },
-    CompilationDatabaseError(CompilationDatabaseError),
+    #[error("CMake failed:\n{stdout}\n{stderr}")]
+    CMakeError { stdout: String, stderr: String },
+    #[error("Error loading compilation database")]
+    CompilationDatabaseError(#[source] CompilationDatabaseError),
+    #[error("The given type is not a function where a function is expected")]
     TypeIsNotFunction,
 }
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl From<std::ffi::NulError> for Error {
-    fn from(e: std::ffi::NulError) -> Self {
-        Error::NulError(e)
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Error::IoError(e)
-    }
-}
-
-impl std::error::Error for Error {}
 
 impl From<CompilationDatabaseError> for Error {
     fn from(e: CompilationDatabaseError) -> Self {

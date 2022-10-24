@@ -10,6 +10,7 @@ use bbl_extract::{
     qualtype::{QualType, TypeRef},
     templates::{TemplateArgument, TemplateParameterDecl},
 };
+use bbl_util::Trace;
 use hashbrown::HashSet;
 use tracing::{error, instrument, trace};
 
@@ -340,7 +341,7 @@ pub fn translate_function(
             TemplateArgument::Integral(n) => Ok(Expr::Token(format!("{n}"))),
             _ => Err(Error::InvalidTemplateArgumentKind {
                 name: format!("{arg:?}"),
-                backtrace: Backtrace::new(),
+                source: Trace::new(),
             }),
         })
         .collect::<Result<Vec<Expr>>>()?;
@@ -776,7 +777,7 @@ pub fn translate_method(
             TemplateArgument::Integral(n) => Ok(Expr::Token(format!("{n}"))),
             _ => Err(Error::InvalidTemplateArgumentKind {
                 name: format!("{arg:?}"),
-                backtrace: Backtrace::new(),
+                source: Trace::new(),
             }),
         })
         .collect::<Result<Vec<Expr>>>()?;
@@ -1408,14 +1409,18 @@ fn get_cpp_typename(qt: &CQualType, ast: &AST) -> Result<String> {
             } else {
                 Err(Error::RefNotFound {
                     usr: *usr,
-                    backtrace: Backtrace::new(),
+                    source: Trace::new(),
                 })
             }
         }
         CTypeRef::FunctionProto { .. } => Err(Error::Unsupported {
             description: format!("Cannot cast FunctionProto {qt:?}"),
+            source: Trace::new(),
         }),
-        CTypeRef::Template(t) => Err(Error::TriedToTranslateTemplateParmeter { name: t.clone() }),
+        CTypeRef::Template(t) => Err(Error::TriedToTranslateTemplateParmeter {
+            name: t.clone(),
+            source: Trace::new(),
+        }),
     }?;
 
     if qt.is_const() {
@@ -1445,7 +1450,7 @@ fn get_bind_kind(usr: USR, ast: &AST) -> Result<ClassBindKind> {
     } else {
         Err(Error::RefNotFound {
             usr,
-            backtrace: Backtrace::new(),
+            source: Trace::new(),
         })
     }
 }
