@@ -506,6 +506,65 @@ mod tests {
 
     /*
     #[test]
+    fn extract_inherited_template() -> bbl_util::Result<()> {
+        bbl_util::run_test(|| {
+            let ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                    #include <string>
+
+                    namespace detail {
+                        template <typename Key, typename Value>
+                        class map {
+                        public:
+                            typedef Key key_type;
+                            typedef Value value_type;
+
+                            void insert(key_type k, value_type v);
+                            const value_type& at(const key_type& k);
+
+                        };
+                    }
+
+                    namespace Test {
+                        class Class : private detail::map<std::string, int> {
+                        public:
+                            using map::key_type;
+                            using map::value_type;
+
+                            using map::map;
+                            using map::insert;
+                            using map::at;
+
+                            void erase(const key_type& key);
+                        };
+                    }
+                "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::new(vec![r#"^Test::.*$"#.to_string()]),
+                &OverrideList::default(),
+            )?;
+
+            let ast = ast.monomorphize()?;
+
+            println!("{ast:?}");
+
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    "#
+                ),
+            )
+        })
+    }
+    */
+
+    /*
+    #[test]
     fn extract_enable_if() -> bbl_util::Result<()> {
         bbl_util::run_test(|| {
             let ast = parse_string_and_extract_ast(
