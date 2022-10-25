@@ -5,7 +5,7 @@ use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 use bbl_clang::cursor::{CurClassTemplate, CurStructDecl, CurTypedef, Cursor};
 use bbl_clang::template_argument::TemplateArgumentKind;
-use bbl_clang::ty::Type;
+use bbl_clang::ty::{Type, TypeKind};
 use bbl_clang::{cursor::USR, cursor_kind::CursorKind, translation_unit::TranslationUnit};
 use tracing::{debug, error, instrument, trace, warn};
 
@@ -1094,6 +1094,41 @@ pub fn dump(
         }
     }
 
+    for i in 0..c.num_overloaded_decls() {
+        let cr = c.get_overloaded_decl(i).unwrap();
+        if already_visited.contains(&cr.usr()) {
+            let template_args = get_template_args(c);
+
+            println!(
+                "{}",
+                format!(
+                    "{indent}↪o {}: {} {} {} 🗸",
+                    cr.kind(),
+                    cr.display_name(),
+                    cr.usr(),
+                    template_args
+                )
+                .color(Color::BrightBlack)
+            );
+        } else {
+            if !cr.usr().is_empty() {
+                already_visited.push(cr.usr());
+            }
+            if !skip_kinds.contains(&cr.kind()) {
+                print!("{indent}↪o ");
+                dump(
+                    cr,
+                    depth + 1,
+                    max_depth,
+                    already_visited,
+                    tu,
+                    skip_kinds,
+                    Some(Color::Cyan),
+                );
+            }
+        }
+    }
+
     if let Ok(cr) = c.specialized_template() {
         if cr != c {
             if already_visited.contains(&cr.usr()) {
@@ -1269,6 +1304,37 @@ pub fn dump_type(
                 Some(color_s),
             );
         }
+    }
+
+    if matches!(
+        ty.kind(),
+        TypeKind::Pointer | TypeKind::LValueReference | TypeKind::RValueReference
+    ) {
+        let pointee = ty.pointee_type().unwrap();
+        print!("{}", format!("{indent}    ").color(Color::BrightBlack));
+        dump_type(
+            pointee,
+            depth + 1,
+            max_depth,
+            already_visited,
+            tu,
+            skip_kinds,
+            Some(Color::BrightBlack),
+        );
+    }
+
+    if matches!(ty.kind(), TypeKind::Elaborated) {
+        let pointee = ty.named_type().unwrap();
+        print!("{}", format!("{indent}    ").color(Color::BrightBlack));
+        dump_type(
+            pointee,
+            depth + 1,
+            max_depth,
+            already_visited,
+            tu,
+            skip_kinds,
+            Some(Color::BrightBlack),
+        );
     }
 }
 
