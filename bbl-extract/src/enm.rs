@@ -50,6 +50,10 @@ impl Enum {
     pub fn namespaces(&self) -> &[USR] {
         &self.namespaces
     }
+
+    pub fn ty(&self) -> Type {
+        self.ty
+    }
 }
 
 pub fn extract_enum(
