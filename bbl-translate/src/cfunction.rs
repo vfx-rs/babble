@@ -80,6 +80,7 @@ pub struct MethodInfo {
 }
 
 pub struct CFunction {
+    usr: USR,
     /// The name of the function with internal namespace baked in, e.g. Imath_3_1_V3f_dot
     pub name_internal: String,
     /// The name of the function that will be used for a public #define, e.g. Imath_V3f_dot
@@ -194,6 +195,10 @@ impl CFunction {
                 )
             }
         }
+    }
+
+    pub fn usr(&self) -> USR {
+        self.usr
     }
 }
 
@@ -684,6 +689,7 @@ pub fn translate_function(
     functions.insert(
         function.usr().into(),
         CFunction {
+            usr: function.usr(),
             name_internal: fn_name_private,
             name_external: fn_name_public,
             // force an integer return for the error code
@@ -1327,6 +1333,7 @@ pub fn translate_method(
         get_c_names(&fn_name, st_prefix_public, st_prefix_private, used_names);
 
     Ok(CFunction {
+        usr: method.usr(),
         name_internal: fn_name_private,
         name_external: fn_name_public,
         result: CQualType::int("int", false),

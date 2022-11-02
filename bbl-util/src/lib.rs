@@ -167,7 +167,7 @@ pub fn compare(left: &str, right: &str) -> Result<(), Error> {
     }
 }
 
-pub(crate) fn source_iter(
+pub fn source_iter(
     error: &(impl std::error::Error + ?Sized),
 ) -> impl Iterator<Item = &(dyn std::error::Error + 'static)> {
     SourceIter {
@@ -175,7 +175,7 @@ pub(crate) fn source_iter(
     }
 }
 
-struct SourceIter<'a> {
+pub struct SourceIter<'a> {
     current: Option<&'a (dyn std::error::Error + 'static)>,
 }
 

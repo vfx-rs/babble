@@ -38,6 +38,14 @@ pub struct CAST {
     pub header_string: String,
 }
 
+pub enum Entity<'a> {
+    Struct(&'a CStruct),
+    Typedef(&'a CTypedef),
+    Function(&'a CFunction),
+    Enum(&'a CEnum),
+    FunctionPointer(&'a CFunctionProto),
+}
+
 impl Debug for CAST {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for st in self.structs.iter() {
@@ -89,6 +97,23 @@ impl CAST {
         self.functions.get(&usr.into())
     }
 
+    #[allow(clippy::manual_map)]
+    pub fn get_entity(&self, usr: USR) -> Option<Entity> {
+        if let Some(st) = self.get_struct(usr) {
+            Some(Entity::Struct(st))
+        } else if let Some(td) = self.get_typedef(usr) {
+            Some(Entity::Typedef(td))
+        } else if let Some(fun) = self.get_function(usr) {
+            Some(Entity::Function(fun))
+        } else if let Some(enm) = self.get_enum(usr) {
+            Some(Entity::Enum(enm))
+        } else if let Some(proto) = self.get_function_proto(usr) {
+            Some(Entity::FunctionPointer(proto))
+        } else {
+            None
+        }
+    }
+
     pub fn get_typeref_name_external(&self, usr: USR) -> Option<&str> {
         if let Some(st) = self.structs.get(usr.as_ref()) {
             Some(&st.name_external)
@@ -125,9 +150,9 @@ pub fn get_c_names(
         i += 1;
     }
     used_names.insert(c_name_private.clone());
-    if i > 1 {
-        warn!("Renaming {cpp_name} to {c_name_private}");
-    }
+    // if i > 1 {
+    //     warn!("Renaming {cpp_name} to {c_name_private}");
+    // }
 
     // if the private and public prefixes are the same then we don't want to uniquify the public name, just use the
     // private name (which will itself already be unique by the block above)
@@ -140,9 +165,9 @@ pub fn get_c_names(
             i += 1;
         }
         used_names.insert(c_name_public.clone());
-        if i > 1 {
-            warn!("Renaming {cpp_name} to {c_name_public}");
-        }
+        // if i > 1 {
+        //     warn!("Renaming {cpp_name} to {c_name_public}");
+        // }
     }
 
     (c_name_public, c_name_private)

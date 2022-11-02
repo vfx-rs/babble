@@ -63,6 +63,7 @@ pub fn parse_file_and_extract_ast<
     allow_list: &AllowList,
     class_overrides: &OverrideList,
     header_str: &str,
+    stop_on_error: bool,
 ) -> Result<AST> {
     let index = Index::new();
     let tu = index.create_translation_unit(path, cli_args)?;
@@ -80,8 +81,15 @@ pub fn parse_file_and_extract_ast<
 
     let cur = tu.get_cursor()?;
 
-    let ast =
-        extract_ast_from_namespace(namespace, cur, &tu, allow_list, class_overrides, header_str)?;
+    let ast = extract_ast_from_namespace(
+        namespace,
+        cur,
+        &tu,
+        allow_list,
+        class_overrides,
+        header_str,
+        stop_on_error,
+    )?;
 
     Ok(ast)
 }
@@ -107,6 +115,7 @@ pub fn parse_string_and_extract_ast<
     namespace: Option<&str>,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    stop_on_error: bool,
 ) -> Result<AST> {
     let path = virtual_file::write_temp_file(contents.as_ref())?;
     parse_file_and_extract_ast(
@@ -117,6 +126,7 @@ pub fn parse_string_and_extract_ast<
         allow_list,
         class_overrides,
         "",
+        stop_on_error,
     )
 }
 

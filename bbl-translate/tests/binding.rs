@@ -35,6 +35,7 @@ public:
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let class = ast.find_class("Class")?;
@@ -82,6 +83,7 @@ public:
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let class = ast.find_class("B")?;
@@ -180,6 +182,7 @@ public:
             Some("Imath_3_1"),
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let namespace = ast.find_namespace("Imath_3_1")?;
@@ -219,6 +222,7 @@ public:
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let class = ast.find_class("Class")?;
@@ -253,6 +257,7 @@ public:
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let class = ast.find_class("Class")?;
@@ -290,6 +295,7 @@ public:
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let class = ast.find_class("Class")?;
@@ -321,6 +327,7 @@ int basic_function(int&& a, float*);
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let ast = ast.monomorphize()?;
@@ -349,6 +356,7 @@ T function_template(T&& a, float*);
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         println!("{ast:?}");
@@ -388,6 +396,7 @@ fn translate_method_template() -> bbl_util::Result<()> {
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let class = ast.find_class("Class")?;
@@ -438,6 +447,7 @@ public:
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let class = ast.find_class("Class")?;
@@ -493,6 +503,7 @@ typedef Class<short> ClassShort;
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let class = ast.find_class("Test::Class")?;
@@ -550,6 +561,7 @@ public:
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let class = ast.find_class("Class")?;
@@ -610,6 +622,7 @@ public:
         &AllowList::default(),
         &OverrideList::default(),
         "",
+        true,
     )?;
     println!("{ast:?}");
 
@@ -635,6 +648,7 @@ public:
             Some("Test"),
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let ast = ast.monomorphize()?;
@@ -696,6 +710,7 @@ fn translate_enum() -> Result<(), Error> {
         None,
         &AllowList::default(),
         &OverrideList::default(),
+        true,
     )?;
 
     let ns = ast.find_namespace("Test_1_0")?;
@@ -741,6 +756,7 @@ fn translate_vector() -> bbl_util::Result<()> {
             None,
             &AllowList::new(vec!["^Test_1_0".to_string()]),
             &OverrideList::default(),
+            true,
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -801,6 +817,7 @@ fn translate_unique_ptr() -> bbl_util::Result<()> {
             None,
             &AllowList::new(vec!["^Test_1_0".to_string()]),
             &OverrideList::default(),
+            true,
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -855,6 +872,7 @@ fn translate_std_function() -> Result<(), bbl_util::Error> {
             None,
             &AllowList::new(vec!["^Test_1_0".to_string()]),
             &OverrideList::default(),
+            true,
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -906,6 +924,7 @@ fn translate_nested_template() -> bbl_util::Result<()> {
             None,
             &AllowList::new(vec![r#"^Test::.*$"#.to_string()]),
             &OverrideList::default(),
+            true,
         )?;
 
         let ast = ast.monomorphize()?;
@@ -953,6 +972,7 @@ fn translate_version_inner_namespace() -> bbl_util::Result<()> {
             None,
             &AllowList::new(vec![r#"^Test::.*$"#.to_string()]),
             &OverrideList::default(),
+            true,
         )?;
 
         // renaming the namespace to the empty string will cause it to be removed entirely

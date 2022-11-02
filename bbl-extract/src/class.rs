@@ -4,7 +4,7 @@
 use bbl_clang::access_specifier::AccessSpecifier;
 use bbl_clang::cursor::{CurClassDecl, Cursor, USR};
 use bbl_clang::translation_unit::TranslationUnit;
-use bbl_util::Trace;
+use bbl_util::{source_iter, Trace};
 use log::*;
 use regex::Regex;
 use std::fmt::{Debug, Display};
@@ -460,6 +460,10 @@ pub fn extract_class_decl(
     overrides: &OverrideList,
     // Allow parents to override the namespaces of the children, e.g. UsingDeclarations
     namespace_override: Option<&[USR]>,
+    // When encountering a class template specialization, specialize it immediately rather than waiting for the later
+    // monomorphize() call
+    specialize_immediately: bool,
+    stop_on_error: bool,
 ) -> Result<USR> {
     let namespaces = if let Some(ns) = namespace_override {
         ns.to_vec()
@@ -472,15 +476,48 @@ pub fn extract_class_decl(
 
     // Check for std:: types we're going to extract manually here
     if class_decl.display_name().starts_with("basic_string<") {
-        debug!("Extracting basic_string {class_decl:?}");
+        debug!("Manually extracting basic_string {class_decl:?}");
         return create_std_string(class_decl.canonical()?, ast, tu, already_visited);
     } else if class_decl.display_name().starts_with("vector<") {
-        return create_std_vector(class_decl, ast, already_visited, tu, allow_list, overrides);
+        debug!("Manually extracting vector {class_decl:?}");
+        return create_std_vector(
+            class_decl,
+            ast,
+            already_visited,
+            tu,
+            allow_list,
+            overrides,
+            specialize_immediately,
+            stop_on_error,
+        );
     } else if class_decl.display_name().starts_with("unique_ptr<") {
-        return create_std_unique_ptr(class_decl, ast, already_visited, tu, allow_list, overrides);
+        debug!("manually extracting std::unique_ptr {class_decl:?}");
+        return create_std_unique_ptr(
+            class_decl,
+            ast,
+            already_visited,
+            tu,
+            allow_list,
+            overrides,
+            specialize_immediately,
+            stop_on_error,
+        );
     } else if class_decl.display_name().starts_with("map<") {
-        debug!("manually extracting std::map {class_decl:?}");
-        return create_std_map(class_decl, ast, already_visited, tu, allow_list, overrides);
+        if class_decl.kind() == CursorKind::ClassDecl {
+            debug!("manually extracting std::map {class_decl:?}");
+            return create_std_map(
+                class_decl,
+                ast,
+                already_visited,
+                tu,
+                allow_list,
+                overrides,
+                specialize_immediately,
+                stop_on_error,
+            );
+        } else {
+            debug!("Found map {class_decl:?}");
+        }
     } else if class_decl.display_name().starts_with("function<") {
         unreachable!("std::function should have been extracted in type extraction");
         // return create_std_function(class_decl, ast, already_visited, tu, allow_list, overrides);
@@ -509,6 +546,8 @@ pub fn extract_class_decl(
             tu,
             allow_list,
             overrides,
+            specialize_immediately,
+            stop_on_error,
         )
         .map_err(|e| Error::FailedToExtractClassTemplateSpecialization {
             name: class_decl.usr().to_string(),
@@ -532,6 +571,7 @@ pub fn extract_class_decl(
         overrides,
         None,
         namespace_override,
+        stop_on_error,
     )
     .map_err(|e| Error::FailedToExtractClass {
         usr: class_decl.usr(),
@@ -561,6 +601,7 @@ fn extract_class_decl_inner(
     class_overrides: &OverrideList,
     qname_override: Option<&str>,
     namespace_override: Option<&[USR]>,
+    stop_on_error: bool,
 ) -> Result<ClassDecl> {
     let namespaces = if let Some(ns) = namespace_override {
         ns.to_vec()
@@ -583,7 +624,7 @@ fn extract_class_decl_inner(
 
     let class_decl_qualified_name = get_qualified_name(&class_name, &namespaces, ast)?;
 
-    println!(
+    debug!(
         "extract_class_decl({}) {} {}",
         class_decl.usr(),
         class_decl_qualified_name,
@@ -598,6 +639,7 @@ fn extract_class_decl_inner(
         if let Ok(c_base_decl) = c_base.referenced() {
             match c_base_decl.kind() {
                 CursorKind::ClassDecl | CursorKind::StructDecl | CursorKind::ClassTemplate => {
+                    /*
                     // we pass a class name override through when extracting the base class members. This will turn
                     // Base::method() into Class::method(). Thus the allow list will work as expected, and still allow
                     // us to avoid adding the Base class to the AST while lofting up its members into Class
@@ -632,13 +674,78 @@ fn extract_class_decl_inner(
                             }
                         }
                     }
+                    */
+
+                    let c_base_decl = c_base_decl.canonical()?;
+                    let base_decl_namespaces =
+                        get_namespaces_for_decl(c_base_decl, tu, ast, already_visited)?;
+                    let base_decl_qualified_name = get_qualified_name(
+                        &c_base_decl.display_name(),
+                        &base_decl_namespaces,
+                        ast,
+                    )?;
+
+                    // if !allow_list.allows(&base_decl_qualified_name) {
+                    //     continue;
+                    // }
+
+                    debug!("Extracting base {c_base_decl:?}");
+                    let u_base = match extract_class_decl(
+                        c_base_decl.try_into()?,
+                        tu,
+                        ast,
+                        already_visited,
+                        allow_list,
+                        class_overrides,
+                        None,
+                        true,
+                        stop_on_error,
+                    )
+                    .map_err(|e| {
+                        // dump_cursor(c_base_decl, tu);
+                        Error::FailedToExtractBaseClass {
+                            base: c_base_decl.usr(),
+                            usr: class_decl.usr(),
+                            source: Box::new(e),
+                        }
+                    }) {
+                        Ok(u) => u,
+                        Err(e) if stop_on_error => return Err(e),
+                        Err(e) => {
+                            warn!("Failed to extract base class {c_base_decl:?} of class {class_decl:?}");
+                            for e in source_iter(&e) {
+                                warn!("    {e}");
+                            }
+                            continue;
+                        }
+                    };
+
+                    let access = c_base.cxx_access_specifier()?;
+
+                    let base = ast.get_class(u_base).expect(&format!(
+                        "Failed to get class that should have just been inserted: {u_base:?}"
+                    ));
+
+                    for method in &base.methods {
+                        if method.is_any_constructor() {
+                            // we store constructors regardless of their access since we want to know about private constructors
+                            // in order to not generate implicit versions for them
+                            base_constructors.push(method.clone());
+                        } else if !method.is_destructor() {
+                            if access == AccessSpecifier::Public {
+                                base_methods.push(method.clone());
+                            } else {
+                                base_private_methods.push(method.clone())
+                            }
+                        }
+                    }
                 }
                 CursorKind::TypeAliasTemplateDecl => {
-                    dump_cursor_until(class_decl.into(), tu, 2);
+                    // dump_cursor_until(class_decl.into(), tu, 2);
                     unimplemented!("cannot handle base of TypeAliasTemplateDecl {c_base_decl:?}");
                 }
                 _ => {
-                    dump_cursor(class_decl.into(), tu);
+                    // dump_cursor(class_decl.into(), tu);
                     unimplemented!("cannot handle base {c_base_decl:?}");
                 }
             }
@@ -715,18 +822,18 @@ fn extract_class_decl_inner(
                             allow_list,
                             class_overrides,
                             &class_name,
+                            stop_on_error,
                         ) {
                             Ok(method) => methods.push(method),
-                            Err(e) => {
-                                if e.is_unsupported() {
-                                    error!("Could not extract method {member_qualified_name} which will be ignored due to unsupported feature: {e:?}");
-                                    continue;
-                                } else {
-                                    return Err(Error::FailedToExtractMethod {
-                                        name: member.display_name(),
-                                        source: Box::new(e),
-                                    });
+                            Err(e) if e.is_unsupported() || !stop_on_error => {
+                                warn!("Could not extract method {member_qualified_name} which will be ignored");
+                                for e in source_iter(&e) {
+                                    warn!("    {e}");
                                 }
+                                continue;
+                            }
+                            Err(e) => {
+                                return Err(e);
                             }
                         }
                     }
@@ -755,6 +862,7 @@ fn extract_class_decl_inner(
                         tu,
                         allow_list,
                         class_overrides,
+                        stop_on_error,
                     )
                     .map_err(|e| Error::FailedToExtractField {
                         class: class_name.clone(),
@@ -904,6 +1012,7 @@ pub fn extract_field(
     tu: &TranslationUnit,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    stop_on_error: bool,
 ) -> Result<Field> {
     let template_parameters = class_template_parameters
         .iter()
@@ -919,6 +1028,7 @@ pub fn extract_field(
         tu,
         allow_list,
         class_overrides,
+        stop_on_error,
     )?;
 
     Ok(Field {
@@ -1009,6 +1119,7 @@ mod tests {
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         println!("{ast:?}");
@@ -1050,6 +1161,7 @@ mod tests {
                 None,
                 &AllowList::default(),
                 &OverrideList::default(),
+                true,
             )?;
 
             println!("{ast:?}");
@@ -1091,6 +1203,7 @@ mod tests {
                 None,
                 &AllowList::default(),
                 &OverrideList::default(),
+                true,
             )?;
 
             println!("{ast:?}");
@@ -1144,8 +1257,12 @@ mod tests {
                 &cli_args()?,
                 true,
                 None,
-                &AllowList::new(vec!["^Class$".to_string(), "^Class.*$".to_string()]),
+                &AllowList::new(vec![
+                    "^Class.*$".to_string(),
+                    "^detail::Base.*$".to_string(),
+                ]),
                 &OverrideList::default(),
+                true,
             )?;
 
             println!("{ast:?}");
@@ -1156,6 +1273,13 @@ mod tests {
                     Namespace c:@N@detail detail None
                     Namespace c:@N@detail@S@Base Base None
                     Namespace c:@S@Class Class None
+                    ClassDecl c:@N@detail@S@Base Base rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[c:@N@detail]
+                    Field b: float
+                    Method DefaultConstructor deleted=true const=false virtual=false pure_virtual=false specializations=[] Function c:@N@detail@S@Base@F@Base# Base rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@detail, c:@N@detail@S@Base]
+                    Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@N@detail@S@Base@F@Base#I#f# Base rename=Some("ctor") ignore=false return=void args=[a: int, b: float] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@detail, c:@N@detail@S@Base]
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@N@detail@S@Base@F@base_do_thing# base_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@detail, c:@N@detail@S@Base]
+                    Method Method deleted=false const=false virtual=true pure_virtual=false specializations=[] Function c:@N@detail@S@Base@F@do_thing# do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@detail, c:@N@detail@S@Base]
+
                     ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor ] template_parameters=[] specializations=[] namespaces=[]
                     Field c: float
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@derived_do_thing# derived_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
@@ -1203,6 +1327,7 @@ mod tests {
                 None,
                 &AllowList::default(),
                 &OverrideList::default(),
+                true,
             )?;
 
             println!("{ast:?}");

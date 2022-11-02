@@ -668,6 +668,7 @@ pub fn extract_argument(
     tu: &TranslationUnit,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    stop_on_error: bool,
 ) -> Result<Argument> {
     trace!("extracting arg {c_arg:?}");
 
@@ -682,6 +683,7 @@ pub fn extract_argument(
         tu,
         allow_list,
         class_overrides,
+        stop_on_error,
     )?;
 
     Ok(Argument {
@@ -699,6 +701,7 @@ pub fn extract_function(
     ast: &mut AST,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    stop_on_error: bool,
 ) -> Result<Function> {
     let c_function = c_function.canonical()?;
 
@@ -768,6 +771,7 @@ pub fn extract_function(
         tu,
         allow_list,
         class_overrides,
+        stop_on_error,
     )
     .map_err(|e| Error::FailedToExtractResult {
         name: format!("{:?}", ty_result),
@@ -794,6 +798,7 @@ pub fn extract_function(
                     tu,
                     allow_list,
                     class_overrides,
+                    stop_on_error,
                 )
                 .map_err(|e| Error::FailedToExtractArgument {
                     name: c_arg.display_name(),
@@ -862,6 +867,7 @@ pub fn extract_method(
     allow_list: &AllowList,
     class_overrides: &OverrideList,
     class_name: &str,
+    stop_on_error: bool,
 ) -> Result<Method> {
     let c_method = c_method.canonical()?;
 
@@ -906,6 +912,7 @@ pub fn extract_method(
             ast,
             allow_list,
             class_overrides,
+            stop_on_error,
         )
         .map_err(|e| Error::FailedToExtractMethod {
             name: c_method.display_name(),
@@ -1027,6 +1034,7 @@ mod tests {
                 None,
                 &AllowList::default(),
                 &OverrideList::default(),
+                true,
             )?;
 
             println!("{ast:?}");
@@ -1073,6 +1081,7 @@ mod tests {
                 None,
                 &AllowList::default(),
                 &OverrideList::default(),
+                true,
             )?;
 
             println!("{ast:?}");

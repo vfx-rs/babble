@@ -55,6 +55,7 @@ pub fn extract_typedef_decl<'a>(
     allow_list: &AllowList,
     class_overrides: &OverrideList,
     extra_template_parameters: &[String],
+    stop_on_error: bool,
 ) -> Result<USR> {
     let usr = c_typedef.usr();
     if already_visited.contains(&usr) {
@@ -75,6 +76,7 @@ pub fn extract_typedef_decl<'a>(
         tu,
         allow_list,
         class_overrides,
+        stop_on_error,
     )?;
 
     let _ = ast.insert_type_alias(Typedef {
@@ -124,6 +126,7 @@ mod tests {
                 None,
                 &AllowList::default(),
                 &OverrideList::default(),
+                true,
             )?;
 
             let ast = ast.monomorphize()?;
@@ -182,6 +185,7 @@ mod tests {
                 None,
                 &AllowList::default(),
                 &OverrideList::default(),
+                true,
             )?;
 
             println!("{ast:?}");

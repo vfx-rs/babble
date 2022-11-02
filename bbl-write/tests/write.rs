@@ -34,6 +34,7 @@ public:
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -76,6 +77,7 @@ typedef Class<float> ClassFloat;
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -115,6 +117,7 @@ public:
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -156,6 +159,7 @@ void fun(Class c);
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -195,6 +199,7 @@ void fun(Class c);
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -237,6 +242,7 @@ public:
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -280,6 +286,7 @@ public:
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -329,6 +336,7 @@ public:
             Some("Test_1_0"),
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -370,6 +378,7 @@ fn take_std_string_by_value() -> bbl_util::Result<()> {
             Some("Test_1_0"),
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -414,6 +423,7 @@ fn write_take_std_string() -> Result<(), Error> {
             Some("Test_1_0"),
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         println!("{ast:?}");
@@ -453,6 +463,7 @@ fn write_implicit_ctor() -> Result<(), Error> {
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         println!("{ast:?}");
@@ -515,6 +526,7 @@ fn write_inherited() -> Result<(), Error> {
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         println!("{ast:?}");
@@ -563,6 +575,7 @@ fn write_take_std_string_fun() -> bbl_util::Result<()> {
             Some("Test_1_0"),
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -611,6 +624,7 @@ fn build_take_std_string() -> bbl_util::Result<()> {
             &AllowList::default(),
             &OverrideList::default(),
             contents,
+            true,
         )?;
 
         println!("{ast:?}");
@@ -671,6 +685,7 @@ fn write_enum() -> Result<(), Error> {
         None,
         &AllowList::default(),
         &OverrideList::default(),
+        true,
     )?;
 
     let ns = ast.find_namespace("Test_1_0")?;
@@ -709,6 +724,7 @@ fn write_vector() -> Result<(), Error> {
         None,
         &AllowList::new(vec!["^Test_1_0".to_string()]),
         &OverrideList::default(),
+        true,
     )?;
 
     let ns = ast.find_namespace("Test_1_0")?;
@@ -747,6 +763,7 @@ fn write_unique_ptr() -> Result<(), Error> {
         None,
         &AllowList::new(vec!["^Test_1_0".to_string()]),
         &OverrideList::default(),
+        true,
     )?;
 
     let ns = ast.find_namespace("Test_1_0")?;
@@ -781,6 +798,7 @@ fn write_std_function() -> Result<(), bbl_util::Error> {
             None,
             &AllowList::new(vec!["^Test_1_0".to_string()]),
             &OverrideList::default(),
+            true,
         )?;
 
         let ns = ast.find_namespace("Test_1_0")?;
@@ -825,6 +843,7 @@ fn write_nested_template() -> bbl_util::Result<()> {
             None,
             &AllowList::new(vec![r#"^Test::.*$"#.to_string()]),
             &OverrideList::default(),
+            true,
         )?;
 
         let ast = ast.monomorphize()?;
@@ -869,6 +888,7 @@ fn write_template_typedef_member() -> bbl_util::Result<()> {
             None,
             &AllowList::new(vec![r#"^Test::.*$"#.to_string()]),
             &OverrideList::default(),
+            true,
         )?;
 
         let ast = ast.monomorphize()?;
@@ -897,6 +917,7 @@ fn write_size_t() -> bbl_util::Result<()> {
             None,
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         let ast = ast.monomorphize()?;

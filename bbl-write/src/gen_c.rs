@@ -1,4 +1,4 @@
-use bbl_clang::ty::TypeKind;
+use bbl_clang::{cursor::USR, ty::TypeKind};
 use bbl_extract::{ast::AST, class::ClassBindKind};
 use bbl_translate::{
     cenum::CEnum,
@@ -6,11 +6,20 @@ use bbl_translate::{
     cstruct::CStruct,
     ctype::{CQualType, CTypeRef},
     ctypedef::CTypedef,
-    CAST,
+    Entity, CAST,
 };
 use bbl_util::Trace;
 
 use crate::error::Error;
+use petgraph::{
+    algo::{min_spanning_tree, tarjan_scc, toposort},
+    data::Element,
+    data::FromElements,
+    dot::Dot,
+    graphmap::DiGraphMap,
+    prelude::DiGraph,
+    visit::{depth_first_search, Control, DfsEvent},
+};
 use tracing::instrument;
 
 use std::{fmt::Write, ops::Deref};
@@ -34,19 +43,106 @@ pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
     //     .map(|i| i.get_statement())
     //     .collect::<Vec<_>>()
     //     .join("\n");
+    let mut source = String::new();
 
-    let mut source = format!(
-        r#"/* Inserted from binding includes */
+    write!(
+        &mut source,
+        r#"{}/* Inserted from binding includes */
 {}
 /* End insert from binding includes */
 "#,
-        c_ast.header_string
-    );
+        "\n\n", c_ast.header_string
+    )?;
     writeln!(&mut source, "\n\n#include <utility>")?;
     writeln!(&mut source, "#include <exception>\n")?;
 
-    // Generate forward declarations for each struct first
+    let ast_graph = create_ast_graph(c_ast);
+
+    // for node in min_spanning_tree(&ast_graph) {
+    //     if let Element::Node { weight } = node {
+    //         if weight == USR::new("__ROOT__") {
+    //             continue;
+    //         }
+    // let entity = c_ast.get_entity(weight).unwrap();
+
+    // for node in tarjan_scc(&ast_graph).into_iter().flatten() {
+    // for node in toposort(&ast_graph, None).unwrap() {
+    //     if node == USR::new("__ROOT__") {
+    //         continue;
+    //     }
+
+    let u_root = USR::new("__ROOT__");
+
+    // do a first pass to emit fwd decls
     header = format!("{header}/* Forward declarations */\n");
+    depth_first_search(&ast_graph, Some(USR::new("__ROOT__")), |event| {
+        if let DfsEvent::Finish(node, _) = event {
+            if node == u_root {
+                return Control::Continue;
+            }
+
+            let entity = c_ast.get_entity(node).unwrap();
+
+            if let Entity::Struct(st) = entity {
+                let decl = generate_struct_forward_declaration(st).unwrap();
+                header = format!("{header}{decl}\n");
+            }
+        }
+
+        Control::<USR>::Continue
+    });
+
+    header = format!("{header}\n\n/* Declarations */\n");
+    depth_first_search(&ast_graph, Some(USR::new("__ROOT__")), |event| {
+        if let DfsEvent::Finish(node, _) = event {
+            if node == u_root {
+                return Control::Continue;
+            }
+
+            let entity = c_ast.get_entity(node).unwrap();
+
+            match entity {
+                Entity::Struct(st) => {
+                    let decl = generate_struct_declaration(st, c_ast).unwrap();
+                    header = format!("{header}{decl}\n");
+                }
+                Entity::Typedef(td) => {
+                    if td.is_template(c_ast) {
+                        return Control::<USR>::Continue;
+                    }
+
+                    let decl = generate_typedef(td, c_ast)
+                        .map_err(|e| Error::FailedToGenerateTypedef {
+                            name: td.name_internal.clone(),
+                            source: Box::new(e),
+                        })
+                        .unwrap();
+                    header = format!("{header}{decl}\n")
+                }
+                Entity::Function(fun) => {
+                    let decl = gen_function_declaration(fun, c_ast)
+                        .map_err(|source| Error::FailedToGenerateFunction {
+                            name: fun.name_internal.clone(),
+                            source: Box::new(source),
+                        })
+                        .unwrap();
+                    header = format!("{header}{decl}\n");
+                }
+                Entity::Enum(enm) => {
+                    let decl = generate_enum_declaration(enm).unwrap();
+                    header = format!("{header}{decl}\n\n")
+                }
+                Entity::FunctionPointer(_) => (),
+            }
+        }
+
+        Control::Continue
+    });
+
+    /*
+    // Generate forward declarations for each struct first
+    header = format!("{header}/* Forward declarations */
+\n");
     for st in c_ast.structs.iter() {
         let decl = generate_struct_forward_declaration(st)?;
         header = format!("{header}{decl}\n")
@@ -55,7 +151,8 @@ pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
     writeln!(&mut header)?;
 
     // Generate the declaration for each enum
-    header = format!("{header}/* Enum declarations */\n");
+    header = format!("{header} /* Enum declarations */
+\n");
     for enm in c_ast.enums.iter() {
         let decl = generate_enum_declaration(enm)?;
         header = format!("{header}{decl}\n\n")
@@ -64,7 +161,8 @@ pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
     writeln!(&mut header)?;
 
     // Generate the declaration for each struct
-    header = format!("{header}/* Struct declarations */\n");
+    header = format!("{header} /* Struct declarations */
+\n");
     for st in c_ast.structs.iter() {
         let decl = generate_struct_declaration(st, c_ast)?;
         header = format!("{header}{decl}\n")
@@ -73,7 +171,8 @@ pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
     writeln!(&mut header)?;
 
     // Generate typedefs
-    header = format!("{header}/* Typedefs */\n");
+    header = format!("{header} /* Typedefs */
+\n");
     for td in c_ast.typedefs.iter() {
         if td.is_template(c_ast) {
             continue;
@@ -87,16 +186,19 @@ pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
     }
 
     writeln!(&mut header)?;
+    */
 
     // Generate the declaration and definition for each function
-    header = format!("{header}/* Function declarations */\n");
     for fun in c_ast.functions.iter() {
+        /*
         let decl = gen_function_declaration(fun, c_ast).map_err(|source| {
             Error::FailedToGenerateFunction {
                 name: fun.name_internal.clone(),
                 source: Box::new(source),
             }
         })?;
+        header = format!("{header}{decl}\n");
+        */
 
         let defn = gen_function_definition(fun, c_ast).map_err(|source| {
             Error::FailedToGenerateFunction {
@@ -105,7 +207,6 @@ pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
             }
         })?;
 
-        header = format!("{header}{decl}\n");
         source = format!("{source}{defn}\n");
     }
 
@@ -114,6 +215,103 @@ pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
     header = format!("{header}\n#endif /* ifdef __{}_H__ */\n", module_name_upper);
 
     Ok((header, source))
+}
+
+fn create_ast_graph(c_ast: &CAST) -> DiGraphMap<USR, ()> {
+    let mut graph = DiGraphMap::new();
+    let root = graph.add_node(USR::new("__ROOT__"));
+
+    // if we only output types etc that are referenced directly by functions, then we cut out a lot of cruft
+    // TODO(AL): make this configurable
+    let all_types = true;
+
+    if all_types {
+        for st in c_ast.structs.iter() {
+            create_ast_graph_usr(st.usr, c_ast, &mut graph);
+            graph.add_edge(root, st.usr, ());
+        }
+
+        for enm in c_ast.enums.iter() {
+            create_ast_graph_usr(enm.usr, c_ast, &mut graph);
+            graph.add_edge(root, enm.usr, ());
+        }
+
+        // for td in c_ast.typedefs.iter() {
+        //     create_ast_graph_usr(td.usr, c_ast, &mut graph);
+        //     graph.add_edge(root, td.usr, ());
+        // }
+    }
+
+    for fun in c_ast.functions.iter() {
+        create_ast_graph_usr(fun.usr(), c_ast, &mut graph);
+        graph.add_edge(root, fun.usr(), ());
+    }
+
+    // for proto in c_ast.function_protos.iter() {
+    //     create_ast_graph_usr(proto.usr, c_ast, &mut graph);
+    //     graph.add_edge(root, proto.usr, ());
+    // }
+
+    // println!("***----\n{:?}\n***----", Dot::new(&graph));
+
+    graph
+}
+
+fn create_ast_graph_usr(usr: USR, c_ast: &CAST, graph: &mut DiGraphMap<USR, ()>) {
+    if graph.contains_node(usr) {
+        return;
+    }
+
+    let en = c_ast.get_entity(usr).unwrap();
+    match en {
+        Entity::Struct(st) => {
+            if matches!(st.bind_kind, ClassBindKind::ValueType) {
+                for fld in &st.fields {
+                    create_ast_graph_qt(usr, fld.qual_type(), c_ast, graph);
+                }
+            }
+        }
+        Entity::Typedef(td) => {
+            create_ast_graph_qt(td.usr, &td.underlying_type, c_ast, graph);
+            graph.add_edge(usr, td.usr, ());
+        }
+        Entity::Function(fun) => {
+            create_ast_graph_qt(usr, &fun.result, c_ast, graph);
+            for arg in &fun.arguments {
+                create_ast_graph_qt(usr, &arg.qual_type, c_ast, graph);
+            }
+        }
+        Entity::Enum(_) => (),
+        Entity::FunctionPointer(proto) => {
+            create_ast_graph_qt(usr, &proto.result, c_ast, graph);
+            for arg in &proto.args {
+                create_ast_graph_qt(usr, arg, c_ast, graph);
+            }
+        }
+    }
+}
+
+fn create_ast_graph_qt(
+    from_usr: USR,
+    qual_type: &CQualType,
+    c_ast: &CAST,
+    graph: &mut DiGraphMap<USR, ()>,
+) {
+    match qual_type.type_ref() {
+        CTypeRef::Builtin(_) => (),
+        CTypeRef::Ref(usr) => {
+            create_ast_graph_usr(*usr, c_ast, graph);
+            graph.add_edge(from_usr, *usr, ());
+        }
+        CTypeRef::Pointer(pointee) => create_ast_graph_qt(from_usr, pointee, c_ast, graph),
+        CTypeRef::FunctionProto { result, args } => {
+            create_ast_graph_qt(from_usr, result, c_ast, graph);
+            for arg in args {
+                create_ast_graph_qt(from_usr, arg, c_ast, graph);
+            }
+        }
+        CTypeRef::Template(_) => (),
+    }
 }
 
 /// Generate the signature for this function

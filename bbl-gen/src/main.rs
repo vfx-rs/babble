@@ -107,7 +107,6 @@ fn main() -> Result<()> {
         .map(|p| p.as_str())
         .collect();
     let allow_list = AllowList::new(args.allow_list.clone());
-    println!("ALLOW LIST: {:?}", allow_list);
 
     let options = BindOptions {
         // We use CMake to configure the compilation and linking of our shim library, so need to point CMAKE_PREFIX_PATH

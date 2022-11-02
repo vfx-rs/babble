@@ -598,6 +598,7 @@ public:
                 None,
                 &AllowList::default(),
                 &OverrideList::default(),
+                true,
             )?;
 
             let ast = ast.monomorphize()?;

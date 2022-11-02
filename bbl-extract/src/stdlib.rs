@@ -11,7 +11,10 @@ use crate::{
     function::{Argument, Const, PureVirtual, Virtual},
     function::{Deleted, FunctionProto, Method, MethodKind},
     qualtype::{extract_type, QualType, TypeRef},
-    templates::{ClassTemplateSpecialization, TemplateArgument, TemplateParameterDecl},
+    templates::{
+        specialize_class_template, ClassTemplateSpecialization, TemplateArgument,
+        TemplateParameterDecl,
+    },
     AllowList,
 };
 
@@ -177,6 +180,8 @@ pub fn create_std_vector(
     tu: &TranslationUnit,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    specialize_immediately: bool,
+    stop_on_error: bool,
 ) -> Result<USR> {
     if already_visited.contains(&c.usr()) {
         return Ok(c.usr());
@@ -199,6 +204,7 @@ pub fn create_std_vector(
         tu,
         allow_list,
         class_overrides,
+        stop_on_error,
     )?)];
 
     let cts = ClassTemplateSpecialization::new(
@@ -219,9 +225,11 @@ pub fn create_std_vector(
     let cd = ast.get_class_mut(usr_tmpl).unwrap();
     cd.add_specialization(template_arguments, c.usr());
 
-    // let cd = ast.get_class(usr_tmpl).unwrap();
-    // let sd = specialize_class_template(cd, &cts, ast)?;
-    // ast.insert_class(sd);
+    if specialize_immediately {
+        let cd = ast.get_class(usr_tmpl).unwrap();
+        let sd = specialize_class_template(cd, &cts, ast)?;
+        ast.insert_class(sd);
+    }
 
     let _ = ast.insert_class_template_specialization(cts);
 
@@ -365,6 +373,8 @@ pub fn create_std_unique_ptr(
     tu: &TranslationUnit,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    specialize_immediately: bool,
+    stop_on_error: bool,
 ) -> Result<USR> {
     if already_visited.contains(&c.usr()) {
         return Ok(c.usr());
@@ -387,6 +397,7 @@ pub fn create_std_unique_ptr(
         tu,
         allow_list,
         class_overrides,
+        stop_on_error,
     )?)];
 
     let cts = ClassTemplateSpecialization::new(
@@ -406,6 +417,12 @@ pub fn create_std_unique_ptr(
 
     let cd = ast.get_class_mut(usr_tmpl).unwrap();
     cd.add_specialization(template_arguments, c.usr());
+
+    if specialize_immediately {
+        let cd = ast.get_class(usr_tmpl).unwrap();
+        let sd = specialize_class_template(cd, &cts, ast)?;
+        ast.insert_class(sd);
+    }
 
     let _ = ast.insert_class_template_specialization(cts);
 
@@ -508,6 +525,7 @@ pub fn create_std_function(
     tu: &TranslationUnit,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    stop_on_error: bool,
 ) -> Result<USR> {
     if already_visited.contains(&c.usr()) {
         return Ok(c.usr());
@@ -540,6 +558,7 @@ pub fn create_std_function(
         tu,
         allow_list,
         class_overrides,
+        stop_on_error,
     )?;
     let num_args = ty.num_arg_types()?;
     let mut args = Vec::new();
@@ -552,6 +571,7 @@ pub fn create_std_function(
             tu,
             allow_list,
             class_overrides,
+            stop_on_error,
         )?);
     }
 
@@ -567,6 +587,8 @@ pub fn create_std_map(
     tu: &TranslationUnit,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    specialize_immediately: bool,
+    stop_on_error: bool,
 ) -> Result<USR> {
     if already_visited.contains(&c.usr()) {
         return Ok(c.usr());
@@ -591,6 +613,7 @@ pub fn create_std_map(
             tu,
             allow_list,
             class_overrides,
+            stop_on_error,
         )?),
         TemplateArgument::Type(extract_type(
             ty_t,
@@ -600,6 +623,7 @@ pub fn create_std_map(
             tu,
             allow_list,
             class_overrides,
+            stop_on_error,
         )?),
     ];
 
@@ -616,9 +640,11 @@ pub fn create_std_map(
     let cd = ast.get_class_mut(usr_tmpl).unwrap();
     cd.add_specialization(template_arguments, c.usr());
 
-    // let cd = ast.get_class(usr_tmpl).unwrap();
-    // let sd = specialize_class_template(cd, &cts, ast)?;
-    // ast.insert_class(sd);
+    if specialize_immediately {
+        let cd = ast.get_class(usr_tmpl).unwrap();
+        let sd = specialize_class_template(cd, &cts, ast)?;
+        ast.insert_class(sd);
+    }
 
     let _ = ast.insert_class_template_specialization(cts);
 
@@ -760,6 +786,7 @@ mod tests {
                 None,
                 &AllowList::new(vec!["^Test_1_0".to_string()]),
                 &OverrideList::default(),
+                true,
             )?;
 
             let ns = ast.find_namespace("Test_1_0")?;
@@ -822,6 +849,7 @@ mod tests {
                 None,
                 &AllowList::new(vec!["^Test_1_0".to_string()]),
                 &OverrideList::default(),
+                true,
             )?;
 
             let ns = ast.find_namespace("Test_1_0")?;
@@ -877,6 +905,7 @@ mod tests {
                 None,
                 &AllowList::new(vec!["^Test_1_0".to_string()]),
                 &OverrideList::default(),
+                true,
             )?;
 
             let ns = ast.find_namespace("Test_1_0")?;

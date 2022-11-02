@@ -29,6 +29,8 @@ pub fn extract_class_template_specialization(
     tu: &TranslationUnit,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    specialize_immediately: bool,
+    stop_on_error: bool,
 ) -> Result<USR> {
     debug!(
         "extract_class_template_specialization: {c_class_decl:?} {}",
@@ -48,8 +50,11 @@ pub fn extract_class_template_specialization(
         tu,
         allow_list,
         class_overrides,
+        stop_on_error,
     )?;
     let namespaces = get_namespaces_for_decl(c_class_decl.into(), tu, ast, already_visited)?;
+
+    debug!("template arguments {:?}", template_arguments);
 
     let needs_implicit = NeedsImplicit {
         ctor: c_class_decl.cxxrecord_needs_implicit_default_constructor(),
@@ -83,6 +88,8 @@ pub fn extract_class_template_specialization(
         allow_list,
         class_overrides,
         None,
+        specialize_immediately,
+        stop_on_error,
     )
     .map_err(|e| Error::FailedToExtractClassTemplate {
         usr: specialized_decl.usr(),
@@ -99,11 +106,29 @@ pub fn extract_class_template_specialization(
         is_pod,
     };
 
-    let class_template = ast
-        .get_class_mut(specialized_decl.usr())
-        .expect("Could not extract just inserted class template");
+    // let class_template = ast.get_class_mut(specialized_decl.usr()).expect(&format!(
+    //     "Could not extract just inserted class template {:?}",
+    //     specialized_decl.usr()
+    // ));
+    let class_template =
+        ast.get_class_mut(specialized_decl.usr())
+            .ok_or_else(|| Error::ClassTemplateNotFound {
+                usr: specialized_decl.usr(),
+                source: Trace::new(),
+            })?;
 
+    debug!("Adding specialization of {c_class_decl:?} with {template_arguments:?}");
     class_template.add_specialization(template_arguments, c_class_decl.usr());
+
+    if specialize_immediately {
+        let class_template = ast
+            .get_class(specialized_decl.usr())
+            .expect("Could not extract just inserted class template");
+
+        let sd = specialize_class_template(class_template, &cts, ast)?;
+        println!("Inserting {}", sd.usr());
+        ast.insert_class(sd);
+    }
 
     // Delay the actual specialization until after the user's had a chance to muck with the AST
     ast.insert_class_template_specialization(cts);
@@ -173,6 +198,7 @@ pub fn extract_template_args(
     tu: &TranslationUnit,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    stop_on_error: bool,
 ) -> Result<Vec<TemplateArgument>> {
     let mut result = Vec::new();
     let num_template_args = c_class_decl.num_template_arguments();
@@ -196,6 +222,7 @@ pub fn extract_template_args(
                     tu,
                     allow_list,
                     class_overrides,
+                    stop_on_error,
                 )?))
             }
             TemplateArgumentKind::Integral => result.push(TemplateArgument::Integral(
@@ -431,7 +458,7 @@ impl Debug for TemplateParameterDecl {
 
 #[cfg(test)]
 mod tests {
-    use bbl_clang::cli_args;
+    use bbl_clang::{cli_args, cli_args_with};
     use indoc::indoc;
 
     use crate::{class::OverrideList, parse_string_and_extract_ast, AllowList};
@@ -465,6 +492,7 @@ mod tests {
                 None,
                 &AllowList::new(vec![r#"^Test::.*$"#.to_string()]),
                 &OverrideList::default(),
+                true,
             )?;
 
             let ast = ast.monomorphize()?;
@@ -519,29 +547,33 @@ mod tests {
                         public:
                             typedef Key key_type;
                             typedef Value value_type;
+                            typedef int size_type;
 
                             void insert(key_type k, value_type v);
                             const value_type& at(const key_type& k);
-
+                            size_type erase(const key_type& k);
                         };
                     }
 
                     namespace Test {
-                        class Class : private detail::map<std::string, int> {
+                        class Class : private detail::map<int, int> {
                         public:
                             using map::key_type;
                             using map::value_type;
+                            using map::size_type;
 
                             using map::map;
                             using map::insert;
                             using map::at;
 
-                            void erase(const key_type& key);
+                            size_type erase(const key_type& key) {
+                                return map::erase(key);
+                            }
                         };
                     }
                 "#
                 ),
-                &cli_args()?,
+                &cli_args_with(&["-std=c++14"])?,
                 true,
                 None,
                 &AllowList::new(vec![r#"^Test::.*$"#.to_string()]),

@@ -124,6 +124,7 @@ mod tests {
                 None,
                 &AllowList::default(),
                 &OverrideList::default(),
+                true,
             )?;
 
             println!("{ast:?}");

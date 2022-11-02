@@ -1,4 +1,4 @@
-use bbl_util::Trace;
+use bbl_util::{source_iter, Trace};
 use std::convert::TryInto;
 use std::fmt::{Debug, Write};
 use std::ops::{Deref, DerefMut, Index, IndexMut};
@@ -789,6 +789,7 @@ pub fn extract_ast(
     class_overrides: &OverrideList,
     // Allow parents to override the namespaces of the children, e.g. UsingDeclarations
     namespace_override: Option<&[USR]>,
+    stop_on_error: bool,
 ) -> Result<()> {
     if depth > max_depth {
         return Ok(());
@@ -812,7 +813,7 @@ pub fn extract_ast(
         match c.kind() {
             CursorKind::ClassDecl => {
                 if c.is_definition() {
-                    extract_class_decl(
+                    match extract_class_decl(
                         c.try_into()?,
                         tu,
                         ast,
@@ -820,9 +821,19 @@ pub fn extract_ast(
                         allow_list,
                         class_overrides,
                         namespace_override,
-                    )?;
-                } else {
-                    println!("NOT DEF");
+                        false,
+                        stop_on_error,
+                    ) {
+                        Ok(_) => return Ok(()),
+                        Err(e) if stop_on_error => return Err(e),
+                        Err(e) => {
+                            warn!("Failed to extract class {c:?}");
+                            for e in source_iter(&e) {
+                                warn!("    {e}");
+                            }
+                            return Ok(());
+                        }
+                    }
                 }
 
                 return Ok(());
@@ -830,7 +841,7 @@ pub fn extract_ast(
             CursorKind::ClassTemplate => {
                 if c.is_definition() {
                     let c_class_template: CurClassTemplate = c.try_into()?;
-                    extract_class_decl(
+                    match extract_class_decl(
                         c_class_template.as_class_decl(),
                         tu,
                         ast,
@@ -838,7 +849,19 @@ pub fn extract_ast(
                         allow_list,
                         class_overrides,
                         namespace_override,
-                    )?;
+                        false,
+                        stop_on_error,
+                    ) {
+                        Ok(_) => return Ok(()),
+                        Err(e) if stop_on_error => return Err(e),
+                        Err(e) => {
+                            warn!("Failed to extract class template {c:?}");
+                            for e in source_iter(&e) {
+                                warn!("    {e}");
+                            }
+                            return Ok(());
+                        }
+                    }
                 }
 
                 return Ok(());
@@ -846,7 +869,7 @@ pub fn extract_ast(
             CursorKind::StructDecl => {
                 if c.is_definition() {
                     let c_struct: CurStructDecl = c.try_into()?;
-                    extract_class_decl(
+                    match extract_class_decl(
                         c_struct.as_class_decl(),
                         tu,
                         ast,
@@ -854,13 +877,25 @@ pub fn extract_ast(
                         allow_list,
                         class_overrides,
                         namespace_override,
-                    )?;
+                        false,
+                        stop_on_error,
+                    ) {
+                        Ok(_) => return Ok(()),
+                        Err(e) if stop_on_error => return Err(e),
+                        Err(e) => {
+                            warn!("Failed to extract struct {c:?}");
+                            for e in source_iter(&e) {
+                                warn!("    {e}");
+                            }
+                            return Ok(());
+                        }
+                    }
                 }
 
                 return Ok(());
             }
             CursorKind::TypeAliasDecl | CursorKind::TypedefDecl => {
-                extract_typedef_decl(
+                match extract_typedef_decl(
                     c.try_into()?,
                     already_visited,
                     ast,
@@ -868,8 +903,18 @@ pub fn extract_ast(
                     allow_list,
                     class_overrides,
                     &[],
-                )?;
-                return Ok(());
+                    stop_on_error,
+                ) {
+                    Ok(_) => return Ok(()),
+                    Err(e) if stop_on_error => return Err(e),
+                    Err(e) => {
+                        warn!("Failed to extract typedef {c:?}");
+                        for e in source_iter(&e) {
+                            warn!("    {e}");
+                        }
+                        return Ok(());
+                    }
+                }
             }
             CursorKind::Namespace => {
                 let usr = extract_namespace(c, tu, ast, already_visited)?;
@@ -902,6 +947,7 @@ pub fn extract_ast(
                     ast,
                     allow_list,
                     class_overrides,
+                    stop_on_error,
                 )
                 .map_err(|e| Error::FailedToExtractFunction {
                     name: c.display_name(),
@@ -912,9 +958,14 @@ pub fn extract_ast(
 
                 return Ok(());
             }
-            CursorKind::EnumDecl => {
-                let _ = extract_enum(c, ast, already_visited, tu)?;
-            }
+            CursorKind::EnumDecl => match extract_enum(c, ast, already_visited, tu) {
+                Ok(_) => return Ok(()),
+                Err(e) if stop_on_error => return Err(e),
+                Err(e) => {
+                    warn!("Failed to extract enum {c:?}: {e}");
+                    return Ok(());
+                }
+            },
             CursorKind::UsingDeclaration => {
                 let decl_ref = c.referenced()?;
                 let namespaces = get_namespaces_for_decl(c, tu, ast, already_visited)?;
@@ -930,6 +981,7 @@ pub fn extract_ast(
                         allow_list,
                         class_overrides,
                         Some(&namespaces),
+                        stop_on_error,
                     )?
                 }
                 return Ok(());
@@ -959,6 +1011,7 @@ pub fn extract_ast(
             allow_list,
             class_overrides,
             None,
+            stop_on_error,
         )?;
     }
 
@@ -1346,6 +1399,7 @@ pub fn extract_ast_from_namespace(
     allow_list: &AllowList,
     class_overrides: &OverrideList,
     header_str: &str,
+    stop_on_error: bool,
 ) -> Result<AST> {
     let ns = if let Some(name) = name {
         if name.is_empty() {
@@ -1387,6 +1441,7 @@ pub fn extract_ast_from_namespace(
             allow_list,
             class_overrides,
             None,
+            stop_on_error,
         )?;
     }
 
@@ -1654,6 +1709,7 @@ mod tests {
             Some("Test"),
             &AllowList::default(),
             &OverrideList::default(),
+            true,
         )?;
 
         println!("{ast:?}");

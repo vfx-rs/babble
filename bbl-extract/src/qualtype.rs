@@ -1,5 +1,5 @@
 use bbl_clang::{
-    cursor::{CurTypedef, USR},
+    cursor::{CurTypedef, Cursor, USR},
     cursor_kind::CursorKind,
     translation_unit::TranslationUnit,
     ty::{Type, TypeKind},
@@ -84,8 +84,24 @@ impl TypeRef {
                     cts.bind_kind(ast)
                 } else if ast.get_function_proto(*usr).is_some() {
                     Ok(ClassBindKind::ValueType)
-                } else if ast.get_type_alias(*usr).is_some() {
-                    todo!()
+                } else if let Some(td) = ast.get_type_alias(*usr) {
+                    td.underlying_type().type_ref.get_bind_kind(ast)
+                } else {
+                    Err(Error::ClassNotFound {
+                        name: usr.to_string(),
+                        source: Trace::new(),
+                    })
+                }
+            }
+            Typedef(usr) => {
+                if let Some(class) = ast.get_class(*usr) {
+                    Ok(*class.bind_kind())
+                } else if let Some(cts) = ast.get_class_template_specialization(*usr) {
+                    cts.bind_kind(ast)
+                } else if ast.get_function_proto(*usr).is_some() {
+                    Ok(ClassBindKind::ValueType)
+                } else if let Some(td) = ast.get_type_alias(*usr) {
+                    td.underlying_type().type_ref.get_bind_kind(ast)
                 } else {
                     Err(Error::ClassNotFound {
                         name: usr.to_string(),
@@ -97,7 +113,7 @@ impl TypeRef {
             LValueReference(p) => p.type_ref.get_bind_kind(ast),
             RValueReference(p) => p.type_ref.get_bind_kind(ast),
             FunctionProto { .. } => Ok(ClassBindKind::ValueType),
-            _ => unreachable!(),
+            _ => unreachable!("cannot get bind kind for TypeRef {self:?}"),
         }
     }
 
@@ -596,6 +612,7 @@ pub fn extract_type(
     tu: &TranslationUnit,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    stop_on_error: bool,
 ) -> Result<QualType> {
     debug!("extract_type {ty:?} {template_parameters:?}");
 
@@ -648,12 +665,13 @@ pub fn extract_type(
                 tu,
                 allow_list,
                 class_overrides,
+                stop_on_error,
             )
         } else {
             // extract underlying decl here
             match c_decl.kind() {
                 CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
-                    debug!("is typedef decl");
+                    debug!("is typedef decl {:?}", template_parameters);
                     let u_ref = extract_typedef_decl(
                         c_decl.try_into()?,
                         already_visited,
@@ -662,6 +680,7 @@ pub fn extract_type(
                         allow_list,
                         class_overrides,
                         template_parameters,
+                        stop_on_error,
                     )
                     .map_err(|e| Error::FailedToExtractTypedef {
                         usr: c_decl.usr(),
@@ -684,6 +703,8 @@ pub fn extract_type(
                         allow_list,
                         class_overrides,
                         None,
+                        false,
+                        stop_on_error,
                     )
                     .map_err(|e| Error::FailedToExtractClass {
                         usr: c_decl.usr(),
@@ -710,6 +731,12 @@ pub fn extract_type(
                     })
                 }
                 CursorKind::TypeRef => unimplemented!("Should extract class here?"),
+                CursorKind::ClassTemplate if c_decl.display_name().contains("initializer_list") => {
+                    Err(Error::Unsupported {
+                        description: "std::initializer_list is unsupported".to_string(),
+                        source: Trace::new(),
+                    })
+                }
                 _ => unimplemented!("Unhandled type decl {:?}", c_decl),
             }
         }
@@ -725,6 +752,7 @@ pub fn extract_type(
                     tu,
                     allow_list,
                     class_overrides,
+                    stop_on_error,
                 )
                 .map_err(|e| Error::FailedToExtractType {
                     name: pointee.spelling(),
@@ -757,6 +785,7 @@ pub fn extract_type(
                                 tu,
                                 allow_list,
                                 class_overrides,
+                                stop_on_error,
                             );
                         }
                     }
@@ -770,6 +799,7 @@ pub fn extract_type(
                     tu,
                     allow_list,
                     class_overrides,
+                    stop_on_error,
                 )
                 .map_err(|e| Error::FailedToExtractType {
                     name: pointee.spelling(),
@@ -792,6 +822,7 @@ pub fn extract_type(
                     tu,
                     allow_list,
                     class_overrides,
+                    stop_on_error,
                 )
                 .map_err(|e| Error::FailedToExtractType {
                     name: pointee.spelling(),
@@ -816,16 +847,21 @@ pub fn extract_type(
                         "Got unexposed for {name} with no matching template parmaeter in {:?}",
                         template_parameters
                     );
-                    println!("NARGS: {}", ty.num_template_arguments());
                     Err(Error::NoMatchingTemplateParameter {
                         name,
                         source: Trace::new(),
                     })
                 }
             }
-            TypeKind::FunctionProto => {
-                extract_function_pointer(ty, ast, already_visited, tu, allow_list, class_overrides)
-            }
+            TypeKind::FunctionProto => extract_function_pointer(
+                ty,
+                ast,
+                already_visited,
+                tu,
+                allow_list,
+                class_overrides,
+                stop_on_error,
+            ),
             TypeKind::Elaborated => {
                 println!("elaborated");
                 let named = ty.named_type()?;
@@ -846,6 +882,7 @@ pub fn extract_function_pointer(
     tu: &TranslationUnit,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    stop_on_error: bool,
 ) -> Result<QualType> {
     if ty.kind() != TypeKind::FunctionProto {
         panic!(
@@ -865,6 +902,7 @@ pub fn extract_function_pointer(
         tu,
         allow_list,
         class_overrides,
+        stop_on_error,
     )?;
     let num_args = ty.num_arg_types()?;
     let mut args = Vec::new();
@@ -877,6 +915,7 @@ pub fn extract_function_pointer(
             tu,
             allow_list,
             class_overrides,
+            stop_on_error,
         )?);
     }
 
@@ -898,6 +937,7 @@ pub fn extract_std_function_as_pointer(
     tu: &TranslationUnit,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
+    stop_on_error: bool,
 ) -> Result<QualType> {
     if ty.kind() != TypeKind::FunctionProto {
         panic!(
@@ -917,6 +957,7 @@ pub fn extract_std_function_as_pointer(
         tu,
         allow_list,
         class_overrides,
+        stop_on_error,
     )?;
     let num_args = ty.num_arg_types()?;
     let mut args = Vec::new();
@@ -929,6 +970,7 @@ pub fn extract_std_function_as_pointer(
             tu,
             allow_list,
             class_overrides,
+            stop_on_error,
         )?);
     }
 

@@ -42,6 +42,7 @@ pub fn parse(header: &str, options: &BindOptions) -> Result<AST, Error> {
         &options.allow_list,
         &options.overrides,
         header,
+        options.stop_on_error,
     )?;
 
     Ok(ast)
@@ -110,6 +111,7 @@ pub struct BindOptions<'a, 'b, 'c, 'd, 'e> {
     pub allow_list: AllowList,
     pub overrides: OverrideList,
     pub log_diagnostics: bool,
+    pub stop_on_error: bool,
 }
 
 impl<'a, 'b, 'c, 'd, 'e> Default for BindOptions<'a, 'b, 'c, 'd, 'e> {
@@ -124,6 +126,7 @@ impl<'a, 'b, 'c, 'd, 'e> Default for BindOptions<'a, 'b, 'c, 'd, 'e> {
             limit_to_namespace: None,
             allow_list: AllowList::default(),
             overrides: OverrideList::default(),
+            stop_on_error: true,
         }
     }
 }

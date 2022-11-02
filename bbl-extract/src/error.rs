@@ -11,6 +11,8 @@ pub enum Error {
     ClangError(#[from] bbl_clang::error::Error),
     #[error("Could not find class \"{name}\"")]
     ClassNotFound { name: String, source: Trace },
+    #[error("Could not find class template \"{usr}\"")]
+    ClassTemplateNotFound { usr: USR, source: Trace },
     #[error("Could not find namespace \"{name}\"")]
     NamespaceNotFound { name: String, source: Trace },
     #[error("Could not find method \"{name}\"")]
