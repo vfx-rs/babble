@@ -782,10 +782,10 @@ fn generate_enum_declaration(enm: &CEnum) -> Result<String> {
 
     if !enm.variants.is_empty() {
         for var in enm.variants.iter().take(enm.variants.len() - 1) {
-            result = format!("{result}    {} = {},\n", var.0, var.1);
+            result = format!("{result}    {}_{} = {},\n", enm.name_external, var.0, var.1);
         }
         let var = enm.variants.last().unwrap();
-        result = format!("{result}    {} = {}\n", var.0, var.1);
+        result = format!("{result}    {}_{} = {}\n", enm.name_external, var.0, var.1);
     }
 
     result = format!("{result}}};\n");
