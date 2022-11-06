@@ -573,8 +573,8 @@ mod tests {
                 &format!("{ast:?}"),
                 indoc!(
                     r#"
-                    Namespace c:@N@detail detail None
                     Namespace c:@S@Class Class None
+                    Namespace c:@N@detail detail None
                     ClassDecl c:@N@detail@ST>1#T@Vec Vec rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[Type(T)] specializations=[] namespaces=[c:@N@detail]
                     Field x: T
                     Field y: T

@@ -4,6 +4,7 @@ use tracing::{instrument, trace, warn};
 use crate::ast::{get_namespaces_for_decl, get_qualified_name, AST};
 use crate::class::OverrideList;
 use crate::qualtype::{extract_type, QualType};
+use crate::templates::TemplateParameterDecl;
 use crate::AllowList;
 use bbl_clang::cursor::{CurTypedef, USR};
 use std::fmt::Debug;
@@ -54,7 +55,7 @@ pub fn extract_typedef_decl<'a>(
     tu: &TranslationUnit,
     allow_list: &AllowList,
     class_overrides: &OverrideList,
-    extra_template_parameters: &[String],
+    extra_template_parameters: &[TemplateParameterDecl],
     stop_on_error: bool,
 ) -> Result<USR> {
     let usr = c_typedef.usr();

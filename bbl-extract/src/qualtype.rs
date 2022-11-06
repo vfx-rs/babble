@@ -611,7 +611,7 @@ impl Display for QualType {
 #[instrument(skip(already_visited, ast, tu), level = "trace")]
 pub fn extract_type(
     ty: Type,
-    template_parameters: &[String],
+    template_parameters: &[TemplateParameterDecl],
     already_visited: &mut Vec<USR>,
     ast: &mut AST,
     tu: &TranslationUnit,
@@ -862,7 +862,11 @@ pub fn extract_type(
                 })
             }
             TypeKind::Unexposed => {
-                if template_parameters.contains(&name) {
+                if template_parameters
+                    .iter()
+                    .position(|p| p.name() == name)
+                    .is_some()
+                {
                     Ok(QualType {
                         name: name.clone(),
                         is_const,

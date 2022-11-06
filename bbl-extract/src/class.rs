@@ -1012,15 +1012,10 @@ pub fn extract_field(
     class_overrides: &OverrideList,
     stop_on_error: bool,
 ) -> Result<Field> {
-    let template_parameters = class_template_parameters
-        .iter()
-        .map(|t| t.name().to_string())
-        .collect::<Vec<_>>();
-
     let ty = c_field.ty()?;
     let qual_type = extract_type(
         ty,
-        &template_parameters,
+        class_template_parameters,
         already_visited,
         ast,
         tu,

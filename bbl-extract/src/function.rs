@@ -662,7 +662,7 @@ impl MethodTemplateSpecialization {
 
 pub fn extract_argument(
     c_arg: Cursor,
-    template_parameters: &[String],
+    template_parameters: &[TemplateParameterDecl],
     already_visited: &mut Vec<USR>,
     ast: &mut AST,
     tu: &TranslationUnit,
@@ -704,6 +704,8 @@ pub fn extract_function(
     stop_on_error: bool,
 ) -> Result<Function> {
     let c_function = c_function.canonical()?;
+    let namespaces = get_namespaces_for_decl(c_function, tu, ast, already_visited)?;
+    let function_qualified_name = get_qualified_name(&c_function.display_name(), &namespaces, ast)?;
 
     debug!(
         "+ function {} {} {:?}",
@@ -745,18 +747,43 @@ pub fn extract_function(
     let template_parameters = c_template_parameters
         .iter()
         .enumerate()
-        .map(|(index, c)| TemplateParameterDecl::Type {
-            name: c.display_name(),
-            index,
-        })
-        .collect::<Vec<_>>();
+        .map(|(index, c)| match c.kind() {
+            CursorKind::TemplateTypeParameter => Ok(TemplateParameterDecl::Type {
+                name: c.display_name(),
+                index,
+            }),
+            CursorKind::NonTypeTemplateParameter => {
+                if let Some(child) = c.children().first() {
+                    debug!("    memebr child {:?}", child);
+                    match child.kind() {
+                        CursorKind::IntegerLiteral => {
+                            let name = c.display_name();
 
-    let string_template_parameters = extra_template_parameters
-        .iter()
-        .map(|t| t.name().to_string())
-        .chain(c_template_parameters.iter().map(|c| c.display_name()))
-        .collect::<Vec<_>>();
-    debug!("string template parameters {string_template_parameters:?}");
+                            return Ok(TemplateParameterDecl::Integer {
+                                name,
+                                default: Some(tu.token(child.location()).spelling()),
+                                index,
+                            });
+                        }
+                        _ => {
+                            return Err(Error::Unsupported {
+                                description: format!(
+                                "Unsupported template parameter kind {} in {function_qualified_name}",
+                                child.kind()
+                            ),
+                                source: Trace::new(),
+                            })
+                        }
+                    }
+                }
+                unreachable!()
+            }
+            _ => unreachable!(),
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut combined_template_parameters = template_parameters.clone();
+    combined_template_parameters.extend_from_slice(extra_template_parameters);
 
     let skip = c_template_parameters.len();
 
@@ -765,7 +792,7 @@ pub fn extract_function(
 
     let result = extract_type(
         ty_result,
-        &string_template_parameters,
+        &combined_template_parameters,
         already_visited,
         ast,
         tu,
@@ -792,7 +819,7 @@ pub fn extract_function(
             arguments.push(
                 extract_argument(
                     *c_arg,
-                    &string_template_parameters,
+                    &combined_template_parameters,
                     already_visited,
                     ast,
                     tu,
