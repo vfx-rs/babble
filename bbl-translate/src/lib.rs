@@ -173,7 +173,7 @@ pub fn get_c_names(
     (c_name_public, c_name_private)
 }
 
-pub fn translate_cpp_ast_to_c(ast: &MonoAST) -> Result<CAST> {
+pub fn translate_cpp_ast_to_c(ast: &MonoAST, stop_on_error: bool) -> Result<CAST> {
     let mut structs = UstrIndexMap::new();
     let mut typedefs = UstrIndexMap::new();
     let mut functions = UstrIndexMap::new();
@@ -206,6 +206,7 @@ pub fn translate_cpp_ast_to_c(ast: &MonoAST) -> Result<CAST> {
             &mut functions,
             &mut used_names,
             &type_replacements,
+            stop_on_error,
         )
         .map_err(|e| Error::FailedToTranslateClass {
             name: class.name().to_string(),

@@ -5,6 +5,8 @@ use bbl_clang::cursor::USR;
 
 use bbl_util::Trace;
 
+use crate::templates::TemplateArgument;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("bbl-clang error")]
@@ -126,6 +128,11 @@ pub enum Error {
     },
     #[error("Unsupported construct: {description}")]
     Unsupported { description: String, source: Trace },
+    #[error("No specialization found for class template {usr} with arguments {template_arguments:?}. You may need to manually specialize it?")]
+    ClassTemplateSpecializationNotFound {
+        usr: USR,
+        template_arguments: Vec<TemplateArgument>,
+    },
 }
 
 impl Error {

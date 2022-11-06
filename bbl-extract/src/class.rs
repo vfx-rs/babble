@@ -16,7 +16,10 @@ use crate::ast::{
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::index_map::IndexMapKey;
 use crate::qualtype::extract_type;
-use crate::stdlib::{create_std_map, create_std_string, create_std_unique_ptr, create_std_vector};
+use crate::stdlib::{
+    create_std_map, create_std_string, create_std_unique_ptr, create_std_unordered_map,
+    create_std_vector,
+};
 use crate::templates::{
     extract_class_template_specialization, TemplateArgument, TemplateParameterDecl,
 };
@@ -502,6 +505,20 @@ pub fn extract_class_decl(
             specialize_immediately,
             stop_on_error,
         );
+    } else if class_decl.display_name().starts_with("unordered_map<") {
+        if class_decl.kind() == CursorKind::ClassDecl {
+            debug!("manually extracting std::unordered_map {class_decl:?}");
+            return create_std_unordered_map(
+                class_decl,
+                ast,
+                already_visited,
+                tu,
+                allow_list,
+                overrides,
+                specialize_immediately,
+                stop_on_error,
+            );
+        }
     } else if class_decl.display_name().starts_with("map<") {
         if class_decl.kind() == CursorKind::ClassDecl {
             debug!("manually extracting std::map {class_decl:?}");
@@ -637,58 +654,13 @@ fn extract_class_decl_inner(
     let mut base_constructors = Vec::new();
     for c_base in class_decl.children_of_kind(CursorKind::CXXBaseSpecifier, false) {
         if let Ok(c_base_decl) = c_base.referenced() {
+            let c_base_decl = c_base_decl.canonical()?;
+            let base_decl_namespaces =
+                get_namespaces_for_decl(c_base_decl, tu, ast, already_visited)?;
+            let base_decl_qualified_name =
+                get_qualified_name(&c_base_decl.display_name(), &base_decl_namespaces, ast)?;
             match c_base_decl.kind() {
                 CursorKind::ClassDecl | CursorKind::StructDecl | CursorKind::ClassTemplate => {
-                    /*
-                    // we pass a class name override through when extracting the base class members. This will turn
-                    // Base::method() into Class::method(). Thus the allow list will work as expected, and still allow
-                    // us to avoid adding the Base class to the AST while lofting up its members into Class
-                    let base = extract_class_decl_inner(
-                        c_base_decl.canonical()?.try_into()?,
-                        tu,
-                        ast,
-                        already_visited,
-                        allow_list,
-                        class_overrides,
-                        qname_override.or(Some(&class_decl_qualified_name)),
-                        None,
-                    )
-                    .map_err(|e| Error::FailedToExtractBaseClass {
-                        base: c_base_decl.usr(),
-                        usr: class_decl.usr(),
-                        source: Box::new(e),
-                    })?;
-
-                    let access = c_base.cxx_access_specifier()?;
-
-                    for method in &base.methods {
-                        if method.is_any_constructor() {
-                            // we store constructors regardless of their access since we want to know about private constructors
-                            // in order to not generate implicit versions for them
-                            base_constructors.push(method.clone());
-                        } else if !method.is_destructor() {
-                            if access == AccessSpecifier::Public {
-                                base_methods.push(method.clone());
-                            } else {
-                                base_private_methods.push(method.clone())
-                            }
-                        }
-                    }
-                    */
-
-                    let c_base_decl = c_base_decl.canonical()?;
-                    let base_decl_namespaces =
-                        get_namespaces_for_decl(c_base_decl, tu, ast, already_visited)?;
-                    let base_decl_qualified_name = get_qualified_name(
-                        &c_base_decl.display_name(),
-                        &base_decl_namespaces,
-                        ast,
-                    )?;
-
-                    // if !allow_list.allows(&base_decl_qualified_name) {
-                    //     continue;
-                    // }
-
                     debug!("Extracting base {c_base_decl:?}");
                     let u_base = match extract_class_decl(
                         c_base_decl.try_into()?,
@@ -722,9 +694,11 @@ fn extract_class_decl_inner(
 
                     let access = c_base.cxx_access_specifier()?;
 
-                    let base = ast.get_class(u_base).expect(&format!(
-                        "Failed to get class that should have just been inserted: {u_base:?}"
-                    ));
+                    let base = ast.get_class(u_base).unwrap_or_else(|| {
+                        panic!(
+                            "Failed to get class that should have just been inserted: {u_base:?}"
+                        )
+                    });
 
                     for method in &base.methods {
                         if method.is_any_constructor() {
@@ -741,8 +715,17 @@ fn extract_class_decl_inner(
                     }
                 }
                 CursorKind::TypeAliasTemplateDecl => {
-                    // dump_cursor_until(class_decl.into(), tu, 2);
-                    unimplemented!("cannot handle base of TypeAliasTemplateDecl {c_base_decl:?}");
+                    if base_decl_qualified_name.contains("allocator<") {
+                        return Err(Error::Unsupported {
+                            description: "std::allocator".to_string(),
+                            source: Trace::new(),
+                        });
+                    } else {
+                        dump_parents(class_decl.try_into().unwrap());
+                        unimplemented!(
+                            "cannot handle base of TypeAliasTemplateDecl {c_base_decl:?}"
+                        );
+                    }
                 }
                 _ => {
                     // dump_cursor(class_decl.into(), tu);
@@ -800,7 +783,15 @@ fn extract_class_decl_inner(
                             });
                             index += 1;
                         }
-                        _ => unimplemented!(),
+                        _ => {
+                            return Err(Error::Unsupported {
+                                description: format!(
+                                "Unsupported template parameter kind {} in {member_qualified_name}",
+                                child.kind()
+                            ),
+                                source: Trace::new(),
+                            })
+                        }
                     }
                 }
             }
@@ -961,6 +952,13 @@ fn extract_class_decl_inner(
     );
 
     Ok(cd)
+}
+
+fn dump_parents(c: Cursor) {
+    println!("{c:?}");
+    if let Ok(p) = c.semantic_parent() {
+        dump_parents(p);
+    }
 }
 
 #[derive(Default)]

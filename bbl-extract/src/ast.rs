@@ -218,6 +218,14 @@ impl AST {
                     source: Trace::new(),
                 })?;
 
+            // first check if a matching specialization already exists, e.g. if the user has created one manually
+            let template_class = ast.classes.index(class_template_id);
+            if let Some(usr) = template_class.get_specialization(cts.template_arguments()) {
+                if ast.classes.get(&usr).is_some() {
+                    continue;
+                }
+            }
+
             let sd = specialize_class_template(ast.classes().index(class_template_id), cts, &ast)?;
             new_classes.push(sd);
         }

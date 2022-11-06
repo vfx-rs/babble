@@ -16,6 +16,7 @@ pub fn build_project<P: AsRef<Path>>(
     link_libraries: &[&str],
     compile_definitions: &[&str],
     cmake_prefix_path: Option<&Path>,
+    cxx_standard: &str,
 ) -> Result<(), Error> {
     let project_name = format!("{project_name}-c");
 
@@ -85,6 +86,7 @@ project({project_name})
 
 set(CMAKE_INSTALL_PREFIX {})
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_CXX_STANDARD {cxx_standard})
 
 {find_packages_str}
 

@@ -580,6 +580,181 @@ pub fn create_std_function(
     Ok(c.usr())
 }
 
+pub fn create_std_unordered_map(
+    c: CurClassDecl,
+    ast: &mut AST,
+    already_visited: &mut Vec<USR>,
+    tu: &TranslationUnit,
+    allow_list: &AllowList,
+    class_overrides: &OverrideList,
+    specialize_immediately: bool,
+    stop_on_error: bool,
+) -> Result<USR> {
+    if already_visited.contains(&c.usr()) {
+        return Ok(c.usr());
+    } else {
+        already_visited.push(c.usr());
+    }
+
+    let c_tmpl = c.specialized_template().unwrap();
+    let usr_tmpl = create_std_unordered_map_tmpl(c_tmpl, ast, tu, already_visited)?;
+
+    let name = c.display_name();
+
+    let namespaces = get_namespaces_for_decl(c.into(), tu, ast, already_visited)?;
+    let ty_key = c.template_argument_type(0)?;
+    let ty_t = c.template_argument_type(1)?;
+    let template_arguments = vec![
+        TemplateArgument::Type(extract_type(
+            ty_key,
+            &[],
+            already_visited,
+            ast,
+            tu,
+            allow_list,
+            class_overrides,
+            stop_on_error,
+        )?),
+        TemplateArgument::Type(extract_type(
+            ty_t,
+            &[],
+            already_visited,
+            ast,
+            tu,
+            allow_list,
+            class_overrides,
+            stop_on_error,
+        )?),
+    ];
+
+    let cts = ClassTemplateSpecialization::new(
+        usr_tmpl,
+        c.usr(),
+        &name,
+        template_arguments.clone(),
+        namespaces,
+        NeedsImplicit::all(),
+        false,
+    );
+
+    let cd = ast.get_class_mut(usr_tmpl).unwrap();
+    cd.add_specialization(template_arguments, c.usr());
+
+    if specialize_immediately {
+        let cd = ast.get_class(usr_tmpl).unwrap();
+        let sd = specialize_class_template(cd, &cts, ast)?;
+        ast.insert_class(sd);
+    }
+
+    let _ = ast.insert_class_template_specialization(cts);
+
+    Ok(c.usr())
+}
+
+fn create_std_unordered_map_tmpl(
+    c_tmpl: Cursor,
+    ast: &mut AST,
+    tu: &TranslationUnit,
+    already_visited: &mut Vec<USR>,
+) -> Result<USR> {
+    if already_visited.contains(&c_tmpl.usr()) {
+        return Ok(c_tmpl.usr());
+    } else {
+        already_visited.push(c_tmpl.usr());
+    }
+
+    // get the namespaces for std::vector<> as we might not have found them already
+    let _ = get_namespaces_for_decl(c_tmpl, tu, ast, already_visited)?;
+
+    let u_std = ast
+        .find_namespace("std")
+        .map(|id| ast.namespaces()[id].usr())
+        .unwrap();
+
+    let method_namespaces = vec![u_std, c_tmpl.usr()];
+
+    let methods = vec![
+        Method::new(
+            USR::new("BBL:map_ctor_default"),
+            "map".to_string(),
+            MethodKind::Constructor,
+            QualType::void(),
+            Vec::new(),
+            Some("ctor".to_string()),
+            method_namespaces.clone(),
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(false),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ),
+        Method::new(
+            USR::new("BBL:map_at_const"),
+            "at".to_string(),
+            MethodKind::Method,
+            QualType::lvalue_reference("const T &", QualType::template_parameter("T", "T", true)),
+            vec![Argument::new(
+                "key",
+                QualType::lvalue_reference(
+                    "const Key &",
+                    QualType::template_parameter("Key", "Key", true),
+                ),
+            )],
+            Some("at".to_string()),
+            method_namespaces.clone(),
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(true),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ),
+        Method::new(
+            USR::new("BBL:map_at_mut"),
+            "at".to_string(),
+            MethodKind::Method,
+            QualType::lvalue_reference("T &", QualType::template_parameter("T", "T", false)),
+            vec![Argument::new(
+                "key",
+                QualType::lvalue_reference(
+                    "const Key &",
+                    QualType::template_parameter("Key", "Key", true),
+                ),
+            )],
+            Some("at_mut".to_string()),
+            method_namespaces,
+            Vec::new(),
+            ExceptionSpecificationKind::None,
+            Const(false),
+            Virtual(false),
+            PureVirtual(false),
+            Deleted(false),
+        ),
+    ];
+
+    let cd = ClassDecl::new(
+        c_tmpl.usr(),
+        "map".to_string(),
+        Vec::new(),
+        methods,
+        vec![u_std],
+        vec![
+            TemplateParameterDecl::typ("Key", 0),
+            TemplateParameterDecl::typ("T", 1),
+        ],
+        false,
+        NeedsImplicit {
+            dtor: true,
+            ..Default::default()
+        },
+    );
+
+    ast.insert_class(cd);
+
+    Ok(c_tmpl.usr())
+}
+
 pub fn create_std_map(
     c: CurClassDecl,
     ast: &mut AST,

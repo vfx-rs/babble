@@ -41,7 +41,7 @@ public:
         ast.rename_namespace(ns, "Test");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 1);
@@ -84,7 +84,7 @@ typedef Class<float> ClassFloat;
         ast.rename_namespace(ns, "Test");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         // assert_eq!(c_ast.structs.len(), 1);
@@ -124,7 +124,7 @@ public:
         ast.rename_namespace(ns, "Test");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 1);
@@ -166,7 +166,7 @@ void fun(Class c);
         ast.rename_namespace(ns, "Test");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 1);
@@ -206,7 +206,7 @@ void fun(Class c);
         ast.rename_namespace(ns, "Test");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 1);
@@ -249,7 +249,7 @@ public:
         ast.rename_namespace(ns, "Test");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 2);
@@ -296,7 +296,7 @@ public:
         ast.class_set_bind_kind(class, ClassBindKind::ValueType)?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 2);
@@ -346,7 +346,7 @@ public:
         ast.class_set_bind_kind(class, ClassBindKind::ValueType)?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 2);
@@ -385,7 +385,7 @@ fn take_std_string_by_value() -> bbl_util::Result<()> {
         ast.rename_namespace(ns, "Test");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 2);
@@ -432,7 +432,7 @@ fn write_take_std_string() -> Result<(), Error> {
         ast.rename_namespace(ns, "Test");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 2);
@@ -486,7 +486,7 @@ fn write_implicit_ctor() -> Result<(), Error> {
         ast.class_set_bind_kind(class_id, ClassBindKind::OpaquePtr)?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         // assert_eq!(c_ast.structs.len(), 2);
@@ -546,7 +546,7 @@ fn write_inherited() -> Result<(), Error> {
             */
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         // assert_eq!(c_ast.structs.len(), 2);
@@ -582,7 +582,7 @@ fn write_take_std_string_fun() -> bbl_util::Result<()> {
         ast.rename_namespace(ns, "Test");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 1);
@@ -614,6 +614,7 @@ fn build_take_std_string() -> bbl_util::Result<()> {
             &find_packages,
             &link_libraries,
             Some(&cmake_prefix_path),
+            "11",
         )?;
 
         let mut ast = parse_file_and_extract_ast(
@@ -633,7 +634,7 @@ fn build_take_std_string() -> bbl_util::Result<()> {
         ast.rename_namespace(ns, "Test");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 2);
@@ -650,6 +651,7 @@ fn build_take_std_string() -> bbl_util::Result<()> {
             &link_libraries,
             &[],
             Some(&cmake_prefix_path),
+            "11",
         )?;
 
         Ok(())
@@ -692,7 +694,7 @@ fn write_enum() -> Result<(), Error> {
     ast.rename_namespace(ns, "Test");
 
     let ast = ast.monomorphize()?;
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
+    let c_ast = translate_cpp_ast_to_c(&ast, true)?;
 
     let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
@@ -731,7 +733,7 @@ fn write_vector() -> Result<(), Error> {
     ast.rename_namespace(ns, "Test");
 
     let ast = ast.monomorphize()?;
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
+    let c_ast = translate_cpp_ast_to_c(&ast, true)?;
 
     let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
@@ -770,7 +772,7 @@ fn write_unique_ptr() -> Result<(), Error> {
     ast.rename_namespace(ns, "Test");
 
     let ast = ast.monomorphize()?;
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
+    let c_ast = translate_cpp_ast_to_c(&ast, true)?;
 
     let (c_header, c_source) = gen_c("test", &c_ast)?;
     println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
@@ -805,7 +807,7 @@ fn write_std_function() -> Result<(), bbl_util::Error> {
         ast.rename_namespace(ns, "Test");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
 
         let (c_header, c_source) = gen_c("test", &c_ast)?;
         println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
@@ -847,7 +849,7 @@ fn write_nested_template() -> bbl_util::Result<()> {
         )?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         let (c_header, c_source) = gen_c("test", &c_ast)?;
@@ -892,7 +894,7 @@ fn write_template_typedef_member() -> bbl_util::Result<()> {
         )?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         let (c_header, c_source) = gen_c("test", &c_ast)?;
@@ -921,7 +923,58 @@ fn write_size_t() -> bbl_util::Result<()> {
         )?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
+        println!("{c_ast:?}");
+
+        let (c_header, c_source) = gen_c("test", &c_ast)?;
+        println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+
+        let mut ffi = String::new();
+        write_rust_ffi(&mut ffi, &c_ast)?;
+
+        println!("FFI:\n---------\n{ffi}");
+
+        Ok(())
+    })
+}
+
+#[test]
+fn write_template_template() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
+                    template <typename T>
+                    struct Vec {
+                        T x;
+                        T y;
+                    };
+
+                    typedef Vec<float> V2f;
+
+                    template <class V>
+                    struct Box {
+                        V _min;
+                        V _max;
+
+                        V min() const;
+                        V max() const;
+                    };
+
+                    typedef Box<V2f> Box2f;
+                "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+            true,
+        )?;
+
+        let ast = ast.monomorphize()?;
+
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         let (c_header, c_source) = gen_c("test", &c_ast)?;

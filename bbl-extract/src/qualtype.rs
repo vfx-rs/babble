@@ -10,7 +10,7 @@ use std::{convert::TryInto, fmt::Display};
 use tracing::{debug, error, instrument, trace, warn};
 
 use crate::{
-    ast::AST,
+    ast::{dump_cursor, dump_cursor_until, AST},
     class::{extract_class_decl, specialize_template_parameter, ClassBindKind, OverrideList},
     enm::extract_enum,
     error::Error,
@@ -254,7 +254,12 @@ impl QualType {
 
                             Ok(true)
                         } else {
-                            todo!("need to generate specialization here?")
+                            // TODO(AL): Is there any way of doing this immediately here? Can't modify the AST because
+                            // we're deep in a loop over it
+                            Err(Error::ClassTemplateSpecializationNotFound {
+                                usr: *usr,
+                                template_arguments: template_arguments.to_vec(),
+                            })
                         }
                     } else {
                         Ok(false)
@@ -731,13 +736,34 @@ pub fn extract_type(
                     })
                 }
                 CursorKind::TypeRef => unimplemented!("Should extract class here?"),
-                CursorKind::ClassTemplate if c_decl.display_name().contains("initializer_list") => {
+                CursorKind::ClassTemplate => {
+                    let usr = extract_class_decl(
+                        c_decl.try_into()?,
+                        tu,
+                        ast,
+                        already_visited,
+                        allow_list,
+                        class_overrides,
+                        None,
+                        false,
+                        stop_on_error,
+                    )?;
+
+                    Ok(QualType {
+                        name,
+                        is_const,
+                        type_ref: TypeRef::Ref(usr),
+                    })
+                }
+                _ => {
+                    dump_cursor_until(c_decl, tu, 2);
                     Err(Error::Unsupported {
-                        description: "std::initializer_list is unsupported".to_string(),
+                        description: format!(
+                            "Unsupported declaration while extracting type {c_decl:?}"
+                        ),
                         source: Trace::new(),
                     })
                 }
-                _ => unimplemented!("Unhandled type decl {:?}", c_decl),
             }
         }
     } else {

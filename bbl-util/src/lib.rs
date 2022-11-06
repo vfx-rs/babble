@@ -206,7 +206,12 @@ impl Default for Trace {
 
 impl std::fmt::Display for Trace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Backtrace:\n{:?}", self.0)
+        match std::env::var("RUST_BACKTRACE") {
+            Ok(value) if value == "1" => {
+                write!(f, "Backtrace:\n{:?}", self.0)
+            }
+            _ => Ok(()),
+        }
     }
 }
 

@@ -37,6 +37,7 @@ pub fn configure_temp_cmake_project<P: AsRef<Path>>(
     find_packages: &[&str],
     link_libraries: &[&str],
     cmake_prefix_path: Option<P>,
+    cxx_standard: &str,
 ) -> Result<(PathBuf, Vec<String>)> {
     let mut dirname = if let Ok(dir) = std::env::var("OUT_DIR") {
         PathBuf::from(&dir)
@@ -104,6 +105,7 @@ cmake_minimum_required(VERSION 3.5)
 project(babble_get_args)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_STANDARD {cxx_standard})
 
 {find_packages_str}
 
@@ -241,6 +243,7 @@ public:
             &["Imath 3.1 REQUIRED"],
             &["Imath::Imath"],
             Some(cmake_prefix_path),
+            "11",
         )?;
 
         Ok(())

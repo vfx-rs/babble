@@ -37,13 +37,13 @@ pub fn gen_c(module_name: &str, c_ast: &CAST) -> Result<(String, String)> {
     header = format!("{header}#define __{}_H__\n\n", module_name_upper);
     header = format!("{header}#ifdef __cplusplus\nextern \"C\" {{\n#endif\n\n");
 
-    // let mut source = c_ast
-    //     .includes
-    //     .iter()
-    //     .map(|i| i.get_statement())
-    //     .collect::<Vec<_>>()
-    //     .join("\n");
-    let mut source = String::new();
+    let mut source = c_ast
+        .includes
+        .iter()
+        .map(|i| i.get_statement())
+        .collect::<Vec<_>>()
+        .join("\n");
+    // let mut source = String::new();
 
     write!(
         &mut source,
@@ -262,7 +262,13 @@ fn create_ast_graph_usr(usr: USR, c_ast: &CAST, graph: &mut DiGraphMap<USR, ()>)
         return;
     }
 
-    let en = c_ast.get_entity(usr).unwrap();
+    let en = match c_ast.get_entity(usr) {
+        Some(en) => en,
+        None => {
+            panic!("Could not find AST entity for {usr}");
+        }
+    };
+
     match en {
         Entity::Struct(st) => {
             if matches!(st.bind_kind, ClassBindKind::ValueType) {

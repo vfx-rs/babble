@@ -81,6 +81,7 @@ pub fn translate_class(
     functions: &mut UstrIndexMap<CFunction, CFunctionId>,
     used_names: &mut HashSet<String>,
     type_replacements: &TypeReplacements,
+    stop_on_error: bool,
 ) -> Result<(), Error> {
     trace!("Translate class {class:?}");
     // build the namespace prefix
@@ -179,9 +180,9 @@ pub fn translate_class(
                 functions.insert(method.usr().into(), c_function);
             }
             Err(e) => {
-                if e.is_unsupported() {
+                if e.is_unsupported() || !stop_on_error {
                     error!(
-                        "Failed to translate method {}::{} due to unsupported feature: {e:?}",
+                        "Failed to translate method {}::{}",
                         class.name(),
                         method.name()
                     );

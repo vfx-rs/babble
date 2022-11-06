@@ -464,6 +464,131 @@ mod tests {
     use crate::{class::OverrideList, parse_string_and_extract_ast, AllowList};
 
     #[test]
+    fn extract_template_template() -> bbl_util::Result<()> {
+        bbl_util::run_test(|| {
+            let ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                    namespace detail {
+                    template <typename T>
+                    struct Vec {
+                        T x;
+                        T y;
+                    };
+
+                    typedef Vec<float> V2f;
+
+                    template <class V>
+                    struct Box {
+                        V _min;
+                        V _max;
+
+                        V min() const;
+                        V max() const;
+                    };
+
+                    typedef Box<V2f> Box2f;
+                    }
+
+                    void take_box(const detail::Box2f&);
+                "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::new(vec![r"^take_box".to_string()]),
+                &OverrideList::default(),
+                true,
+            )?;
+
+            let ast = ast.monomorphize()?;
+
+            println!("{ast:?}");
+
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    Namespace c:@N@detail detail None
+                    ClassDecl c:@N@detail@ST>1#T@Vec Vec rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[Type(T)] specializations=[([float], c:@N@detail@S@Vec>#f)] namespaces=[c:@N@detail]
+                    Field x: T
+                    Field y: T
+
+                    ClassDecl c:@N@detail@ST>1#T@Box Box rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[Type(V)] specializations=[([detail::Vec<float>], c:@N@detail@S@Box>#$@N@detail@S@Vec>#f)] namespaces=[c:@N@detail]
+                    Field _min: V
+                    Field _max: V
+
+                    ClassDecl c:@N@detail@S@Vec>#f Vec<float> rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[c:@N@detail]
+                    Field x: float
+                    Field y: float
+
+                    ClassDecl c:@N@detail@S@Box>#$@N@detail@S@Vec>#f Box<detail::Vec<float>> rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[c:@N@detail]
+                    Field _min: detail::Vec<float>
+                    Field _max: detail::Vec<float>
+
+                    Function c:@F@take_box#&1$@N@detail@S@Box>#$@N@detail@S@Vec>#f# take_box rename=None ignore=false return=void args=[: const detail::Box2f &] noexcept=None template_parameters=[] specializations=[] namespaces=[]
+                    TypeAlias Box2f = Box<V2f>
+                    ClassTemplateSpecialization c:@N@detail@S@Vec>#f Vec<float> specialized_decl=c:@N@detail@ST>1#T@Vec template_arguments=[float] namespaces=[c:@N@detail]
+                    ClassTemplateSpecialization c:@N@detail@S@Box>#$@N@detail@S@Vec>#f Box<detail::Vec<float>> specialized_decl=c:@N@detail@ST>1#T@Box template_arguments=[detail::Vec<float>] namespaces=[c:@N@detail]
+                    "#
+                ),
+            )
+        })
+    }
+
+    #[test]
+    fn extract_class_template_parameter() -> bbl_util::Result<()> {
+        bbl_util::run_test(|| {
+            let ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                    namespace detail {
+                    template <typename T>
+                    struct Vec {
+                        T x;
+                        T y;
+                    };
+                    }
+
+                    class Class {
+                    public:
+                        template <typename T>
+                        float take_vec(const detail::Vec<T>&);
+                    };
+                "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::new(vec![r"^Class".to_string()]),
+                &OverrideList::default(),
+                true,
+            )?;
+
+            let ast = ast.monomorphize()?;
+
+            println!("{ast:?}");
+
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    Namespace c:@N@detail detail None
+                    Namespace c:@S@Class Class None
+                    ClassDecl c:@N@detail@ST>1#T@Vec Vec rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[Type(T)] specializations=[] namespaces=[c:@N@detail]
+                    Field x: T
+                    Field y: T
+
+                    ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@FT@>1#Ttake_vec#&1>@N@detail@ST>1#T@Vec1t0.0#f# take_vec rename=None ignore=false return=float args=[: const detail::Vec<T> &] noexcept=None template_parameters=[Type(T)] specializations=[] namespaces=[c:@S@Class]
+
+                    "#
+                ),
+            )
+        })
+    }
+
+    #[test]
     fn extract_nested_template() -> bbl_util::Result<()> {
         bbl_util::run_test(|| {
             let ast = parse_string_and_extract_ast(

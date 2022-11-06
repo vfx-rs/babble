@@ -87,6 +87,13 @@ impl AsRef<Ustr> for USR {
     }
 }
 
+impl Deref for USR {
+    type Target = Ustr;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct Cursor {
     pub(crate) inner: CXCursor,

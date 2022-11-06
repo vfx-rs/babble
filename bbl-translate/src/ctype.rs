@@ -254,7 +254,12 @@ pub fn translate_qual_type(
             cpp_type_ref: qual_type.type_ref.clone(),
         }),
         TypeRef::Typedef(usr) => {
-            let td = ast.get_type_alias(*usr).unwrap();
+            let td = ast
+                .get_type_alias(*usr)
+                .ok_or_else(|| Error::FailedToTranslateTypedef {
+                    usr: *usr,
+                    source: Box::new(Trace::new()),
+                })?;
             if td.underlying_type().is_template(ast) {
                 // expand the template now
                 translate_qual_type(

@@ -603,7 +603,7 @@ public:
 
             let ast = ast.monomorphize()?;
 
-            let c_ast = translate_cpp_ast_to_c(&ast)?;
+            let c_ast = translate_cpp_ast_to_c(&ast, true)?;
             let rast = translate_cpp_ast_to_rust(&ast, &c_ast)?;
 
             println!("{rast:?}");

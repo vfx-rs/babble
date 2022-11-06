@@ -26,6 +26,7 @@ pub fn parse(header: &str, options: &BindOptions) -> Result<AST, Error> {
         options.find_packages,
         options.link_libraries,
         options.cmake_prefix_path.as_ref(),
+        options.cxx_standard,
     )?;
 
     for a in options.clang_args {
@@ -55,7 +56,8 @@ pub fn bind(
     ast: &MonoAST,
     options: &BindOptions,
 ) -> Result<(), Error> {
-    let c_ast = translate_cpp_ast_to_c(ast)?;
+    let c_ast = translate_cpp_ast_to_c(ast, options.stop_on_error)?;
+    // println!("{c_ast:?}");
 
     // let (c_header, c_source) = gen_c(project_name, &c_ast)?;
     // debug!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
@@ -68,6 +70,7 @@ pub fn bind(
         options.link_libraries,
         options.compile_definitions,
         options.cmake_prefix_path.as_deref(),
+        options.cxx_standard,
     )?;
 
     // now that the cmake project has built successfully let's translate the c ast to rust and write out the ffi module
@@ -101,7 +104,7 @@ pub fn bind(
     Ok(())
 }
 
-pub struct BindOptions<'a, 'b, 'c, 'd, 'e> {
+pub struct BindOptions<'a, 'b, 'c, 'd, 'e, 'f> {
     pub cmake_prefix_path: Option<PathBuf>,
     pub find_packages: &'a [&'a str],
     pub link_libraries: &'b [&'b str],
@@ -112,9 +115,10 @@ pub struct BindOptions<'a, 'b, 'c, 'd, 'e> {
     pub overrides: OverrideList,
     pub log_diagnostics: bool,
     pub stop_on_error: bool,
+    pub cxx_standard: &'f str,
 }
 
-impl<'a, 'b, 'c, 'd, 'e> Default for BindOptions<'a, 'b, 'c, 'd, 'e> {
+impl<'a, 'b, 'c, 'd, 'e, 'f> Default for BindOptions<'a, 'b, 'c, 'd, 'e, 'f> {
     fn default() -> Self {
         BindOptions {
             cmake_prefix_path: None,
@@ -127,6 +131,7 @@ impl<'a, 'b, 'c, 'd, 'e> Default for BindOptions<'a, 'b, 'c, 'd, 'e> {
             allow_list: AllowList::default(),
             overrides: OverrideList::default(),
             stop_on_error: true,
+            cxx_standard: "11",
         }
     }
 }

@@ -51,7 +51,7 @@ public:
 
         let ast = ast.monomorphize()?;
 
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
 
         println!("{c_ast:?}");
 
@@ -91,7 +91,7 @@ public:
         let _method = ast.find_method(class, "take_a(const A &)")?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
 
         println!("{c_ast:?}");
 
@@ -189,7 +189,7 @@ public:
         ast.rename_namespace(namespace, "Imath");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
 
         println!("{c_ast:?}");
 
@@ -306,7 +306,7 @@ public:
         )?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         Ok(())
@@ -331,7 +331,7 @@ int basic_function(int&& a, float*);
         )?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         assert_eq!(c_ast.structs.len(), 0);
         assert_eq!(c_ast.functions.len(), 1);
 
@@ -368,7 +368,7 @@ T function_template(T&& a, float*);
         )?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         assert_eq!(c_ast.structs.len(), 0);
@@ -409,7 +409,7 @@ fn translate_method_template() -> bbl_util::Result<()> {
         )?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         bbl_util::compare(
@@ -460,7 +460,7 @@ public:
         )?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
 
         println!("{c_ast:?}");
 
@@ -521,7 +521,7 @@ typedef Class<short> ClassShort;
 
         println!("{ast:?}");
 
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
 
         println!("{c_ast:?}");
 
@@ -574,7 +574,7 @@ public:
         )?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
         bbl_util::compare(
             &format!("{c_ast:?}"),
@@ -612,6 +612,7 @@ public:
         &["Imath 3.1 REQUIRED"],
         &["Imath::Imath"],
         None,
+        "11",
     )?;
 
     let ast = parse_file_and_extract_ast(
@@ -652,7 +653,7 @@ public:
         )?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
 
         println!("{c_ast:?}");
         bbl_util::compare(
@@ -717,7 +718,7 @@ fn translate_enum() -> Result<(), Error> {
     ast.rename_namespace(ns, "Test");
 
     let ast = ast.monomorphize()?;
-    let c_ast = translate_cpp_ast_to_c(&ast)?;
+    let c_ast = translate_cpp_ast_to_c(&ast, true)?;
     println!("{c_ast:?}");
     assert_eq!(
         format!("{c_ast:?}"),
@@ -763,7 +764,7 @@ fn translate_vector() -> bbl_util::Result<()> {
         ast.rename_namespace(ns, "Test");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         bbl_util::compare(
@@ -824,7 +825,7 @@ fn translate_unique_ptr() -> bbl_util::Result<()> {
         ast.rename_namespace(ns, "Test");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
 
         println!("{c_ast:?}");
         bbl_util::compare(
@@ -879,7 +880,7 @@ fn translate_std_function() -> Result<(), bbl_util::Error> {
         ast.rename_namespace(ns, "Test");
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
 
         println!("{c_ast:?}");
         bbl_util::compare(
@@ -928,7 +929,7 @@ fn translate_nested_template() -> bbl_util::Result<()> {
         )?;
 
         let ast = ast.monomorphize()?;
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         bbl_util::compare(
@@ -982,7 +983,7 @@ fn translate_version_inner_namespace() -> bbl_util::Result<()> {
         let ast = ast.monomorphize()?;
         println!("{ast:?}");
 
-        let c_ast = translate_cpp_ast_to_c(&ast)?;
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
         println!("{c_ast:?}");
 
         bbl_util::compare(
@@ -993,6 +994,127 @@ fn translate_version_inner_namespace() -> bbl_util::Result<()> {
                     CFunction Test_v1_0_Class_ctor Test_Class_ctor([result: c:@N@Test@N@v1_0@S@Class*])  -> Int
                     CFunction Test_v1_0_Class_copy_ctor Test_Class_copy_ctor([result: c:@N@Test@N@v1_0@S@Class*, rhs: c:@N@Test@N@v1_0@S@Class const* const])  -> Int
                     CFunction Test_v1_0_Class_move_ctor Test_Class_move_ctor([result: c:@N@Test@N@v1_0@S@Class*, rhs: c:@N@Test@N@v1_0@S@Class const*])  -> Int
+        "#
+            ),
+        )
+    })
+}
+
+#[test]
+fn translate_template_template() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
+                    template <typename T>
+                    struct Vec {
+                        T x;
+                        T y;
+                    };
+
+                    typedef Vec<float> V2f;
+
+                    template <class V>
+                    struct Box {
+                        V _min;
+                        V _max;
+
+                        V min() const;
+                        V max() const;
+                    };
+
+                    typedef Box<V2f> Box2f;
+                "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::default(),
+            &OverrideList::default(),
+            true,
+        )?;
+
+        let ast = ast.monomorphize()?;
+
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
+        println!("{c_ast:?}");
+
+        bbl_util::compare(
+            &format!("{c_ast:?}"),
+            indoc!(
+                r#"
+                CStruct c:@S@Vec>#f Vec_float_ Vec_float_ OpaquePtr fields=[x: Float, y: Float]
+                CStruct c:@S@Box>#$@S@Vec>#f Box_Vec_float_ Box_Vec_float_ OpaquePtr fields=[_min: c:@S@Vec>#f, _max: c:@S@Vec>#f]
+                CTypedef V2f V2f c:@S@Vec>#f
+                CTypedef Box2f Box2f c:@S@Box>#$@S@Vec>#f
+                CFunction Box_Vec_float__min Box_Vec_float__min([this_: c:@S@Box>#$@S@Vec>#f const*, result: c:@S@Vec>#f*])  -> Int
+                CFunction Box_Vec_float__max Box_Vec_float__max([this_: c:@S@Box>#$@S@Vec>#f const*, result: c:@S@Vec>#f*])  -> Int
+        "#
+            ),
+        )
+    })
+}
+
+#[test]
+fn translate_class_template_parameter() -> bbl_util::Result<()> {
+    bbl_util::run_test(|| {
+        let mut ast = parse_string_and_extract_ast(
+            indoc!(
+                r#"
+                namespace detail {
+                template <typename T>
+                struct Vec {
+                    T x;
+                    T y;
+                };
+                }
+
+                class Class {
+                public:
+                    template <typename T>
+                    float take_vec(const detail::Vec<T>&);
+                };
+                "#
+            ),
+            &cli_args()?,
+            true,
+            None,
+            &AllowList::new(vec![r"^Class".to_string()]),
+            &OverrideList::default(),
+            true,
+        )?;
+
+        let class = ast.find_class("Vec")?;
+        ast.specialize_class(
+            class,
+            "Vec_float",
+            vec![TemplateArgument::Type(QualType::float())],
+        )?;
+
+        let class = ast.find_class("Class")?;
+        let method = ast.find_method(class, "take_vec")?;
+        ast.specialize_method(
+            class,
+            method,
+            "take_vec_float",
+            vec![TemplateArgument::Type(QualType::float())],
+        )?;
+
+        let ast = ast.monomorphize()?;
+
+        let c_ast = translate_cpp_ast_to_c(&ast, true)?;
+        println!("{c_ast:?}");
+
+        bbl_util::compare(
+            &format!("{c_ast:?}"),
+            indoc!(
+                r#"
+                CStruct c:@S@Class Class Class ValueType fields=[]
+                CStruct c:@N@detail@ST>1#T@Vec_Vec_float Vec_float Vec_float OpaquePtr fields=[x: Float, y: Float]
+                CFunction Class_take_vec_float Class_take_vec_float([this_: c:@S@Class*, result: Float*, arg: c:@N@detail@ST>1#T@Vec_Vec_float const*])  -> Int
+                CFunction Class_ctor Class_ctor([result: c:@S@Class*])  -> Int
+                CFunction Class_copy_ctor Class_copy_ctor([result: c:@S@Class*, rhs: c:@S@Class const* const])  -> Int
+                CFunction Class_move_ctor Class_move_ctor([result: c:@S@Class*, rhs: c:@S@Class const*])  -> Int
         "#
             ),
         )
