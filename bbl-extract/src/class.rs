@@ -868,6 +868,21 @@ fn extract_class_decl_inner(
                     });
                 }
             }
+            CursorKind::ClassDecl | CursorKind::ClassTemplate => {
+                let class = extract_class_decl_inner(
+                    member.try_into()?,
+                    tu,
+                    ast,
+                    already_visited,
+                    allow_list,
+                    class_overrides,
+                    qname_override,
+                    namespace_override,
+                    stop_on_error,
+                )?;
+
+                ast.insert_class(class);
+            }
             _ => {
                 debug!("  {member:?}");
                 for child in member.children() {
@@ -1346,6 +1361,56 @@ mod tests {
             let class_id = ast.find_class("Class")?;
             let class = &ast.classes()[class_id];
             assert!(matches!(class.bind_kind(), ClassBindKind::OpaquePtr));
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn extract_nested_class() -> bbl_util::Result<()> {
+        bbl_util::run_test(|| {
+            let ast = parse_string_and_extract_ast(
+                indoc!(
+                    r#"
+                class Class {
+                public:
+                    float class_float;
+                    void class_do_thing();
+
+                    class Inner {
+                    public:
+                        int inner_int();
+                        void inner_do_thing();
+                    };
+                };
+            "#
+                ),
+                &cli_args()?,
+                true,
+                None,
+                &AllowList::default(),
+                &OverrideList::default(),
+                true,
+            )?;
+
+            println!("{ast:?}");
+            bbl_util::compare(
+                &format!("{ast:?}"),
+                indoc!(
+                    r#"
+                    Namespace c:@S@Class Class None
+                    Namespace c:@S@Class@S@Inner Inner None
+                    ClassDecl c:@S@Class@S@Inner Inner rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@S@Inner@F@inner_int# inner_int rename=None ignore=false return=int args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class, c:@S@Class@S@Inner]
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@S@Inner@F@inner_do_thing# inner_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class, c:@S@Class@S@Inner]
+
+                    ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    Field class_float: float
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@class_do_thing# class_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+
+        "#
+                ),
+            )?;
 
             Ok(())
         })

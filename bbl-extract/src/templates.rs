@@ -80,7 +80,9 @@ pub fn extract_class_template_specialization(
         })?;
     debug!("extract_class_template_specialization: got specialized decl {specialized_decl:?}");
 
-    extract_class_decl(
+    let name = c_class_decl.display_name();
+
+    let u_specialized = extract_class_decl(
         specialized_decl.as_class_decl(),
         tu,
         ast,
@@ -110,6 +112,15 @@ pub fn extract_class_template_specialization(
     //     "Could not extract just inserted class template {:?}",
     //     specialized_decl.usr()
     // ));
+
+    if ast.get_class(specialized_decl.usr()).is_none() {
+        println!("{ast:?}");
+        println!("--- {u_specialized}");
+        println!("--- {}", specialized_decl.usr());
+        println!(" in {c_class_decl:?}");
+        panic!();
+    }
+
     let class_template =
         ast.get_class_mut(specialized_decl.usr())
             .ok_or_else(|| Error::ClassTemplateNotFound {
@@ -490,13 +501,14 @@ mod tests {
                     typedef Box<V2f> Box2f;
                     }
 
+                    void take_vec(const detail::V2f&);
                     void take_box(const detail::Box2f&);
                 "#
                 ),
                 &cli_args()?,
                 true,
                 None,
-                &AllowList::new(vec![r"^take_box".to_string()]),
+                &AllowList::new(vec![r"^take_".to_string()]),
                 &OverrideList::default(),
                 true,
             )?;
@@ -526,7 +538,9 @@ mod tests {
                     Field _min: detail::Vec<float>
                     Field _max: detail::Vec<float>
 
+                    Function c:@F@take_vec#&1$@N@detail@S@Vec>#f# take_vec rename=None ignore=false return=void args=[: const detail::V2f &] noexcept=None template_parameters=[] specializations=[] namespaces=[]
                     Function c:@F@take_box#&1$@N@detail@S@Box>#$@N@detail@S@Vec>#f# take_box rename=None ignore=false return=void args=[: const detail::Box2f &] noexcept=None template_parameters=[] specializations=[] namespaces=[]
+                    TypeAlias V2f = Vec<float>
                     TypeAlias Box2f = Box<V2f>
                     ClassTemplateSpecialization c:@N@detail@S@Vec>#f Vec<float> specialized_decl=c:@N@detail@ST>1#T@Vec template_arguments=[float] namespaces=[c:@N@detail]
                     ClassTemplateSpecialization c:@N@detail@S@Box>#$@N@detail@S@Vec>#f Box<detail::Vec<float>> specialized_decl=c:@N@detail@ST>1#T@Box template_arguments=[detail::Vec<float>] namespaces=[c:@N@detail]

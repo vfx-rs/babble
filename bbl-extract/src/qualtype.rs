@@ -862,11 +862,7 @@ pub fn extract_type(
                 })
             }
             TypeKind::Unexposed => {
-                if template_parameters
-                    .iter()
-                    .position(|p| p.name() == name)
-                    .is_some()
-                {
+                if template_parameters.iter().any(|p| p.name() == name) {
                     Ok(QualType {
                         name: name.clone(),
                         is_const,
