@@ -95,6 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &tu,
                 &skip_kinds,
                 None,
+                true,
             );
         }
     } else {
@@ -106,6 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &tu,
             &skip_kinds,
             None,
+            true,
         );
     }
 

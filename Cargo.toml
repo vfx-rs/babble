@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "bbl-bind",
     "bbl-clang",
     "bbl-extract",
     "bbl-translate",
@@ -8,5 +9,5 @@ members = [
     "bbl-gen",
     "bbl-dumpast",
     "bbl-util",
-    "examples/*"
+    "examples/*",
 ]

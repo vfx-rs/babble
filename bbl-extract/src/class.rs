@@ -445,6 +445,10 @@ impl ClassDecl {
     pub fn needs_implicit(&self) -> &NeedsImplicit {
         &self.needs_implicit
     }
+
+    pub fn rename(&self) -> Option<&String> {
+        self.rename.as_ref()
+    }
 }
 
 impl Display for ClassDecl {
@@ -745,12 +749,12 @@ fn extract_class_decl_inner(
     let mut has_private_fields = false;
 
     let needs_implicit = NeedsImplicit {
-        ctor: class_decl.cxxrecord_needs_implicit_default_constructor(),
-        copy_ctor: class_decl.cxxrecord_needs_implicit_copy_constructor(),
-        move_ctor: class_decl.cxxrecord_needs_implicit_move_constructor(),
-        copy_assign: class_decl.cxxrecord_needs_implicit_copy_assignment(),
-        move_assign: class_decl.cxxrecord_needs_implicit_move_assignment(),
-        dtor: class_decl.cxxrecord_needs_implicit_destructor(),
+        ctor: false,
+        copy_ctor: false,
+        move_ctor: false,
+        copy_assign: false,
+        move_assign: false,
+        dtor: false,
     };
 
     for member in members {

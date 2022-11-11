@@ -120,6 +120,10 @@ impl From<CursorKind> for CXCursorKind {
             CursorKind::OMPArrayShapingExpr => CXCursor_OMPArrayShapingExpr,
             CursorKind::OMPIteratorExpr => CXCursor_OMPIteratorExpr,
             CursorKind::CXXAddrspaceCastExpr => CXCursor_CXXAddrspaceCastExpr,
+            CursorKind::ConceptSpecializationExpr => CXCursor_ConceptSpecializationExpr,
+            CursorKind::ExprWithCleanups => CXCursor_ExprWithCleanups,
+            CursorKind::ImplicitCastExpr => CXCursor_ImplicitCastExpr,
+
             CursorKind::UnexposedStmt => CXCursor_UnexposedStmt,
             CursorKind::LabelStmt => CXCursor_LabelStmt,
             CursorKind::CompoundStmt => CXCursor_CompoundStmt,
@@ -413,6 +417,10 @@ impl From<CXCursorKind> for CursorKind {
             CXCursor_OMPArrayShapingExpr => CursorKind::OMPArrayShapingExpr,
             CXCursor_OMPIteratorExpr => CursorKind::OMPIteratorExpr,
             CXCursor_CXXAddrspaceCastExpr => CursorKind::CXXAddrspaceCastExpr,
+            CXCursor_ConceptSpecializationExpr => CursorKind::ConceptSpecializationExpr,
+            CXCursor_RequiresExpr => CursorKind::RequiresExpr,
+            CXCursor_ExprWithCleanups => CursorKind::ExprWithCleanups,
+            CXCursor_ImplicitCastExpr => CursorKind::ImplicitCastExpr,
 
             CXCursor_UnexposedStmt => CursorKind::UnexposedStmt,
             CXCursor_LabelStmt => CursorKind::LabelStmt,
@@ -1074,7 +1082,8 @@ pub enum CursorKind {
      * Expression that references a C++20 concept.
      */
     RequiresExpr = 154,
-
+    ExprWithCleanups = 155,
+    ImplicitCastExpr = 156,
     /* Statements */
     /**
      * A statement whose specific kind is not exposed via this

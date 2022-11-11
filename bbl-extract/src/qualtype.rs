@@ -756,7 +756,7 @@ pub fn extract_type(
                     })
                 }
                 _ => {
-                    dump_cursor_until(c_decl, tu, 2);
+                    dump_cursor_until(c_decl, tu, 2, true);
                     Err(Error::Unsupported {
                         description: format!(
                             "Unsupported declaration while extracting type {c_decl:?}"
@@ -896,6 +896,16 @@ pub fn extract_type(
                 println!("decl: {decl:?}");
                 panic!();
             }
+            TypeKind::SubstTemplateTypeParm => extract_type(
+                ty.replacement_type()?,
+                template_parameters,
+                already_visited,
+                ast,
+                tu,
+                allow_list,
+                class_overrides,
+                stop_on_error,
+            ),
             _ => unimplemented!("Unimplemented extraction for {ty:?}"),
         }
     }

@@ -87,7 +87,11 @@ pub fn translate_class(
     // build the namespace prefix
     let (ns_prefix_public, ns_prefix_private) = build_namespace_prefix(ast, class.namespaces())?;
 
-    let st_name = sanitize_name(class.name());
+    let st_name = sanitize_name(if let Some(name) = class.rename() {
+        name
+    } else {
+        class.name()
+    });
     let ns_prefix_public = sanitize_name(&ns_prefix_public);
     let ns_prefix_private = sanitize_name(&ns_prefix_private);
 

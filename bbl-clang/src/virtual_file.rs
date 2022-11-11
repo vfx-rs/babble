@@ -178,13 +178,133 @@ target_link_libraries(babble_get_args {link_libraries_str})
     Ok((source_filename, args))
 }
 
+#[derive(Debug, Clone)]
+pub struct FileCommands {
+    filename: String,
+    args: Vec<String>,
+}
+
+impl FileCommands {
+    pub fn filename(&self) -> &str {
+        self.filename.as_ref()
+    }
+
+    pub fn args(&self) -> &[String] {
+        self.args.as_ref()
+    }
+}
+
+pub fn configure_bind_project(
+    bind_project_dir: impl AsRef<Path>,
+    cmake_prefix_path: Option<impl AsRef<Path>>,
+) -> Result<Vec<FileCommands>> {
+    let mut dirname = if let Ok(dir) = std::env::var("OUT_DIR") {
+        PathBuf::from(&dir)
+    } else {
+        std::env::temp_dir()
+    };
+
+    let mut s = DefaultHasher::new();
+    bind_project_dir.as_ref().hash(&mut s);
+    dirname.push(format!("bbl-{:x}", s.finish()));
+    let build_dir = dirname.join("build");
+
+    if build_dir.exists() {
+        std::fs::remove_dir_all(&build_dir)?;
+    }
+
+    #[cfg(windows)]
+    let args = [
+        ".",
+        "-B",
+        build_dir.as_os_str().to_str().unwrap(),
+        "-G",
+        "Ninja",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+    ];
+
+    #[cfg(unix)]
+    let args = [
+        ".",
+        "-B",
+        build_dir.as_os_str().to_str().unwrap(),
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+    ];
+
+    let output = if let Some(pp) = cmake_prefix_path {
+        std::process::Command::new("cmake")
+            .args(&args)
+            .current_dir(bind_project_dir.as_ref())
+            .env("CMAKE_PREFIX_PATH", pp.as_ref())
+            .output()
+            .map_err(Error::FailedToRunCMake)?
+    } else {
+        std::process::Command::new("cmake")
+            .args(&args)
+            .current_dir(bind_project_dir.as_ref())
+            .output()
+            .map_err(Error::FailedToRunCMake)?
+    };
+
+    if !output.status.success() {
+        error!(
+            "Failed to configure cmake binding project:\n{}\n\n{}",
+            std::str::from_utf8(&output.stdout).expect("UTF-8 error parsing cmake stdout"),
+            std::str::from_utf8(&output.stderr).expect("UTF-8 error parsing cmake stderr")
+        );
+        return Err(Error::CMakeError {
+            stdout: std::str::from_utf8(&output.stdout)
+                .expect("UTF-8 error parsing cmake stdout")
+                .to_string(),
+            stderr: std::str::from_utf8(&output.stderr)
+                .expect("UTF-8 error parsing cmake stderr")
+                .to_string(),
+        });
+    }
+
+    let compilation_db = CompilationDatabase::from_directory(&build_dir)?;
+    let compile_commands = compilation_db.get_all_compile_commands();
+
+    let mut result = Vec::new();
+    for cc in compile_commands.get_commands() {
+        let filename = cc.get_filename();
+        let args = filter_args(&filename, cc.get_arguments());
+        result.push(FileCommands { filename, args });
+    }
+
+    Ok(result)
+}
+
+fn filter_args(source_filename: &str, raw_args: Vec<String>) -> Vec<String> {
+    let mut it_raw_args = raw_args.into_iter().skip(1);
+
+    let mut args = Vec::new();
+    'outer: while let Some(arg) = it_raw_args.next() {
+        for pattern in ["-c", "-o"] {
+            if arg.starts_with(pattern) {
+                // skip this arg and its value
+                it_raw_args.nth(1);
+                continue 'outer;
+            }
+        }
+
+        if arg.starts_with("--driver-mode") || arg == source_filename {
+            continue;
+        }
+
+        args.push(arg);
+    }
+
+    args
+}
+
 #[cfg(test)]
 mod tests {
     use crate::index::Index;
     use crate::*;
     use log::*;
 
-    use super::configure_temp_cmake_project;
+    use super::{configure_bind_project, configure_temp_cmake_project};
 
     #[test]
     fn test_virtual_file() -> Result<(), crate::error::Error> {
@@ -245,6 +365,27 @@ public:
             Some(cmake_prefix_path),
             "11",
         )?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_bind_project() -> Result<(), crate::error::Error> {
+        let testdata_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("testdata");
+
+        let imath_path = testdata_path.join("imath");
+        let take_string_path = testdata_path.join("take_string");
+
+        let cmake_prefix_path = std::env::join_paths(&[imath_path, take_string_path]).unwrap();
+
+        let bind_project_dir = testdata_path.join("bind_project");
+
+        let source_args = configure_bind_project(bind_project_dir, Some(cmake_prefix_path))?;
+
+        println!("{source_args:?}");
 
         Ok(())
     }

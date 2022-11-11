@@ -103,6 +103,9 @@ impl Type {
     pub fn result_type(&self) -> Result<Type> {
         unsafe { to_type(clang_getResultType(self.inner)) }
     }
+    pub fn replacement_type(&self) -> Result<Type> {
+        unsafe { to_type(clang_Type_getReplacementType(self.inner)) }
+    }
 }
 
 impl Display for Type {
@@ -260,6 +263,8 @@ pub enum TypeKind {
     OCLIntelSubgroupAVCImeDualRefStreamin = 175,
     ExtVector = 176,
     Atomic = 177,
+    BTFTagAttributed = 178,
+    SubstTemplateTypeParm = 179,
 }
 
 impl From<TypeKind> for clang_sys::CXTypeKind {
@@ -390,6 +395,8 @@ impl From<TypeKind> for clang_sys::CXTypeKind {
             }
             TypeKind::ExtVector => CXType_ExtVector,
             TypeKind::Atomic => CXType_Atomic,
+            TypeKind::BTFTagAttributed => CXType_BTFTagAttributed,
+            TypeKind::SubstTemplateTypeParm => CXType_SubstTemplateTypeParm,
         }
     }
 }
@@ -522,6 +529,8 @@ impl From<clang_sys::CXTypeKind> for TypeKind {
             }
             CXType_ExtVector => TypeKind::ExtVector,
             CXType_Atomic => TypeKind::Atomic,
+            CXType_BTFTagAttributed => TypeKind::BTFTagAttributed,
+            CXType_SubstTemplateTypeParm => TypeKind::SubstTemplateTypeParm,
             _ => unimplemented!(),
         }
     }

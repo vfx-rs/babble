@@ -57,12 +57,12 @@ pub fn extract_class_template_specialization(
     debug!("template arguments {:?}", template_arguments);
 
     let needs_implicit = NeedsImplicit {
-        ctor: c_class_decl.cxxrecord_needs_implicit_default_constructor(),
-        copy_ctor: c_class_decl.cxxrecord_needs_implicit_copy_constructor(),
-        move_ctor: c_class_decl.cxxrecord_needs_implicit_move_constructor(),
-        copy_assign: c_class_decl.cxxrecord_needs_implicit_copy_assignment(),
-        move_assign: c_class_decl.cxxrecord_needs_implicit_move_assignment(),
-        dtor: c_class_decl.cxxrecord_needs_implicit_destructor(),
+        ctor: false,
+        copy_ctor: false,
+        move_ctor: false,
+        copy_assign: false,
+        move_assign: false,
+        dtor: false,
     };
 
     let is_pod = c_class_decl.ty()?.is_pod();
@@ -75,7 +75,7 @@ pub fn extract_class_template_specialization(
         })?
         .try_into()
         .map_err(|e| {
-            dump_cursor_until(*c_class_decl, tu, 4);
+            dump_cursor_until(*c_class_decl, tu, 4, true);
             e
         })?;
     debug!("extract_class_template_specialization: got specialized decl {specialized_decl:?}");

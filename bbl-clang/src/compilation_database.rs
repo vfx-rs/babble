@@ -51,6 +51,12 @@ impl CompilationDatabase {
 
         CompileCommands { inner }
     }
+
+    pub fn get_all_compile_commands(&self) -> CompileCommands {
+        let inner = unsafe { clang_CompilationDatabase_getAllCompileCommands(self.inner) };
+
+        CompileCommands { inner }
+    }
 }
 
 impl Drop for CompilationDatabase {
@@ -97,5 +103,9 @@ impl<'a> CompileCommand<'a> {
             result.push(unsafe { clang_CompileCommand_getArg(self.inner, i).to_string() });
         }
         result
+    }
+
+    pub fn get_filename(&self) -> String {
+        unsafe { clang_CompileCommand_getFilename(self.inner).to_string() }
     }
 }

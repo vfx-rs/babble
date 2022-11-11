@@ -12,16 +12,13 @@ use clang_sys::{
     clang_CXXConstructor_isDefaultConstructor, clang_CXXConstructor_isMoveConstructor,
     clang_CXXMethod_isConst, clang_CXXMethod_isDefaulted, clang_CXXMethod_isDeleted,
     clang_CXXMethod_isPureVirtual, clang_CXXMethod_isStatic, clang_CXXMethod_isVirtual,
-    clang_CXXRecord_isAbstract, clang_CXXRecord_needsImplicitCopyAssignment,
-    clang_CXXRecord_needsImplicitCopyConstructor, clang_CXXRecord_needsImplicitDefaultConstructor,
-    clang_CXXRecord_needsImplicitDestructor, clang_CXXRecord_needsImplicitMoveAssignment,
-    clang_CXXRecord_needsImplicitMoveConstructor, clang_Cursor_getArgument,
-    clang_Cursor_getNumArguments, clang_Cursor_getNumTemplateArguments,
-    clang_Cursor_getTemplateArgumentKind, clang_Cursor_getTemplateArgumentType,
-    clang_Cursor_getTemplateArgumentUnsignedValue, clang_Cursor_getTemplateArgumentValue,
-    clang_Cursor_getVarDeclInitializer, clang_Cursor_hasVarDeclExternalStorage,
-    clang_Cursor_hasVarDeclGlobalStorage, clang_equalCursors, clang_getCXXAccessSpecifier,
-    clang_getCanonicalCursor, clang_getCursorDefinition, clang_getCursorDisplayName,
+    clang_CXXRecord_isAbstract, clang_Cursor_getArgument, clang_Cursor_getNumArguments,
+    clang_Cursor_getNumTemplateArguments, clang_Cursor_getTemplateArgumentKind,
+    clang_Cursor_getTemplateArgumentType, clang_Cursor_getTemplateArgumentUnsignedValue,
+    clang_Cursor_getTemplateArgumentValue, clang_Cursor_getVarDeclInitializer,
+    clang_Cursor_hasVarDeclExternalStorage, clang_Cursor_hasVarDeclGlobalStorage,
+    clang_equalCursors, clang_getCXXAccessSpecifier, clang_getCanonicalCursor,
+    clang_getCursorDefinition, clang_getCursorDisplayName,
     clang_getCursorExceptionSpecificationType, clang_getCursorKind, clang_getCursorLocation,
     clang_getCursorPrettyPrinted, clang_getCursorPrintingPolicy, clang_getCursorReferenced,
     clang_getCursorResultType, clang_getCursorSemanticParent, clang_getCursorSpelling,
@@ -237,6 +234,20 @@ impl Cursor {
         result
     }
 
+    pub fn first_child_of_kind_with_name(&self, kind: CursorKind, name: &str) -> Option<Cursor> {
+        let mut result = None;
+        self.visit_children(|c, _| {
+            if c.kind() == kind && c.display_name().starts_with(name) {
+                result = Some(c);
+                ChildVisitResult::Break
+            } else {
+                ChildVisitResult::Continue
+            }
+        });
+
+        result
+    }
+
     pub fn children_of_kind_with_name(
         &self,
         kind: CursorKind,
@@ -388,30 +399,6 @@ impl Cursor {
 
     pub fn enum_decl_integer_type(&self) -> Result<Type> {
         unsafe { to_type(clang_getEnumDeclIntegerType(self.inner)) }
-    }
-
-    pub fn cxxrecord_needs_implicit_default_constructor(&self) -> bool {
-        unsafe { clang_CXXRecord_needsImplicitDefaultConstructor(self.inner) != 0 }
-    }
-
-    pub fn cxxrecord_needs_implicit_copy_constructor(&self) -> bool {
-        unsafe { clang_CXXRecord_needsImplicitCopyConstructor(self.inner) != 0 }
-    }
-
-    pub fn cxxrecord_needs_implicit_move_constructor(&self) -> bool {
-        unsafe { clang_CXXRecord_needsImplicitMoveConstructor(self.inner) != 0 }
-    }
-
-    pub fn cxxrecord_needs_implicit_copy_assignment(&self) -> bool {
-        unsafe { clang_CXXRecord_needsImplicitCopyAssignment(self.inner) != 0 }
-    }
-
-    pub fn cxxrecord_needs_implicit_move_assignment(&self) -> bool {
-        unsafe { clang_CXXRecord_needsImplicitMoveAssignment(self.inner) != 0 }
-    }
-
-    pub fn cxxrecord_needs_implicit_destructor(&self) -> bool {
-        unsafe { clang_CXXRecord_needsImplicitDestructor(self.inner) != 0 }
     }
 
     pub fn num_overloaded_decls(&self) -> u32 {

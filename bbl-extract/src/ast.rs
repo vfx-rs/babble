@@ -1026,14 +1026,14 @@ pub fn extract_ast(
     Ok(())
 }
 
-pub fn dump_cursor(c: Cursor, tu: &TranslationUnit) {
+pub fn dump_cursor(c: Cursor, tu: &TranslationUnit, follow_refs: bool) {
     let mut av = Vec::new();
-    dump(c, 0, 20, &mut av, tu, &[], None);
+    dump(c, 0, 20, &mut av, tu, &[], None, follow_refs);
 }
 
-pub fn dump_cursor_until(c: Cursor, tu: &TranslationUnit, max_depth: usize) {
+pub fn dump_cursor_until(c: Cursor, tu: &TranslationUnit, max_depth: usize, follow_refs: bool) {
     let mut av = Vec::new();
-    dump(c, 0, max_depth, &mut av, tu, &[], None);
+    dump(c, 0, max_depth, &mut av, tu, &[], None, follow_refs);
 }
 
 fn get_template_args(c: Cursor) -> String {
@@ -1072,6 +1072,7 @@ pub fn dump(
     tu: &TranslationUnit,
     skip_kinds: &[CursorKind],
     color_s: Option<Color>,
+    follow_refs: bool,
 ) {
     if depth > max_depth {
         println!("⋱");
@@ -1116,6 +1117,7 @@ pub fn dump(
             tu,
             skip_kinds,
             Some(color_s),
+            follow_refs,
         );
     }
 
@@ -1139,7 +1141,7 @@ pub fn dump(
                 if !cr.usr().is_empty() {
                     already_visited.push(cr.usr());
                 }
-                if !skip_kinds.contains(&cr.kind()) {
+                if !skip_kinds.contains(&cr.kind()) && follow_refs {
                     print!("{indent}↪ ");
                     dump(
                         cr,
@@ -1149,6 +1151,7 @@ pub fn dump(
                         tu,
                         skip_kinds,
                         Some(Color::Cyan),
+                        follow_refs,
                     );
                 }
             }
@@ -1175,7 +1178,7 @@ pub fn dump(
             if !cr.usr().is_empty() {
                 already_visited.push(cr.usr());
             }
-            if !skip_kinds.contains(&cr.kind()) {
+            if !skip_kinds.contains(&cr.kind()) && follow_refs {
                 print!("{indent}↪o ");
                 dump(
                     cr,
@@ -1185,6 +1188,7 @@ pub fn dump(
                     tu,
                     skip_kinds,
                     Some(Color::Cyan),
+                    follow_refs,
                 );
             }
         }
@@ -1210,7 +1214,7 @@ pub fn dump(
                 if !cr.usr().is_empty() {
                     already_visited.push(cr.usr());
                 }
-                if !skip_kinds.contains(&cr.kind()) {
+                if !skip_kinds.contains(&cr.kind()) && follow_refs {
                     print!("{indent}↪ ");
                     dump(
                         cr,
@@ -1220,6 +1224,7 @@ pub fn dump(
                         tu,
                         skip_kinds,
                         Some(Color::Cyan),
+                        follow_refs,
                     );
                 }
             }
@@ -1262,6 +1267,7 @@ pub fn dump(
             tu,
             skip_kinds,
             Some(color_s),
+            follow_refs,
         );
     }
 }
@@ -1274,12 +1280,28 @@ pub fn dump_type(
     tu: &TranslationUnit,
     skip_kinds: &[CursorKind],
     color_s: Option<Color>,
+    follow_refs: bool,
 ) {
     let color_s = if let Some(color_s) = color_s {
         color_s
     } else {
         Color::White
     };
+
+    if let Ok(rty) = ty.replacement_type() {
+        print!("{}", format!("𝜏 Subst: ",).italic().color(color_s));
+        dump_type(
+            rty,
+            depth,
+            max_depth,
+            already_visited,
+            tu,
+            skip_kinds,
+            Some(color_s),
+            follow_refs,
+        );
+        return;
+    }
 
     let args = ty.template_argument_types().map(|v| {
         v.iter()
@@ -1333,6 +1355,7 @@ pub fn dump_type(
                 tu,
                 skip_kinds,
                 Some(Color::BrightBlack),
+                follow_refs,
             );
         } else {
             let template_args = get_template_args(c_decl);
@@ -1363,6 +1386,7 @@ pub fn dump_type(
                 tu,
                 skip_kinds,
                 Some(color_s),
+                follow_refs,
             );
         }
     }
@@ -1381,6 +1405,7 @@ pub fn dump_type(
             tu,
             skip_kinds,
             Some(Color::BrightBlack),
+            follow_refs,
         );
     }
 
@@ -1395,6 +1420,7 @@ pub fn dump_type(
             tu,
             skip_kinds,
             Some(Color::BrightBlack),
+            follow_refs,
         );
     }
 }
