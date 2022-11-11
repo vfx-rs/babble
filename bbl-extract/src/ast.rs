@@ -1344,7 +1344,7 @@ pub fn dump_type(
 
     let indent = format!("{:width$}", "", width = depth * 4);
     if let Ok(c_decl) = ty.type_declaration() {
-        if !already_visited.contains(&c_decl.usr()) {
+        if !already_visited.contains(&c_decl.usr()) && follow_refs {
             already_visited.push(c_decl.usr());
             print!("{}", format!("{indent}  = ").color(Color::BrightBlack));
             dump(
@@ -1374,7 +1374,8 @@ pub fn dump_type(
         if matches!(
             c_decl.kind(),
             CursorKind::TypedefDecl | CursorKind::TypeAliasDecl
-        ) {
+        ) && follow_refs
+        {
             let c_td: CurTypedef = c_decl.try_into().unwrap();
             let ty = c_td.underlying_type().unwrap();
             print!("{}", format!("{indent}  ↪u→ ").color(color_s));

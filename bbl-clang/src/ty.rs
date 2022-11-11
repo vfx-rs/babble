@@ -76,6 +76,15 @@ impl Type {
     }
 
     #[cfg(feature = "clang_16")]
+    /// Retrieve the type named by the using import
+    ///
+    /// *Errors
+    /// If a non-using type is passed in
+    pub fn underlying_type(&self) -> Result<Type> {
+        unsafe { to_type(clang_Type_getUnderlyingType(self.inner)) }
+    }
+
+    #[cfg(feature = "clang_16")]
     /// Retrieve the unqualified variant of the given type, removing as little sugar as possible.
     ///
     /// e.g. given `const int`, return `int`
@@ -265,6 +274,7 @@ pub enum TypeKind {
     Atomic = 177,
     BTFTagAttributed = 178,
     SubstTemplateTypeParm = 179,
+    Using = 180,
 }
 
 impl From<TypeKind> for clang_sys::CXTypeKind {
@@ -397,6 +407,7 @@ impl From<TypeKind> for clang_sys::CXTypeKind {
             TypeKind::Atomic => CXType_Atomic,
             TypeKind::BTFTagAttributed => CXType_BTFTagAttributed,
             TypeKind::SubstTemplateTypeParm => CXType_SubstTemplateTypeParm,
+            TypeKind::Using => CXType_Using,
         }
     }
 }
@@ -531,6 +542,7 @@ impl From<clang_sys::CXTypeKind> for TypeKind {
             CXType_Atomic => TypeKind::Atomic,
             CXType_BTFTagAttributed => TypeKind::BTFTagAttributed,
             CXType_SubstTemplateTypeParm => TypeKind::SubstTemplateTypeParm,
+            CXType_Using => TypeKind::Using,
             _ => unimplemented!(),
         }
     }

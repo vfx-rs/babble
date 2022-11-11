@@ -2,6 +2,7 @@ use bbl_clang::{
     cursor::{ChildVisitResult, CurTypedef, Cursor, USR},
     cursor_kind::CursorKind,
     translation_unit::TranslationUnit,
+    ty::{Type, TypeKind},
 };
 use log::debug;
 use tracing::error;
@@ -117,11 +118,20 @@ fn get_class_from_typedef(c_td: Cursor) -> Option<Cursor> {
     }
 }
 
+fn get_underlying_type(ty: Type) -> Result<Type> {
+    match ty.kind() {
+        TypeKind::Elaborated => get_underlying_type(ty.named_type()?),
+        TypeKind::Using => get_underlying_type(ty.underlying_type()?),
+        _ => Ok(ty),
+    }
+}
+
 fn find_class_bindings(c_compound: Cursor) -> Vec<ClassBinding> {
     let mut result = Vec::new();
     c_compound.visit_children(|c, _| {
-        // The "entry point" is UnexposedExpr, which is actually ExprWithCleanups, but this isn't exposed by the C API.
+        // The main "entry point" is UnexposedExpr, which is actually ExprWithCleanups, but this isn't exposed by the C API.
         // TODO(AL): expose this (or watch for exposition later).
+        // If the user binds without any method calls on the Class object, then the entry will be CallExpr
         // This might be nested under a VarDecl if the user has done `auto v = bbl::Class<Foo>()`
         // Once we've hit this point, the full expression appears in reverse order, so given:
         //
@@ -130,7 +140,10 @@ fn find_class_bindings(c_compound: Cursor) -> Vec<ClassBinding> {
         //   .m(&Foo::baz)
         //
         // we get m(&Foo::baz) first, then m(&Foo::bar), then the constructor call.
-        if matches!(c.kind(), CursorKind::ExprWithCleanups) {
+        if matches!(
+            c.kind(),
+            CursorKind::ExprWithCleanups | CursorKind::CallExpr
+        ) {
             if let Ok(ty) = c.ty() {
                 if ty.spelling().starts_with("Class<") || ty.spelling().starts_with("bbl::Class<") {
                     debug!("Found Class< {ty:?}");
@@ -138,6 +151,7 @@ fn find_class_bindings(c_compound: Cursor) -> Vec<ClassBinding> {
                     if num_template_args == 1 {
                         let tty = ty.template_argument_as_type(0).unwrap();
                         let mut rename = None;
+                        let tty = get_underlying_type(tty).unwrap();
                         if let Ok(decl) = tty.type_declaration() {
                             if matches!(
                                 decl.kind(),
@@ -236,6 +250,7 @@ pub fn extract_ast_from_binding_tu(
     // first extract the classes to fill the AST with types so we favour the users extractions
     for cb in &class_bindings {
         let class = bind_class(cb, tu, ast, already_visited)?;
+        already_visited.push(class.usr());
         ast.insert_class(class);
     }
 
