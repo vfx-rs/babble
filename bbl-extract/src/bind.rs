@@ -79,6 +79,22 @@ fn extract_class_binding(
                             }
                         }
                     }
+                // Or a static_cast<>() if the user is disambiguating overloads
+                } else if let Some(c_sc) = c.first_child_of_kind(CursorKind::CXXStaticCastExpr) {
+                    if let Some(c_uo) = c_sc.first_child_of_kind(CursorKind::UnaryOperator) {
+                        if let Some(c_ref_expr) = c_uo.first_child_of_kind(CursorKind::DeclRefExpr)
+                        {
+                            if let Ok(c_method) = c_ref_expr.referenced() {
+                                if c_method.kind() == CursorKind::CXXMethod {
+                                    class_binding.methods.push(c_method);
+                                } else {
+                                    error!(
+                                "got what should have been the CXXMethod but it was {c_method:?}"
+                            );
+                                }
+                            }
+                        }
+                    }
                 }
 
                 ChildVisitResult::Recurse
