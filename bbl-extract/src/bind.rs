@@ -1,6 +1,7 @@
 use bbl_clang::{
     cursor::{ChildVisitResult, CurTypedef, Cursor, USR},
     cursor_kind::CursorKind,
+    exception::ExceptionSpecificationKind,
     template_argument::TemplateArgumentKind,
     translation_unit::TranslationUnit,
     ty::{Type, TypeKind},
@@ -12,8 +13,11 @@ use crate::{
     ast::{dump_cursor, dump_cursor_until, get_namespaces_for_decl, AST},
     class::{ClassBindKind, ClassDecl, NeedsImplicit, OverrideList},
     error::Error,
-    function::extract_method,
+    function::{
+        extract_method, Argument, Const, Deleted, Method, MethodKind, PureVirtual, Virtual,
+    },
     namespace::extract_namespace,
+    qualtype::{extract_type, QualType},
     AllowList,
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -46,6 +50,14 @@ impl ClassBinding {
             needs_implicit: NeedsImplicit::default(),
             ctors: Vec::new(),
         }
+    }
+
+    fn needs_implicit(&self) -> &NeedsImplicit {
+        &self.needs_implicit
+    }
+
+    fn ctors(&self) -> &[Vec<Type>] {
+        self.ctors.as_ref()
     }
 }
 
@@ -338,6 +350,10 @@ pub fn extract_ast_from_binding_tu(
 
     // now extract their methods
     for cb in &binding.classes {
+        let u_class = cb.class_decl().usr();
+        let mut namespaces = ast.get_class(u_class).unwrap().namespaces().to_vec();
+        namespaces.push(u_class);
+
         for c_method in cb.methods() {
             let method = extract_method(
                 *c_method,
@@ -354,6 +370,46 @@ pub fn extract_ast_from_binding_tu(
 
             let class = ast.get_class_mut(cb.class_decl().usr()).unwrap();
             class.methods.push(method);
+        }
+
+        // do the constructors
+        for (index, ctor_args) in cb.ctors().iter().enumerate() {
+            let args = ctor_args
+                .iter()
+                .enumerate()
+                .map(|(pi, t)| {
+                    extract_type(
+                        *t,
+                        &[],
+                        already_visited,
+                        ast,
+                        tu,
+                        &AllowList::default(),
+                        &OverrideList::default(),
+                        true,
+                    )
+                    .map(|ty| Argument::new(&format!("parm{pi}"), ty))
+                })
+                .collect::<Result<Vec<Argument>>>()?;
+
+            let ctor = Method::new(
+                USR::new(&format!("{u_class}#ctor:{index}")),
+                "ctor".to_string(),
+                MethodKind::Constructor,
+                QualType::void(),
+                args,
+                Some("ctor".to_string()),
+                namespaces.clone(),
+                Vec::new(),
+                ExceptionSpecificationKind::None,
+                Const(false),
+                Virtual(false),
+                PureVirtual(false),
+                Deleted(false),
+            );
+
+            let class = ast.get_class_mut(u_class).unwrap();
+            class.methods.push(ctor);
         }
     }
 
