@@ -742,6 +742,20 @@ impl AST {
         self.namespaces.get(&usr.into())
     }
 
+    pub fn set_namespace_rename(&mut self, usr: USR, rename: &str) -> Result<()> {
+        let ns = self
+            .namespaces
+            .get_mut(usr.as_ref())
+            .ok_or_else(|| Error::NamespaceNotFound {
+                name: usr.to_string(),
+                source: Trace::new(),
+            })?;
+
+        ns.rename = Some(rename.to_string());
+
+        Ok(())
+    }
+
     pub fn get_class_or_namespace_names(&self, usr: USR) -> Result<(&str, Option<&String>)> {
         if let Some(ns) = self.namespaces.get(&usr.into()) {
             Ok((&ns.name, ns.rename.as_ref()))

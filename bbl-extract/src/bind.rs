@@ -12,9 +12,16 @@ use crate::{
     class::{ClassBindKind, ClassDecl, NeedsImplicit, OverrideList},
     error::Error,
     function::extract_method,
+    namespace::extract_namespace,
     AllowList,
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
+
+#[derive(Debug, Default, Clone)]
+struct Binding {
+    classes: Vec<ClassBinding>,
+    namespace_aliases: Vec<(Cursor, String)>,
+}
 
 #[derive(Debug, Clone)]
 struct ClassBinding {
@@ -142,8 +149,7 @@ fn get_underlying_type(ty: Type) -> Result<Type> {
     }
 }
 
-fn find_class_bindings(c_compound: Cursor) -> Vec<ClassBinding> {
-    let mut result = Vec::new();
+fn create_binding(c_compound: Cursor, binding: &mut Binding) {
     c_compound.visit_children(|c, _| {
         // The main "entry point" is UnexposedExpr, which is actually ExprWithCleanups, but this isn't exposed by the C API.
         // TODO(AL): expose this (or watch for exposition later).
@@ -156,57 +162,72 @@ fn find_class_bindings(c_compound: Cursor) -> Vec<ClassBinding> {
         //   .m(&Foo::baz)
         //
         // we get m(&Foo::baz) first, then m(&Foo::bar), then the constructor call.
-        if matches!(
-            c.kind(),
-            CursorKind::ExprWithCleanups | CursorKind::CallExpr
-        ) {
-            if let Ok(ty) = c.ty() {
-                if ty.spelling().starts_with("Class<") || ty.spelling().starts_with("bbl::Class<") {
-                    debug!("Found Class< {ty:?}");
-                    let num_template_args = ty.num_template_arguments();
-                    if num_template_args == 1 {
-                        let tty = ty.template_argument_as_type(0).unwrap();
-                        let mut rename = None;
-                        let tty = get_underlying_type(tty).unwrap();
-                        if let Ok(decl) = tty.type_declaration() {
-                            if matches!(
-                                decl.kind(),
-                                CursorKind::ClassDecl
-                                    | CursorKind::StructDecl
-                                    | CursorKind::TypedefDecl
-                                    | CursorKind::TypeAliasDecl
-                            ) {
-                                let class_decl = match decl.kind() {
-                                    CursorKind::ClassDecl | CursorKind::StructDecl => decl,
-                                    CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
-                                        debug!("Got typedef {}", decl.display_name());
-                                        rename = Some(decl.display_name());
-                                        get_class_from_typedef(decl).unwrap()
-                                    }
-                                    _ => unreachable!(),
-                                };
+        match c.kind() {
+            CursorKind::ExprWithCleanups | CursorKind::CallExpr => {
+                if let Ok(ty) = c.ty() {
+                    if ty.spelling().starts_with("Class<")
+                        || ty.spelling().starts_with("bbl::Class<")
+                    {
+                        debug!("Found Class< {ty:?}");
+                        let num_template_args = ty.num_template_arguments();
+                        if num_template_args == 1 {
+                            let tty = ty.template_argument_as_type(0).unwrap();
+                            let mut rename = None;
+                            let tty = get_underlying_type(tty).unwrap();
+                            if let Ok(decl) = tty.type_declaration() {
+                                if matches!(
+                                    decl.kind(),
+                                    CursorKind::ClassDecl
+                                        | CursorKind::StructDecl
+                                        | CursorKind::TypedefDecl
+                                        | CursorKind::TypeAliasDecl
+                                ) {
+                                    let class_decl = match decl.kind() {
+                                        CursorKind::ClassDecl | CursorKind::StructDecl => decl,
+                                        CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
+                                            debug!("Got typedef {}", decl.display_name());
+                                            rename = Some(decl.display_name());
+                                            get_class_from_typedef(decl).unwrap()
+                                        }
+                                        _ => unreachable!(),
+                                    };
 
-                                let mut class_binding = ClassBinding::new(class_decl, rename);
-                                extract_class_binding(c, &mut class_binding).unwrap();
-                                result.push(class_binding);
+                                    let mut class_binding = ClassBinding::new(class_decl, rename);
+                                    extract_class_binding(c, &mut class_binding).unwrap();
+                                    binding.classes.push(class_binding);
 
-                                return ChildVisitResult::Continue;
+                                    return ChildVisitResult::Continue;
+                                } else {
+                                    error!("Invalid type passed to Class constructor: {decl:?}");
+                                }
                             } else {
-                                error!("Invalid type passed to Class constructor: {decl:?}");
+                                error!("Could not get decl from {tty:?}");
                             }
                         } else {
-                            error!("Could not get decl from {tty:?}");
+                            error!("Got Class< with {num_template_args} template args");
                         }
-                    } else {
-                        error!("Got Class< with {num_template_args} template args");
                     }
                 }
             }
+            CursorKind::DeclStmt => {
+                // use namespace aliases to capture namespace renaming
+                if let Some(c_ns_alias) = c.first_child_of_kind(CursorKind::NamespaceAlias) {
+                    if let Ok(c_ns) = c_ns_alias.definition() {
+                        binding
+                            .namespace_aliases
+                            .push((c_ns, c_ns_alias.display_name()));
+                    }
+                }
+            }
+            // allow inner blocks
+            CursorKind::CompoundStmt => {
+                create_binding(c, binding);
+                return ChildVisitResult::Continue;
+            }
+            _ => (),
         }
         ChildVisitResult::Recurse
     });
-
-    result
 }
 
 fn bind_class(
@@ -256,22 +277,23 @@ pub fn extract_ast_from_binding_tu(
         .first_child_of_kind(CursorKind::CompoundStmt)
         .expect("Could not find body for bbl_bind");
 
-    let class_bindings = find_class_bindings(body);
+    let mut binding = Binding::default();
+    create_binding(body, &mut binding);
 
-    println!("Got classes: {class_bindings:?}");
+    println!("Got binding: {binding:?}");
 
     let allow_list = AllowList::default();
     let overrides = OverrideList::default();
 
     // first extract the classes to fill the AST with types so we favour the users extractions
-    for cb in &class_bindings {
+    for cb in &binding.classes {
         let class = bind_class(cb, tu, ast, already_visited)?;
         already_visited.push(class.usr());
         ast.insert_class(class);
     }
 
     // now extract their methods
-    for cb in &class_bindings {
+    for cb in &binding.classes {
         for c_method in cb.methods() {
             let method = extract_method(
                 *c_method,
@@ -288,6 +310,27 @@ pub fn extract_ast_from_binding_tu(
 
             let class = ast.get_class_mut(cb.class_decl().usr()).unwrap();
             class.methods.push(method);
+        }
+    }
+
+    // process any namespace renames
+    for (c_namespace, name) in &binding.namespace_aliases {
+        let u_ns = extract_namespace(*c_namespace, tu, ast, already_visited).unwrap();
+        let ns = ast.get_namespace(u_ns).unwrap();
+        let parent_namespaces = ns.namespaces().to_vec();
+
+        if parent_namespaces.is_empty() {
+            // is a top-level namespace, rename directly
+            ast.set_namespace_rename(u_ns, name).unwrap();
+        } else {
+            // is an inner namespace. rename the highest-level parent and set all others, including this one, to empty
+            ast.set_namespace_rename(parent_namespaces[0], name)
+                .unwrap();
+
+            for u_p_ns in parent_namespaces.iter().skip(1) {
+                ast.set_namespace_rename(*u_p_ns, "").unwrap();
+            }
+            ast.set_namespace_rename(u_ns, "").unwrap();
         }
     }
 
