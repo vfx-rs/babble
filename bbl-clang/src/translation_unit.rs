@@ -29,7 +29,11 @@ impl TranslationUnit {
     }
 
     pub fn spelling(&self) -> String {
-        unsafe { clang_getTranslationUnitSpelling(self.inner).to_string() }
+        unsafe {
+            clang_getTranslationUnitSpelling(self.inner)
+                .to_string()
+                .expect("null string")
+        }
     }
 
     pub fn token(&self, loc: SourceLocation) -> Token {

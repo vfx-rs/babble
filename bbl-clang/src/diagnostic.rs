@@ -20,7 +20,9 @@ impl Diagnostic {
     pub fn format(&self) -> String {
         unsafe {
             let opt = clang_defaultDiagnosticDisplayOptions();
-            clang_formatDiagnostic(self.inner, opt).to_string()
+            clang_formatDiagnostic(self.inner, opt)
+                .to_string()
+                .expect("got null string")
         }
     }
 

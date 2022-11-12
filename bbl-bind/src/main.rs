@@ -54,13 +54,21 @@ fn main() -> Result<()> {
     for fc in &file_commands {
         let index = Index::new();
         let tu = index.create_translation_unit(fc.filename(), &cli_args_with(fc.args())?)?;
+        let mut has_error = false;
         for d in tu.diagnostics() {
             match d.severity() {
                 Severity::Ignored => debug!("{}", d),
                 Severity::Note => info!("{}", d),
                 Severity::Warning => warn!("{}", d),
-                Severity::Error | Severity::Fatal => error!("{}", d),
+                Severity::Error | Severity::Fatal => {
+                    has_error = true;
+                    error!("{}", d)
+                }
             }
+        }
+
+        if has_error {
+            anyhow::bail!("C++ errors detected. Cannot continue.");
         }
 
         let cur = tu.get_cursor()?;

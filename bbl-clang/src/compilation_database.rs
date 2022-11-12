@@ -100,12 +100,18 @@ impl<'a> CompileCommand<'a> {
     pub fn get_arguments(&self) -> Vec<String> {
         let mut result = Vec::new();
         for i in 0..unsafe { clang_CompileCommand_getNumArgs(self.inner) } {
-            result.push(unsafe { clang_CompileCommand_getArg(self.inner, i).to_string() });
+            if let Some(s) = unsafe { clang_CompileCommand_getArg(self.inner, i).to_string() } {
+                result.push(s);
+            }
         }
         result
     }
 
     pub fn get_filename(&self) -> String {
-        unsafe { clang_CompileCommand_getFilename(self.inner).to_string() }
+        unsafe {
+            clang_CompileCommand_getFilename(self.inner)
+                .to_string()
+                .expect("got null string")
+        }
     }
 }

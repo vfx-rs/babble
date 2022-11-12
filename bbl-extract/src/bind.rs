@@ -1,6 +1,7 @@
 use bbl_clang::{
     cursor::{ChildVisitResult, CurTypedef, Cursor, USR},
     cursor_kind::CursorKind,
+    template_argument::TemplateArgumentKind,
     translation_unit::TranslationUnit,
     ty::{Type, TypeKind},
 };
@@ -30,6 +31,8 @@ struct ClassBinding {
     ignore: bool,
     rename: Option<String>,
     bind_kind: ClassBindKind,
+    needs_implicit: NeedsImplicit,
+    ctors: Vec<Vec<Type>>,
 }
 
 impl ClassBinding {
@@ -40,6 +43,8 @@ impl ClassBinding {
             ignore: false,
             rename,
             bind_kind: ClassBindKind::OpaquePtr,
+            needs_implicit: NeedsImplicit::default(),
+            ctors: Vec::new(),
         }
     }
 }
@@ -101,6 +106,45 @@ fn extract_class_binding(
                                 }
                             }
                         }
+                    }
+                } else if let Some(c_call) = c.first_child_of_kind(CursorKind::CallExpr) {
+                    match c_call.display_name().as_str() {
+                        "Ctor" => {
+                            let ctor_ty = c_call.ty().unwrap();
+                            let ctor_decl = ctor_ty.type_declaration().unwrap();
+                            if ctor_decl.num_template_arguments() == 1
+                                && ctor_decl.template_argument_kind(0).unwrap()
+                                    == TemplateArgumentKind::Pack
+                            {
+                                let pack_size = ctor_decl.template_argument_pack_size(0);
+                                if pack_size >= 0 {
+                                    let mut ctor_args = Vec::new();
+                                    for i in 0..pack_size {
+                                        ctor_args.push(
+                                            ctor_decl
+                                                .template_argument_pack_type(0, i as u32)
+                                                .unwrap(),
+                                        );
+                                    }
+                                    println!("Got Ctor {ctor_args:?}");
+                                    class_binding.ctors.push(ctor_args);
+                                } else {
+                                    error!("Ctor decl pak should have 0 or more args");
+                                }
+                            } else {
+                                error!("Ctor decl should have 1 template pack arg");
+                            }
+                        }
+                        "CopyCtor" => {
+                            class_binding.needs_implicit.copy_ctor = true;
+                        }
+                        "MoveCtor" => {
+                            class_binding.needs_implicit.move_ctor = true;
+                        }
+                        "Dtor" => {
+                            class_binding.needs_implicit.dtor = true;
+                        }
+                        _ => (),
                     }
                 }
 
@@ -253,7 +297,7 @@ fn bind_class(
         bind_kind: cb.bind_kind(),
         specialized_methods: Vec::new(),
         is_pod: false,
-        needs_implicit: NeedsImplicit::default(),
+        needs_implicit: cb.needs_implicit.clone(),
     })
 }
 

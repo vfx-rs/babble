@@ -14,11 +14,12 @@ use clang_sys::{
     clang_CXXMethod_isPureVirtual, clang_CXXMethod_isStatic, clang_CXXMethod_isVirtual,
     clang_CXXRecord_isAbstract, clang_Cursor_getArgument, clang_Cursor_getNumArguments,
     clang_Cursor_getNumTemplateArguments, clang_Cursor_getTemplateArgumentKind,
-    clang_Cursor_getTemplateArgumentType, clang_Cursor_getTemplateArgumentUnsignedValue,
-    clang_Cursor_getTemplateArgumentValue, clang_Cursor_getVarDeclInitializer,
-    clang_Cursor_hasVarDeclExternalStorage, clang_Cursor_hasVarDeclGlobalStorage,
-    clang_equalCursors, clang_getCXXAccessSpecifier, clang_getCanonicalCursor,
-    clang_getCursorDefinition, clang_getCursorDisplayName,
+    clang_Cursor_getTemplateArgumentPackKind, clang_Cursor_getTemplateArgumentPackSize,
+    clang_Cursor_getTemplateArgumentPackType, clang_Cursor_getTemplateArgumentType,
+    clang_Cursor_getTemplateArgumentUnsignedValue, clang_Cursor_getTemplateArgumentValue,
+    clang_Cursor_getVarDeclInitializer, clang_Cursor_hasVarDeclExternalStorage,
+    clang_Cursor_hasVarDeclGlobalStorage, clang_equalCursors, clang_getCXXAccessSpecifier,
+    clang_getCanonicalCursor, clang_getCursorDefinition, clang_getCursorDisplayName,
     clang_getCursorExceptionSpecificationType, clang_getCursorKind, clang_getCursorLocation,
     clang_getCursorPrettyPrinted, clang_getCursorPrintingPolicy, clang_getCursorReferenced,
     clang_getCursorResultType, clang_getCursorSemanticParent, clang_getCursorSpelling,
@@ -33,7 +34,7 @@ use std::{
     convert::TryFrom,
     fmt::{Debug, Display},
     ops::Deref,
-    os::raw::{c_longlong, c_ulonglong, c_void},
+    os::raw::{c_int, c_longlong, c_ulonglong, c_void},
 };
 
 use crate::ty::{to_type, Type};
@@ -151,11 +152,19 @@ impl Cursor {
     }
 
     pub fn display_name(&self) -> String {
-        unsafe { clang_getCursorDisplayName(self.inner).to_string() }
+        unsafe {
+            clang_getCursorDisplayName(self.inner)
+                .to_string()
+                .expect("got null string")
+        }
     }
 
     pub fn spelling(&self) -> String {
-        unsafe { clang_getCursorSpelling(self.inner).to_string() }
+        unsafe {
+            clang_getCursorSpelling(self.inner)
+                .to_string()
+                .expect("got null string")
+        }
     }
 
     pub fn usr(&self) -> USR {
@@ -290,6 +299,18 @@ impl Cursor {
         unsafe { clang_Cursor_getTemplateArgumentUnsignedValue(self.inner, i) }
     }
 
+    pub fn template_argument_pack_type(&self, i: u32, j: u32) -> Result<Type> {
+        unsafe { to_type(clang_Cursor_getTemplateArgumentPackType(self.inner, i, j)) }
+    }
+
+    pub fn template_argument_pack_size(&self, i: u32) -> i32 {
+        unsafe { clang_Cursor_getTemplateArgumentPackSize(self.inner, i) }
+    }
+
+    pub fn template_argument_pack_kind(&self, i: u32, j: u32) -> Result<TemplateArgumentKind> {
+        unsafe { clang_Cursor_getTemplateArgumentPackKind(self.inner, i, j).try_into() }
+    }
+
     pub fn ty(&self) -> Result<Type> {
         unsafe { to_type(clang_getCursorType(self.inner)) }
     }
@@ -394,7 +415,11 @@ impl Cursor {
     }
 
     pub fn pretty_printed(&self, policy: PrintingPolicy) -> String {
-        unsafe { clang_getCursorPrettyPrinted(self.inner, policy.inner).to_string() }
+        unsafe {
+            clang_getCursorPrettyPrinted(self.inner, policy.inner)
+                .to_string()
+                .expect("got null string")
+        }
     }
 
     pub fn enum_decl_integer_type(&self) -> Result<Type> {

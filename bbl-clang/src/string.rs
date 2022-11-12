@@ -5,12 +5,17 @@ use ustr::Ustr;
 pub trait CXStringEx {
     fn as_cxstring(&self) -> CXString;
 
-    fn to_string(&self) -> String {
+    fn to_string(&self) -> Option<String> {
         unsafe {
-            let cstr = CStr::from_ptr(clang_getCString(self.as_cxstring()));
-            let result = cstr.to_string_lossy().to_string();
-            clang_disposeString(self.as_cxstring());
-            result
+            let ptr = clang_getCString(self.as_cxstring());
+            if ptr.is_null() {
+                None
+            } else {
+                let cstr = CStr::from_ptr(ptr);
+                let result = cstr.to_string_lossy().to_string();
+                clang_disposeString(self.as_cxstring());
+                Some(result)
+            }
         }
     }
 

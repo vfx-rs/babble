@@ -14,7 +14,11 @@ pub struct Token<'tu> {
 
 impl<'tu> Token<'tu> {
     pub fn spelling(&self) -> String {
-        unsafe { clang_getTokenSpelling(self.tu.inner, self.inner).to_string() }
+        unsafe {
+            clang_getTokenSpelling(self.tu.inner, self.inner)
+                .to_string()
+                .expect("null string")
+        }
     }
 
     pub fn extent(&self) -> SourceRange {
@@ -74,6 +78,16 @@ pub struct FileLocation {
 
 impl Display for FileLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}:{}", self.file.file_name(), self.line, self.column)
+        write!(
+            f,
+            "{}:{}:{}",
+            if let Some(s) = self.file.file_name() {
+                s
+            } else {
+                "NULL".to_string()
+            },
+            self.line,
+            self.column
+        )
     }
 }

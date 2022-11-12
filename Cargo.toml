@@ -3,6 +3,7 @@ members = [
     "bbl-bind",
     "bbl-clang",
     "bbl-extract",
+    "bbl-scan",
     "bbl-translate",
     "bbl-write",
     "bbl",

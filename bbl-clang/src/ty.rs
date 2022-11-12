@@ -42,7 +42,11 @@ impl Type {
     }
 
     pub fn spelling(&self) -> String {
-        unsafe { clang_getTypeSpelling(self.inner).to_string() }
+        unsafe {
+            clang_getTypeSpelling(self.inner)
+                .to_string()
+                .expect("null string")
+        }
     }
 
     pub fn is_const_qualified(&self) -> bool {
@@ -141,7 +145,9 @@ impl TypeKind {
     pub fn spelling(&self) -> String {
         unsafe {
             let cx: CXTypeKind = (*self).into();
-            clang_getTypeKindSpelling(cx).to_string()
+            clang_getTypeKindSpelling(cx)
+                .to_string()
+                .expect("null string")
         }
     }
 }
