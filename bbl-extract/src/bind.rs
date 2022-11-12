@@ -36,7 +36,7 @@ struct ClassBinding {
     rename: Option<String>,
     bind_kind: ClassBindKind,
     needs_implicit: NeedsImplicit,
-    ctors: Vec<Vec<Type>>,
+    ctors: Vec<(Vec<Type>, Option<String>)>,
 }
 
 impl ClassBinding {
@@ -56,7 +56,7 @@ impl ClassBinding {
         &self.needs_implicit
     }
 
-    fn ctors(&self) -> &[Vec<Type>] {
+    fn ctors(&self) -> &[(Vec<Type>, Option<String>)] {
         self.ctors.as_ref()
     }
 }
@@ -139,7 +139,9 @@ fn extract_class_binding(
                                         );
                                     }
                                     println!("Got Ctor {ctor_args:?}");
-                                    class_binding.ctors.push(ctor_args);
+                                    class_binding
+                                        .ctors
+                                        .push((ctor_args, get_first_string_arg(c)));
                                 } else {
                                     error!("Ctor decl pak should have 0 or more args");
                                 }
@@ -286,6 +288,21 @@ fn create_binding(c_compound: Cursor, binding: &mut Binding) {
     });
 }
 
+fn strip_quotes(s: String) -> String {
+    let mut s = s;
+    s.pop();
+    s.remove(0);
+    s
+}
+
+fn get_first_string_arg(c: Cursor) -> Option<String> {
+    c.first_child_of_kind(CursorKind::ImplicitCastExpr)
+        .and_then(|ice| {
+            ice.first_child_of_kind(CursorKind::StringLiteral)
+                .map(|sl| strip_quotes(sl.display_name()))
+        })
+}
+
 fn bind_class(
     cb: &ClassBinding,
     tu: &TranslationUnit,
@@ -373,7 +390,7 @@ pub fn extract_ast_from_binding_tu(
         }
 
         // do the constructors
-        for (index, ctor_args) in cb.ctors().iter().enumerate() {
+        for (index, (ctor_args, rename)) in cb.ctors().iter().enumerate() {
             let args = ctor_args
                 .iter()
                 .enumerate()
@@ -398,7 +415,7 @@ pub fn extract_ast_from_binding_tu(
                 MethodKind::Constructor,
                 QualType::void(),
                 args,
-                Some("ctor".to_string()),
+                rename.clone(),
                 namespaces.clone(),
                 Vec::new(),
                 ExceptionSpecificationKind::None,
