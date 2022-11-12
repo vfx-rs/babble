@@ -676,27 +676,41 @@ pub fn extract_type(
             // extract underlying decl here
             match c_decl.kind() {
                 CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
-                    debug!("is typedef decl {:?}", template_parameters);
-                    let u_ref = extract_typedef_decl(
-                        c_decl.try_into()?,
+                    // debug!("is typedef decl {:?}", template_parameters);
+                    // let u_ref = extract_typedef_decl(
+                    //     c_decl.try_into()?,
+                    //     already_visited,
+                    //     ast,
+                    //     tu,
+                    //     allow_list,
+                    //     class_overrides,
+                    //     template_parameters,
+                    //     stop_on_error,
+                    // )
+                    // .map_err(|e| Error::FailedToExtractTypedef {
+                    //     usr: c_decl.usr(),
+                    //     source: Box::new(e),
+                    // })?;
+
+                    // Ok(QualType {
+                    //     name,
+                    //     is_const,
+                    //     type_ref: TypeRef::Typedef(u_ref),
+                    // })
+
+                    // TODO(AL): preserve stddef types here (size_t, uint32_t etc)
+                    let td: CurTypedef = c_decl.try_into()?;
+                    let underlying_type = td.underlying_type()?;
+                    extract_type(
+                        underlying_type,
+                        template_parameters,
                         already_visited,
                         ast,
                         tu,
                         allow_list,
                         class_overrides,
-                        template_parameters,
                         stop_on_error,
                     )
-                    .map_err(|e| Error::FailedToExtractTypedef {
-                        usr: c_decl.usr(),
-                        source: Box::new(e),
-                    })?;
-
-                    Ok(QualType {
-                        name,
-                        is_const,
-                        type_ref: TypeRef::Typedef(u_ref),
-                    })
                 }
                 CursorKind::ClassDecl | CursorKind::StructDecl => {
                     debug!("is class decl");
