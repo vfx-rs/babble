@@ -39,7 +39,7 @@ impl Binding {
 #[derive(Debug, Clone)]
 struct ClassBinding {
     class_decl: Cursor,
-    methods: Vec<Cursor>,
+    methods: Vec<FunctionBinding>,
     ignore: bool,
     rename: Option<String>,
     bind_kind: ClassBindKind,
@@ -74,7 +74,7 @@ impl ClassBinding {
         self.class_decl
     }
 
-    fn methods(&self) -> &[Cursor] {
+    fn methods(&self) -> &[FunctionBinding] {
         self.methods.as_ref()
     }
 
@@ -114,12 +114,20 @@ fn extract_class_binding(
     c_expr_with_cleanups.visit_children(|c, _| {
         match c.kind() {
             CursorKind::CallExpr if c.display_name() == "m" => {
+                let mut rename = None;
+                for child in c.children(){
+                    if child.kind() == CursorKind::ImplicitCastExpr {
+                        if let Some(c_lit) = child.first_child_of_kind(CursorKind::StringLiteral) {
+                            rename = Some(strip_quotes(c_lit.display_name()));
+                        }
+                    }
+                }
                 // Then we get UnaryOperator > DeclRefExpr > CXXMethod
                 if let Some(c_uo) = c.first_child_of_kind(CursorKind::UnaryOperator) {
                     if let Some(c_ref_expr) = c_uo.first_child_of_kind(CursorKind::DeclRefExpr) {
                         if let Ok(c_method) = c_ref_expr.referenced() {
                             if c_method.kind() == CursorKind::CXXMethod {
-                                class_binding.methods.push(c_method);
+                                class_binding.methods.push(FunctionBinding{decl: c_method, rename});
                             } else {
                                 error!(
                                 "got what should have been the CXXMethod but it was {c_method:?}"
@@ -134,7 +142,7 @@ fn extract_class_binding(
                         {
                             if let Ok(c_method) = c_ref_expr.referenced() {
                                 if c_method.kind() == CursorKind::CXXMethod {
-                                    class_binding.methods.push(c_method);
+                                    class_binding.methods.push(FunctionBinding{decl: c_method, rename});
                                 } else {
                                     error!(
                                 "got what should have been the CXXMethod but it was {c_method:?}"
@@ -153,7 +161,7 @@ fn extract_class_binding(
                                 {
                                     if let Ok(c_method) = c_ref_expr.referenced() {
                                         if c_method.kind() == CursorKind::CXXMethod {
-                                            class_binding.methods.push(c_method);
+                                            class_binding.methods.push(FunctionBinding{decl: c_method, rename});
                                         } else {
                                             error!( "got what should have been the CXXMethod but it was {c_method:?}");
                                         }
@@ -483,8 +491,12 @@ pub fn extract_ast_from_binding_tu(
         let mut namespaces = ast.get_class(u_class).unwrap().namespaces().to_vec();
         namespaces.push(u_class);
 
-        for c_method in cb.methods() {
-            let method = extract_method(
+        for FunctionBinding {
+            decl: c_method,
+            rename,
+        } in cb.methods()
+        {
+            let mut method = extract_method(
                 *c_method,
                 &[],
                 already_visited,
@@ -496,6 +508,8 @@ pub fn extract_ast_from_binding_tu(
                 stop_on_error,
             )
             .expect("Failed to extract method");
+
+            method.set_replacement_name(rename.clone());
 
             let class = ast.get_class_mut(cb.class_decl().usr()).unwrap();
             class.methods.push(method);

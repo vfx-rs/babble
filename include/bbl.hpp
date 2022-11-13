@@ -34,29 +34,33 @@ namespace bbl
         }
 
         template <
+            typename T = C,
             typename... Args,
-            typename = std::enable_if_t<std::is_constructible<C, Args...>::value>>
+            typename = std::enable_if_t<std::is_constructible<T, Args...>::value>>
         Class m(Ctor<Args...> ctor, const char *rename = "")
         {
             return *this;
         }
 
         template <
-            typename = std::enable_if_t<std::is_copy_constructible<C>::value>>
+            typename T = C,
+            typename = std::enable_if_t<std::is_copy_constructible<T>::value>>
         Class m(CopyCtor ctor, const char *rename = "")
         {
             return *this;
         }
 
         template <
-            typename = std::enable_if_t<std::is_move_constructible<C>::value>>
+            typename T = C,
+            typename = std::enable_if_t<std::is_move_constructible<T>::value>>
         Class m(MoveCtor ctor, const char *rename = "")
         {
             return *this;
         }
 
         template <
-            typename = std::enable_if_t<std::is_destructible<C>::value>>
+            typename T = C,
+            typename = std::enable_if_t<std::is_destructible<T>::value>>
         Class m(Dtor ctor, const char *rename = "")
         {
             return *this;

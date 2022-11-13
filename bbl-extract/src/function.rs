@@ -303,6 +303,10 @@ impl Function {
     pub fn unused_template_arguments(&self) -> &[TemplateArgument] {
         self.unused_template_arguments.as_ref()
     }
+
+    pub fn set_replacement_name(&mut self, replacement_name: Option<String>) {
+        self.replacement_name = replacement_name;
+    }
 }
 
 #[derive(Clone)]
@@ -573,6 +577,10 @@ impl Method {
         }
 
         Ok(unused_arguments)
+    }
+
+    pub fn set_replacement_name(&mut self, replacement_name: Option<String>) {
+        self.function.set_replacement_name(replacement_name);
     }
 }
 
