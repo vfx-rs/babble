@@ -14,7 +14,8 @@ use crate::{
     class::{ClassBindKind, ClassDecl, NeedsImplicit, OverrideList},
     error::Error,
     function::{
-        extract_method, Argument, Const, Deleted, Method, MethodKind, PureVirtual, Virtual,
+        extract_function, extract_method, Argument, Const, Deleted, Method, MethodKind,
+        PureVirtual, Virtual,
     },
     namespace::extract_namespace,
     qualtype::{extract_type, QualType},
@@ -26,6 +27,13 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 struct Binding {
     classes: Vec<ClassBinding>,
     namespace_aliases: Vec<(Cursor, String)>,
+    functions: Vec<FunctionBinding>,
+}
+
+impl Binding {
+    fn functions(&self) -> &[FunctionBinding] {
+        self.functions.as_ref()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +91,22 @@ impl ClassBinding {
     }
 }
 
+#[derive(Debug, Clone)]
+struct FunctionBinding {
+    decl: Cursor,
+    rename: Option<String>,
+}
+
+impl FunctionBinding {
+    fn decl(&self) -> Cursor {
+        self.decl
+    }
+
+    fn rename(&self) -> Option<&String> {
+        self.rename.as_ref()
+    }
+}
+
 fn extract_class_binding(
     c_expr_with_cleanups: Cursor,
     class_binding: &mut ClassBinding,
@@ -119,8 +143,31 @@ fn extract_class_binding(
                             }
                         }
                     }
+                // Or a C-style cast
+                } else if let Some(c_sc) = c.first_child_of_kind(CursorKind::CStyleCastExpr) {
+                    println!("GOT C STYLE CAST");
+                    if let Some(c_ic) = c_sc.first_child_of_kind(CursorKind::ImplicitCastExpr) {
+                        if let Some(c_pe) = c_ic.first_child_of_kind(CursorKind::ParenExpr) {
+                            if let Some(c_uo) = c_pe.first_child_of_kind(CursorKind::UnaryOperator) {
+                                if let Some(c_ref_expr) = c_uo.first_child_of_kind(CursorKind::DeclRefExpr)
+                                {
+                                    if let Ok(c_method) = c_ref_expr.referenced() {
+                                        if c_method.kind() == CursorKind::CXXMethod {
+                                            class_binding.methods.push(c_method);
+                                        } else {
+                                            error!( "got what should have been the CXXMethod but it was {c_method:?}");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 } else if let Some(c_call) = c.first_child_of_kind(CursorKind::CallExpr) {
                     match c_call.display_name().as_str() {
+                        // We can't use member function pointers for constructors, so we differentiate the ctors using
+                        // a special type, Ctor, whose template parameter pack matches the arguments for the given
+                        // constructor (and the signature is checked with SFINAE on the C++ side).
+                        // The other RoF methods are checked with similar types, below (but they don't have arguments)
                         "Ctor" => {
                             let ctor_ty = c_call.ty().unwrap();
                             let ctor_decl = ctor_ty.type_declaration().unwrap();
@@ -138,7 +185,7 @@ fn extract_class_binding(
                                                 .unwrap(),
                                         );
                                     }
-                                    println!("Got Ctor {ctor_args:?}");
+
                                     class_binding
                                         .ctors
                                         .push((ctor_args, get_first_string_arg(c)));
@@ -169,11 +216,7 @@ fn extract_class_binding(
                 for child in children {
                     if child.kind() == CursorKind::ImplicitCastExpr {
                         if let Some(c_lit) = child.first_child_of_kind(CursorKind::StringLiteral) {
-                            let mut name = c_lit.display_name();
-                            // remove first and last chars as they're quotes
-                            name.pop();
-                            name.remove(0);
-                            class_binding.rename = Some(name);
+                            class_binding.rename = Some(strip_quotes(c_lit.display_name()));
                         }
                     }
                 }
@@ -221,6 +264,9 @@ fn create_binding(c_compound: Cursor, binding: &mut Binding) {
         //
         // we get m(&Foo::baz) first, then m(&Foo::bar), then the constructor call.
         match c.kind() {
+            CursorKind::CallExpr if c.display_name() == "fn" || c.display_name() == "bbl::fn" => {
+                extract_function_binding(c, binding);
+            }
             CursorKind::ExprWithCleanups | CursorKind::CallExpr => {
                 if let Ok(ty) = c.ty() {
                     if ty.spelling().starts_with("Class<")
@@ -266,6 +312,7 @@ fn create_binding(c_compound: Cursor, binding: &mut Binding) {
                         }
                     }
                 }
+                return ChildVisitResult::Continue;
             }
             CursorKind::DeclStmt => {
                 // use namespace aliases to capture namespace renaming
@@ -286,6 +333,71 @@ fn create_binding(c_compound: Cursor, binding: &mut Binding) {
         }
         ChildVisitResult::Recurse
     });
+}
+
+fn extract_function_binding(c: Cursor, binding: &mut Binding) {
+    let mut rename = None;
+    let children = c.children();
+    for child in children {
+        if child.kind() == CursorKind::ImplicitCastExpr {
+            if let Some(c_lit) = child.first_child_of_kind(CursorKind::StringLiteral) {
+                rename = Some(strip_quotes(c_lit.display_name()));
+            }
+        }
+    }
+    // Then we get UnaryOperator > DeclRefExpr > CXXMethod
+    if let Some(c_uo) = c.first_child_of_kind(CursorKind::UnaryOperator) {
+        if let Some(c_ref_expr) = c_uo.first_child_of_kind(CursorKind::DeclRefExpr) {
+            if let Ok(c_function) = c_ref_expr.referenced() {
+                if c_function.kind() == CursorKind::FunctionDecl {
+                    binding.functions.push(FunctionBinding {
+                        decl: c_function,
+                        rename,
+                    });
+                } else {
+                    error!("got what should have been the FunctionDecl but it was {c_function:?}");
+                }
+            }
+        }
+    // Or a static_cast<>() if the user is disambiguating overloads
+    } else if let Some(c_sc) = c.first_child_of_kind(CursorKind::CXXStaticCastExpr) {
+        if let Some(c_uo) = c_sc.first_child_of_kind(CursorKind::UnaryOperator) {
+            if let Some(c_ref_expr) = c_uo.first_child_of_kind(CursorKind::DeclRefExpr) {
+                if let Ok(c_function) = c_ref_expr.referenced() {
+                    if c_function.kind() == CursorKind::FunctionDecl {
+                        binding.functions.push(FunctionBinding {
+                            decl: c_function,
+                            rename,
+                        });
+                    } else {
+                        error!(
+                            "got what should have been the FunctionDecl but it was {c_function:?}"
+                        );
+                    }
+                }
+            }
+        }
+    // Or a C-style cast
+    } else if let Some(c_sc) = c.first_child_of_kind(CursorKind::CStyleCastExpr) {
+        if let Some(c_uo) = c_sc.first_child_of_kind(CursorKind::UnaryOperator) {
+            if let Some(c_ref_expr) = c_uo.first_child_of_kind(CursorKind::DeclRefExpr) {
+                if let Ok(c_function) = c_ref_expr.referenced() {
+                    if c_function.kind() == CursorKind::FunctionDecl {
+                        binding.functions.push(FunctionBinding {
+                            decl: c_function,
+                            rename,
+                        });
+                    } else {
+                        error!(
+                            "got what should have been the FunctionDecl but it was {c_function:?}"
+                        );
+                    }
+                }
+            }
+        }
+    } else {
+        error!("Expected UnaryOperator or CXXStaticCastExpr extracting function. Got {c:?}");
+    }
 }
 
 fn strip_quotes(s: String) -> String {
@@ -449,6 +561,23 @@ pub fn extract_ast_from_binding_tu(
             }
             ast.set_namespace_rename(u_ns, "").unwrap();
         }
+    }
+
+    // extract functions
+    for fn_binding in binding.functions() {
+        let mut function = extract_function(
+            fn_binding.decl,
+            &[],
+            already_visited,
+            tu,
+            ast,
+            &allow_list,
+            &overrides,
+            stop_on_error,
+        )?;
+        function.replacement_name = fn_binding.rename.clone();
+
+        ast.insert_function(function);
     }
 
     println!("{ast:?}");

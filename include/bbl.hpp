@@ -6,12 +6,20 @@
 
 namespace bbl
 {
-    template <typename ...Args>
-    struct Ctor {};
+    template <typename... Args>
+    struct Ctor
+    {
+    };
 
-    struct CopyCtor{};
-    struct MoveCtor{};
-    struct Dtor{};
+    struct CopyCtor
+    {
+    };
+    struct MoveCtor
+    {
+    };
+    struct Dtor
+    {
+    };
 
     template <typename C>
     class Class
@@ -26,7 +34,7 @@ namespace bbl
         }
 
         template <
-            typename ...Args,
+            typename... Args,
             typename = std::enable_if_t<std::is_constructible<C, Args...>::value>>
         Class m(Ctor<Args...> ctor, const char *rename = "")
         {
@@ -61,8 +69,12 @@ namespace bbl
         }
     };
 
-    void rename_namespace(const char *from, const char *to) {}
-}
+    template <typename Result, typename... Args>
+    void fn(Result (*fun)(Args...), const char *rename = "") {}
 
+    void rename_namespace(const char *from, const char *to)
+    {
+    }
+}
 
 #endif
