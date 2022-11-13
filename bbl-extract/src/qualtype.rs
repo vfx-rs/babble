@@ -676,32 +676,12 @@ pub fn extract_type(
             // extract underlying decl here
             match c_decl.kind() {
                 CursorKind::TypedefDecl | CursorKind::TypeAliasDecl => {
-                    // debug!("is typedef decl {:?}", template_parameters);
-                    // let u_ref = extract_typedef_decl(
-                    //     c_decl.try_into()?,
-                    //     already_visited,
-                    //     ast,
-                    //     tu,
-                    //     allow_list,
-                    //     class_overrides,
-                    //     template_parameters,
-                    //     stop_on_error,
-                    // )
-                    // .map_err(|e| Error::FailedToExtractTypedef {
-                    //     usr: c_decl.usr(),
-                    //     source: Box::new(e),
-                    // })?;
-
-                    // Ok(QualType {
-                    //     name,
-                    //     is_const,
-                    //     type_ref: TypeRef::Typedef(u_ref),
-                    // })
-
+                    debug!("    is typedef decl");
                     // TODO(AL): preserve stddef types here (size_t, uint32_t etc)
+                    let is_const = ty.is_const_qualified();
                     let td: CurTypedef = c_decl.try_into()?;
                     let underlying_type = td.underlying_type()?;
-                    extract_type(
+                    let mut qt = extract_type(
                         underlying_type,
                         template_parameters,
                         already_visited,
@@ -710,10 +690,12 @@ pub fn extract_type(
                         allow_list,
                         class_overrides,
                         stop_on_error,
-                    )
+                    )?;
+                    qt.is_const = qt.is_const || is_const;
+                    Ok(qt)
                 }
                 CursorKind::ClassDecl | CursorKind::StructDecl => {
-                    debug!("is class decl");
+                    debug!("    is class decl");
                     let u_ref = extract_class_decl(
                         c_decl.try_into()?,
                         tu,
@@ -737,6 +719,7 @@ pub fn extract_type(
                     })
                 }
                 CursorKind::EnumDecl => {
+                    debug!("    is enum decl");
                     let u_ref = extract_enum(c_decl, ast, already_visited, tu).map_err(|e| {
                         Error::FailedToExtractEnum {
                             usr: c_decl.usr(),
@@ -751,6 +734,7 @@ pub fn extract_type(
                 }
                 CursorKind::TypeRef => unimplemented!("Should extract class here?"),
                 CursorKind::ClassTemplate => {
+                    debug!("    is class template");
                     let usr = extract_class_decl(
                         c_decl.try_into()?,
                         tu,
