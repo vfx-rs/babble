@@ -1,12 +1,17 @@
 use anyhow::Result;
 use bbl_clang::{
-    cli_args_with, cursor::ChildVisitResult, cursor_kind::CursorKind, index::Index,
-    virtual_file::configure_bind_project,
+    access_specifier::AccessSpecifier,
+    cli_args_with,
+    cursor::{ChildVisitResult, Cursor, USR},
+    cursor_kind::CursorKind,
+    index::Index,
+    virtual_file::{configure_bind_project, write_temp_file},
 };
 use clap::{Parser, ValueEnum};
 use log::{debug, error, info, warn};
 use std::{
-    fmt::Display,
+    collections::{HashMap, HashSet},
+    fmt::{Display, Write},
     path::{Component, Path, PathBuf},
 };
 
@@ -23,6 +28,10 @@ struct Args {
     /// Path to find cmake packages. Overrides CMAKE_PREFIX_PATH
     #[clap(long, value_parser)]
     cmake_prefix_path: Option<String>,
+
+    /// Namespaces to extract from
+    #[clap(short, long, value_parser)]
+    namespaces: Vec<String>,
 
     /// Verbosity of the output
     #[clap(short, long, arg_enum, value_parser)]
@@ -59,6 +68,8 @@ fn main() -> Result<()> {
 
     let fc = &file_commands[0];
 
+    let mut includes = String::new();
+
     for entry in walkdir::WalkDir::new(&args.include_path)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -67,7 +78,6 @@ fn main() -> Result<()> {
             continue;
         }
 
-        let index = Index::new();
         match entry
             .path()
             .extension()
@@ -75,49 +85,201 @@ fn main() -> Result<()> {
         {
             Some(ex) if ["h", "hh", "hpp", "hxx"].contains(&ex.as_str()) => {
                 let rel_path = diff_paths(entry.path(), &args.include_path).unwrap();
-                println!("######## {}", rel_path.display());
-                let tu =
-                    index.create_translation_unit(fc.filename(), &cli_args_with(fc.args())?)?;
+                writeln!(&mut includes, "#include <{}>", rel_path.display())?;
+            }
+            _ => (),
+        }
+    }
 
-                let c_tu = tu.get_cursor()?;
+    let temp_file = write_temp_file(&includes)?;
 
-                c_tu.visit_children(|c, _| {
-                    let decl_fn = c
+    let index = Index::new();
+    let tu = index.create_translation_unit(&temp_file, &cli_args_with(fc.args())?)?;
+
+    let c_tu = tu.get_cursor()?;
+
+    let mut class_decls = HashMap::new();
+
+    for child in c_tu.children() {
+        if child.kind() == CursorKind::Namespace && args.namespaces.contains(&child.display_name())
+        {
+            walk_ast(child, child.display_name(), &mut class_decls);
+        }
+    }
+
+    /*
+    c_tu.visit_children(|c, _| {
+        let decl_fn = c
+            .location()
+            .spelling_location()
+            .file
+            .file_name()
+            .unwrap_or_else(|| "NULL".to_string());
+
+        let namespace_names = c.
+
+        if matches!(
+            c.kind(),
+            CursorKind::ClassDecl
+                | CursorKind::ClassTemplate
+                | CursorKind::ClassTemplatePartialSpecialization
+                | CursorKind::StructDecl
+        ) && decl_fn.starts_with(&args.include_path)
+        {
+            class_decls.insert(format!("{c:?}"));
+        }
+
+        ChildVisitResult::Recurse
+
+        // if decl_fn != entry.path().to_string_lossy() {
+        //     return ChildVisitResult::Recurse;
+        // }
+
+        // match c.kind() {
+        //     CursorKind::ClassDecl => {
+        //         println!("   {c:?} -- {decl_fn}");
+        //         ChildVisitResult::Continue
+        //     }
+        //     CursorKind::ClassTemplate => {
+        //         println!("   {c:?} -- {decl_fn}");
+        //         ChildVisitResult::Continue
+        //     }
+        //     _ => {
+        //         println!("   {c:?}");
+        //         ChildVisitResult::Recurse
+        //     }
+        // }
+    });
+    */
+
+    let mut class_decls = class_decls
+        .into_iter()
+        .map(|(_, c)| c)
+        .collect::<Vec<Class>>();
+
+    class_decls.sort_by(|c1, c2| c1.qname().cmp(c2.qname()));
+
+    for c in &class_decls {
+        println!(
+            "{} - {}",
+            c.qname(),
+            if let Some(p) = diff_paths(c.filename(), &args.include_path) {
+                p
+            } else {
+                PathBuf::from(c.filename())
+            }
+            .display()
+        );
+
+        for m in c.methods() {
+            println!("    {m}");
+        }
+    }
+
+    Ok(())
+}
+
+fn walk_ast(c: Cursor, namespace: String, class_decls: &mut HashMap<USR, Class>) {
+    for child in c.children() {
+        match child.kind() {
+            CursorKind::ClassDecl | CursorKind::ClassTemplate | CursorKind::StructDecl => {
+                let qname = format!("{namespace}::{}", child.display_name());
+
+                #[allow(clippy::map_entry)]
+                if !class_decls.contains_key(&child.usr()) {
+                    let filename = c
                         .location()
                         .spelling_location()
                         .file
                         .file_name()
                         .unwrap_or_else(|| "NULL".to_string());
 
-                    if c.display_name() == "Marker" {
-                        println!("GOT MARKER: {c:?}");
-                    }
+                    let mut methods = Vec::new();
+                    get_methods(child, &mut methods);
 
-                    if decl_fn != entry.path().to_string_lossy() {
-                        return ChildVisitResult::Recurse;
-                    }
+                    class_decls.insert(
+                        child.usr(),
+                        Class::new(child.display_name(), qname.clone(), filename, methods),
+                    );
+                }
 
-                    match c.kind() {
-                        CursorKind::ClassDecl => {
-                            println!("   {c:?} -- {decl_fn}");
-                            ChildVisitResult::Continue
-                        }
-                        CursorKind::ClassTemplate => {
-                            println!("   {c:?} -- {decl_fn}");
-                            ChildVisitResult::Continue
-                        }
-                        _ => {
-                            println!("   {c:?}");
-                            ChildVisitResult::Recurse
-                        }
-                    }
-                });
+                walk_ast(child, qname, class_decls);
             }
-            _ => (),
+            CursorKind::Namespace => {
+                let child_ns = format!("{namespace}::{}", child.display_name());
+                walk_ast(child, child_ns, class_decls);
+            }
+            _ => walk_ast(child, namespace.clone(), class_decls),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct Class {
+    name: String,
+    qname: String,
+    filename: String,
+    methods: Vec<String>,
+}
+
+impl Class {
+    fn new(name: String, qname: String, filename: String, methods: Vec<String>) -> Self {
+        Self {
+            name,
+            qname,
+            filename,
+            methods,
         }
     }
 
-    Ok(())
+    fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+
+    fn qname(&self) -> &str {
+        self.qname.as_ref()
+    }
+
+    fn filename(&self) -> &str {
+        self.filename.as_ref()
+    }
+
+    fn methods(&self) -> &[String] {
+        self.methods.as_ref()
+    }
+}
+
+fn get_methods(c_class: Cursor, methods: &mut Vec<String>) {
+    for c in c_class.children() {
+        if matches!(
+            c.kind(),
+            CursorKind::CXXMethod | CursorKind::FunctionTemplate
+        ) {
+            let access = c.cxx_access_specifier().unwrap_or(AccessSpecifier::Public);
+            if access == AccessSpecifier::Public {
+                methods.push(c.display_name());
+            }
+        }
+    }
+
+    // now do any bases
+    for c_base in c_class.children_of_kind(CursorKind::CXXBaseSpecifier, false) {
+        if let Ok(c_base_decl) = c_base.referenced() {
+            match c_base_decl.kind() {
+                CursorKind::ClassDecl | CursorKind::StructDecl | CursorKind::ClassTemplate => {
+                    debug!("Extracting base {c_base_decl:?}");
+                    let access = c_base
+                        .cxx_access_specifier()
+                        .unwrap_or(AccessSpecifier::Public);
+
+                    if access == AccessSpecifier::Public {
+                        get_methods(c_base_decl, methods);
+                    }
+                }
+                _ => warn!("Unhandled base {c_base_decl:?} of class {c_class:?}"),
+            }
+        }
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
