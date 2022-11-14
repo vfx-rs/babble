@@ -238,7 +238,7 @@ fn main() -> Result<()> {
 
         writeln!(&mut body, "}}\n")?;
 
-        println!("{}", body);
+        // println!("{}", body);
 
         let mut output_path = project_root.clone();
         let mut cpp_rel_path = PathBuf::new();
@@ -397,39 +397,6 @@ impl ModuleFile {
     }
 }
 
-// impl ModuleFile {
-//     fn name(&self) -> &str {
-//         self.name.as_ref()
-//     }
-// }
-
-// #[derive(Debug, Clone)]
-// enum ModuleEntry {
-//     File(ModuleFile),
-//     Dir(Module),
-// }
-
-// impl ModuleEntry {
-//     pub fn name(&self) -> &str {
-//         match self {
-//             ModuleEntry::File(m) => m.name(),
-//             ModuleEntry::Dir(m) => m.name(),
-//         }
-//     }
-// }
-
-// #[derive(Debug, Clone)]
-// struct Module {
-//     name: String,
-//     entries: Vec<ModuleEntry>,
-// }
-
-// impl Module {
-//     fn name(&self) -> &str {
-//         self.name.as_ref()
-//     }
-// }
-
 #[derive(Debug, Clone)]
 struct Class {
     name: String,
@@ -583,33 +550,36 @@ fn get_methods(c_class: Cursor, parent_methods: &mut Vec<Method>) {
             c.kind(),
             CursorKind::CXXMethod | CursorKind::FunctionTemplate
         ) {
-            let access = c.cxx_access_specifier().unwrap_or(AccessSpecifier::Public);
-            if access == AccessSpecifier::Public {
-                let result = c
-                    .result_ty()
-                    .map_or_else(|_| String::from("ERR"), get_type_name);
+            if let Ok(access) = c.cxx_access_specifier() {
+                if access == AccessSpecifier::Public && !c.cxx_method_is_deleted() {
+                    let result = c
+                        .result_ty()
+                        .map_or_else(|_| String::from("ERR"), get_type_name);
 
-                let num_args = c.num_arguments().unwrap_or(0);
-                let mut args = Vec::new();
-                for i in 0..num_args {
-                    let a = c.argument(i).unwrap();
-                    let name = c.spelling();
-                    let ty = a.ty().map_or_else(|_| String::from("ERR"), get_type_name);
+                    let num_args = c.num_arguments().unwrap_or(0);
+                    let mut args = Vec::new();
+                    for i in 0..num_args {
+                        let a = c.argument(i).unwrap();
+                        let name = c.spelling();
+                        let ty = a.ty().map_or_else(|_| String::from("ERR"), get_type_name);
 
-                    args.push(Argument { name, ty });
+                        args.push(Argument { name, ty });
+                    }
+
+                    let new_method = Method {
+                        name: c.spelling(),
+                        result,
+                        args,
+                        is_const: c.cxx_method_is_const(),
+                        overload_count: 0,
+                    };
+
+                    if !parent_methods.contains(&new_method) {
+                        methods.push(new_method);
+                    }
                 }
-
-                let new_method = Method {
-                    name: c.spelling(),
-                    result,
-                    args,
-                    is_const: c.cxx_method_is_const(),
-                    overload_count: 0,
-                };
-
-                if !parent_methods.contains(&new_method) {
-                    methods.push(new_method);
-                }
+            } else {
+                error!("Could not get access specifier for {c:?}");
             }
         }
     }
@@ -621,7 +591,6 @@ fn get_methods(c_class: Cursor, parent_methods: &mut Vec<Method>) {
         if let Ok(c_base_decl) = c_base.referenced() {
             match c_base_decl.kind() {
                 CursorKind::ClassDecl | CursorKind::StructDecl | CursorKind::ClassTemplate => {
-                    debug!("Extracting base {c_base_decl:?}");
                     let access = c_base
                         .cxx_access_specifier()
                         .unwrap_or(AccessSpecifier::Public);
