@@ -611,6 +611,7 @@ public:
         contents,
         &["Imath 3.1 REQUIRED"],
         &["Imath::Imath"],
+        &[],
         None,
         "11",
     )?;

@@ -5,9 +5,11 @@ use bbl_clang::{
     cursor::{ChildVisitResult, Cursor, USR},
     cursor_kind::CursorKind,
     index::Index,
-    virtual_file::{configure_bind_project, write_temp_file},
+    ty::Type,
+    virtual_file::{configure_bind_project, configure_temp_cmake_project, write_temp_file},
 };
 use clap::{Parser, ValueEnum};
+use convert_case::{Case, Casing};
 use log::{debug, error, info, warn};
 use std::{
     collections::{HashMap, HashSet},
@@ -17,17 +19,36 @@ use std::{
 
 #[derive(Parser)]
 struct Args {
-    /// Path to the CMake binding project (i.e. the directory containing the CMakeLists.txt)
-    #[clap(value_name = "PROJECT_PATH")]
+    /// Path to the CMake binding project to write (i.e. the directory containing the CMakeLists.txt)
+    #[clap(value_name = "OUTPUT_PATH")]
     project_path: String,
 
     /// Path to the root include directory of the library to bind
-    #[clap(value_name = "INCLUDE_PATH")]
-    include_path: String,
+    /// e.g. if one of your headers is at "~/mylib/include/foo/bar.h" you would pass "~/mylib/include" here
+    #[clap(value_name = "HEADER_PATH")]
+    header_path: String,
 
     /// Path to find cmake packages. Overrides CMAKE_PREFIX_PATH
     #[clap(long, value_parser)]
     cmake_prefix_path: Option<String>,
+
+    /// packages to pass to find_package command
+    #[clap(short, long, value_parser)]
+    package: Vec<String>,
+
+    /// libraries to pass to target_link_libraries command
+    /// Note: nothing is every built and linked, these will just be used for gathering extra include paths
+    #[clap(short, long, value_parser)]
+    link_library: Vec<String>,
+
+    /// Extra include paths
+    /// Note: these are not scanned, they are just added to the target_include_directories
+    #[clap(short, long, value_parser)]
+    include: Vec<String>,
+
+    /// C++ standard to use for parsing when scanning the headers, e.g. "14"
+    #[clap(long, value_parser)]
+    cxx_standard: Option<String>,
 
     /// Namespaces to extract from
     #[clap(short, long, value_parser)]
@@ -51,26 +72,17 @@ fn main() -> Result<()> {
             .init();
     }
 
-    let cmakelists = Path::new(&args.project_path).join("CMakeLists.txt");
-
-    if !cmakelists.is_file() {
-        anyhow::bail!(
-            "Could not find CMakeLists.txt in provided path \"{}\"",
-            args.project_path
-        );
-    }
-
-    let file_commands = configure_bind_project(&args.project_path, args.cmake_prefix_path)?;
-
-    if file_commands.is_empty() {
-        anyhow::bail!("No compile commands found in project")
-    }
-
-    let fc = &file_commands[0];
-
     let mut includes = String::new();
 
-    for entry in walkdir::WalkDir::new(&args.include_path)
+    let project_name = Path::new(&args.project_path)
+        .components()
+        .last()
+        .expect("empty project path")
+        .as_os_str()
+        .to_string_lossy()
+        .to_string();
+
+    for entry in walkdir::WalkDir::new(&args.header_path)
         .into_iter()
         .filter_map(|e| e.ok())
     {
@@ -84,97 +96,232 @@ fn main() -> Result<()> {
             .map(|os| os.to_string_lossy().to_lowercase())
         {
             Some(ex) if ["h", "hh", "hpp", "hxx"].contains(&ex.as_str()) => {
-                let rel_path = diff_paths(entry.path(), &args.include_path).unwrap();
+                let rel_path = diff_paths(entry.path(), &args.header_path).unwrap();
                 writeln!(&mut includes, "#include <{}>", rel_path.display())?;
             }
             _ => (),
         }
     }
 
-    let temp_file = write_temp_file(&includes)?;
+    let cxx_standard = if let Some(s) = &args.cxx_standard {
+        s.clone()
+    } else {
+        String::from("14")
+    };
+
+    let find_packages: Vec<&str> = args.package.iter().map(|s| s.as_str()).collect();
+    let link_libraries: Vec<&str> = args.link_library.iter().map(|s| s.as_str()).collect();
+    let mut extra_includes: Vec<&str> = args.include.iter().map(|s| s.as_str()).collect();
+    extra_includes.push(&args.header_path);
+
+    let (temp_file, temp_args) = configure_temp_cmake_project(
+        &includes,
+        &find_packages,
+        &link_libraries,
+        &extra_includes,
+        args.cmake_prefix_path.as_ref(),
+        &cxx_standard,
+    )?;
+
+    // split off the namespace renames and create clean namespaces for searching
+    let mut namespace_renames = Vec::new();
+    let mut namespaces = Vec::new();
+    for ns in &args.namespaces {
+        if ns.contains('=') {
+            let mut toks = ns.split("=");
+            let original = toks.next().unwrap().to_string();
+            let rename = toks.next().unwrap().to_string();
+            namespaces.push(original.clone());
+            namespace_renames.push((original, rename));
+        } else {
+            namespaces.push(ns.clone());
+        }
+    }
 
     let index = Index::new();
-    let tu = index.create_translation_unit(&temp_file, &cli_args_with(fc.args())?)?;
+    let tu = index.create_translation_unit(&temp_file, &cli_args_with(&temp_args)?)?;
 
     let c_tu = tu.get_cursor()?;
 
     let mut class_decls = HashMap::new();
 
-    for child in c_tu.children() {
-        if child.kind() == CursorKind::Namespace && args.namespaces.contains(&child.display_name())
-        {
-            walk_ast(child, child.display_name(), &mut class_decls);
-        }
-    }
-
-    /*
+    // extract everything starting at the selected namespaces
     c_tu.visit_children(|c, _| {
-        let decl_fn = c
-            .location()
-            .spelling_location()
-            .file
-            .file_name()
-            .unwrap_or_else(|| "NULL".to_string());
-
-        let namespace_names = c.
-
-        if matches!(
-            c.kind(),
-            CursorKind::ClassDecl
-                | CursorKind::ClassTemplate
-                | CursorKind::ClassTemplatePartialSpecialization
-                | CursorKind::StructDecl
-        ) && decl_fn.starts_with(&args.include_path)
-        {
-            class_decls.insert(format!("{c:?}"));
+        if c.kind() == CursorKind::Namespace {
+            let qname = qualified_name(c, c.display_name());
+            if namespaces.contains(&qname) {
+                walk_ast(c, qname, &mut class_decls);
+            }
         }
-
         ChildVisitResult::Recurse
-
-        // if decl_fn != entry.path().to_string_lossy() {
-        //     return ChildVisitResult::Recurse;
-        // }
-
-        // match c.kind() {
-        //     CursorKind::ClassDecl => {
-        //         println!("   {c:?} -- {decl_fn}");
-        //         ChildVisitResult::Continue
-        //     }
-        //     CursorKind::ClassTemplate => {
-        //         println!("   {c:?} -- {decl_fn}");
-        //         ChildVisitResult::Continue
-        //     }
-        //     _ => {
-        //         println!("   {c:?}");
-        //         ChildVisitResult::Recurse
-        //     }
-        // }
     });
-    */
+
+    // partition decls into modules
+    let mut modules: Vec<ModuleFile> = Vec::new();
 
     let mut class_decls = class_decls
         .into_iter()
-        .map(|(_, c)| c)
-        .collect::<Vec<Class>>();
+        .map(|(_, class)| class)
+        .collect::<Vec<_>>();
 
-    class_decls.sort_by(|c1, c2| c1.qname().cmp(c2.qname()));
+    class_decls.sort_by(|a, b| a.name.cmp(&b.name));
 
-    for c in &class_decls {
-        println!(
-            "{} - {}",
-            c.qname(),
-            if let Some(p) = diff_paths(c.filename(), &args.include_path) {
-                p
+    for class in class_decls.into_iter() {
+        if let Some(relpath) = diff_paths(class.filename(), &args.header_path) {
+            if let Some(m) = modules.iter_mut().find(|m| m.relpath == relpath) {
+                m.classes.push(class);
             } else {
-                PathBuf::from(c.filename())
+                modules.push(ModuleFile::new(relpath.clone(), vec![class]));
             }
-            .display()
-        );
-
-        for m in c.methods() {
-            println!("    {m}");
+        } else {
+            warn!(
+                "Class {class:?} is in file {} which is not in include path {}. Ignoring",
+                class.filename(),
+                args.header_path
+            );
         }
     }
+
+    modules.sort_by(|a, b| a.relpath.cmp(&b.relpath));
+
+    for module in &mut modules {
+        let mut module_namespace_renames = Vec::new();
+
+        for nsr in &namespace_renames {
+            for class in &mut module.classes {
+                if class.rename_namespace(&nsr.0, &nsr.1) && !module_namespace_renames.contains(nsr)
+                {
+                    module_namespace_renames.push(nsr.clone());
+                }
+            }
+        }
+
+        module.namespace_renames = module_namespace_renames;
+    }
+
+    let project_root = PathBuf::from(&args.project_path);
+    let mut cpp_files = Vec::new();
+
+    for m in &modules {
+        let mut body = String::new();
+
+        writeln!(&mut body, "#include <{}>\n", m.relpath.display())?;
+        writeln!(&mut body, "#include <bbl.hpp>\n")?;
+
+        writeln!(&mut body, "BBL_MODULE({}) {{", m.module_name.join("::"))?;
+
+        for nsr in &m.namespace_renames {
+            writeln!(&mut body, "    namespace {} = {};", nsr.1, nsr.0)?;
+        }
+        writeln!(&mut body)?;
+
+        for c in &m.classes {
+            writeln!(&mut body, "    bbl::Class<{}>()", c.qname())?;
+
+            for method in c.methods() {
+                let cast = if method.overload_count > 1 {
+                    format!("{}\n            ", method.cast(c.qname()))
+                } else {
+                    String::new()
+                };
+
+                writeln!(
+                    &mut body,
+                    "        .m({cast}&{}::{})",
+                    c.qname(),
+                    method.name()
+                )?;
+            }
+
+            writeln!(&mut body, "    ;\n")?;
+        }
+
+        writeln!(&mut body, "}}\n")?;
+
+        println!("{}", body);
+
+        let mut output_path = project_root.clone();
+        let mut cpp_rel_path = PathBuf::new();
+        for comp in &m.module_name {
+            cpp_rel_path.push(comp);
+        }
+        cpp_rel_path = cpp_rel_path.with_extension("cpp");
+
+        output_path.push(&cpp_rel_path);
+        let output_dir = output_path.parent().expect("broken project path");
+        std::fs::create_dir_all(output_dir)?;
+
+        std::fs::write(&output_path, body)?;
+
+        cpp_files.push(cpp_rel_path);
+    }
+
+    let cxx_standard_str = if let Some(s) = args.cxx_standard {
+        format!("set(CMAKE_CXX_STANDARD {s})")
+    } else {
+        "".to_string()
+    };
+
+    let find_package_str = args
+        .package
+        .iter()
+        .map(|p| format!("find_package({p} REQUIRED)"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let src_str = cpp_files
+        .iter()
+        .map(|f| format!("{}", f.as_os_str().to_string_lossy()))
+        .collect::<Vec<_>>()
+        .join("\n    ");
+
+    let target_link_libraries_str = if args.link_library.is_empty() {
+        "".to_string()
+    } else {
+        format!(
+            "target_link_libraries({project_name} {})",
+            args.link_library.join(" ")
+        )
+    };
+
+    let extra_includes_str = if extra_includes.is_empty() {
+        "".to_string()
+    } else {
+        format!(
+            "target_include_directories({project_name} PUBLIC {})",
+            extra_includes.join(" ")
+        )
+    };
+
+    // finally, write the binding cmake project
+    let cmake_contents = format!(
+        r#"cmake_minimum_required(VERSION 3.5)
+
+project({project_name})
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+{cxx_standard_str}
+
+{find_package_str}
+
+add_library({project_name} STATIC 
+    {src_str}
+    )
+
+{target_link_libraries_str}
+{extra_includes_str}
+target_include_directories({project_name} PUBLIC ${{CMAKE_CURRENT_LIST_DIR}})
+"#
+    );
+
+    println!("{cmake_contents}");
+
+    std::fs::write(project_root.join("CMakeLists.txt"), cmake_contents)?;
+    std::fs::write(
+        project_root.join("bbl.hpp"),
+        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../include/bbl.hpp")),
+    )?;
 
     Ok(())
 }
@@ -197,6 +344,17 @@ fn walk_ast(c: Cursor, namespace: String, class_decls: &mut HashMap<USR, Class>)
                     let mut methods = Vec::new();
                     get_methods(child, &mut methods);
 
+                    let mut overload_counts = HashMap::<String, usize>::new();
+                    for method in &methods {
+                        *overload_counts.entry(method.name.clone()).or_default() += 1;
+                    }
+
+                    for method in methods.iter_mut() {
+                        method.overload_count = *overload_counts.get(&method.name).unwrap();
+                    }
+
+                    methods.sort_by(|a, b| a.name.cmp(&b.name));
+
                     class_decls.insert(
                         child.usr(),
                         Class::new(child.display_name(), qname.clone(), filename, methods),
@@ -214,16 +372,74 @@ fn walk_ast(c: Cursor, namespace: String, class_decls: &mut HashMap<USR, Class>)
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
+struct ModuleFile {
+    relpath: PathBuf,
+    module_name: Vec<String>,
+    classes: Vec<Class>,
+    namespace_renames: Vec<(String, String)>,
+}
+
+impl ModuleFile {
+    pub fn new(relpath: PathBuf, classes: Vec<Class>) -> Self {
+        let module_name = relpath
+            .with_extension("")
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy().to_case(Case::Snake))
+            .collect::<Vec<_>>();
+
+        Self {
+            relpath,
+            module_name,
+            classes,
+            namespace_renames: Vec::new(),
+        }
+    }
+}
+
+// impl ModuleFile {
+//     fn name(&self) -> &str {
+//         self.name.as_ref()
+//     }
+// }
+
+// #[derive(Debug, Clone)]
+// enum ModuleEntry {
+//     File(ModuleFile),
+//     Dir(Module),
+// }
+
+// impl ModuleEntry {
+//     pub fn name(&self) -> &str {
+//         match self {
+//             ModuleEntry::File(m) => m.name(),
+//             ModuleEntry::Dir(m) => m.name(),
+//         }
+//     }
+// }
+
+// #[derive(Debug, Clone)]
+// struct Module {
+//     name: String,
+//     entries: Vec<ModuleEntry>,
+// }
+
+// impl Module {
+//     fn name(&self) -> &str {
+//         self.name.as_ref()
+//     }
+// }
+
+#[derive(Debug, Clone)]
 struct Class {
     name: String,
     qname: String,
     filename: String,
-    methods: Vec<String>,
+    methods: Vec<Method>,
 }
 
 impl Class {
-    fn new(name: String, qname: String, filename: String, methods: Vec<String>) -> Self {
+    fn new(name: String, qname: String, filename: String, methods: Vec<Method>) -> Self {
         Self {
             name,
             qname,
@@ -244,12 +460,124 @@ impl Class {
         self.filename.as_ref()
     }
 
-    fn methods(&self) -> &[String] {
+    fn methods(&self) -> &[Method] {
         self.methods.as_ref()
+    }
+
+    fn rename_namespace(&mut self, original: &str, new: &str) -> bool {
+        let mut renamed = false;
+        if self.qname.contains(&original) {
+            renamed = true;
+            self.qname = self.qname.replace(original, new);
+        }
+
+        for method in &mut self.methods {
+            renamed |= method.rename_namespace(original, new);
+        }
+
+        renamed
     }
 }
 
-fn get_methods(c_class: Cursor, methods: &mut Vec<String>) {
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct Method {
+    name: String,
+    result: String,
+    args: Vec<Argument>,
+    is_const: bool,
+    overload_count: usize,
+}
+
+impl Method {
+    fn cast(&self, class_name: &str) -> String {
+        let args = self
+            .args
+            .iter()
+            .map(|a| a.ty.clone())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        let is_const = if self.is_const { " const" } else { "" };
+
+        format!("({} ({class_name}::*)({args}){is_const})", self.result())
+    }
+
+    fn rename_namespace(&mut self, original: &str, new: &str) -> bool {
+        let mut renamed = false;
+        if self.result.contains(original) {
+            renamed = true;
+            self.result = self.result.replace(original, new);
+        }
+
+        for arg in &mut self.args {
+            if arg.ty.contains(original) {
+                renamed = true;
+                arg.ty = arg.ty.replace(original, new);
+            }
+        }
+
+        renamed
+    }
+}
+
+impl Display for Method {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let args = self
+            .args
+            .iter()
+            .map(|a| format!("{a}"))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        let is_const = if self.is_const { " const" } else { "" };
+        let over = if self.overload_count > 1 {
+            format!("({})", self.overload_count)
+        } else {
+            "".to_string()
+        };
+
+        write!(
+            f,
+            "{}({args}){is_const} -> {} {over}",
+            self.name(),
+            self.result()
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct Argument {
+    name: String,
+    ty: String,
+}
+
+impl Display for Argument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.name, self.ty)
+    }
+}
+
+impl Method {
+    fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+
+    fn result(&self) -> &str {
+        self.result.as_ref()
+    }
+
+    fn is_const(&self) -> bool {
+        self.is_const
+    }
+
+    fn args(&self) -> &[Argument] {
+        self.args.as_ref()
+    }
+}
+
+fn get_methods(c_class: Cursor, parent_methods: &mut Vec<Method>) {
+    let mut methods = Vec::new();
+
     for c in c_class.children() {
         if matches!(
             c.kind(),
@@ -257,10 +585,36 @@ fn get_methods(c_class: Cursor, methods: &mut Vec<String>) {
         ) {
             let access = c.cxx_access_specifier().unwrap_or(AccessSpecifier::Public);
             if access == AccessSpecifier::Public {
-                methods.push(c.display_name());
+                let result = c
+                    .result_ty()
+                    .map_or_else(|_| String::from("ERR"), get_type_name);
+
+                let num_args = c.num_arguments().unwrap_or(0);
+                let mut args = Vec::new();
+                for i in 0..num_args {
+                    let a = c.argument(i).unwrap();
+                    let name = c.spelling();
+                    let ty = a.ty().map_or_else(|_| String::from("ERR"), get_type_name);
+
+                    args.push(Argument { name, ty });
+                }
+
+                let new_method = Method {
+                    name: c.spelling(),
+                    result,
+                    args,
+                    is_const: c.cxx_method_is_const(),
+                    overload_count: 0,
+                };
+
+                if !parent_methods.contains(&new_method) {
+                    methods.push(new_method);
+                }
             }
         }
     }
+
+    parent_methods.extend_from_slice(&methods);
 
     // now do any bases
     for c_base in c_class.children_of_kind(CursorKind::CXXBaseSpecifier, false) {
@@ -273,13 +627,28 @@ fn get_methods(c_class: Cursor, methods: &mut Vec<String>) {
                         .unwrap_or(AccessSpecifier::Public);
 
                     if access == AccessSpecifier::Public {
-                        get_methods(c_base_decl, methods);
+                        get_methods(c_base_decl, parent_methods);
                     }
                 }
                 _ => warn!("Unhandled base {c_base_decl:?} of class {c_class:?}"),
             }
         }
     }
+}
+
+fn get_type_name(ty: Type) -> String {
+    ty.fully_qualified_name()
+}
+
+fn qualified_name(c: Cursor, name: String) -> String {
+    let mut name = name;
+    let parent = c.canonical().unwrap().semantic_parent().unwrap();
+    if parent.kind() != CursorKind::TranslationUnit {
+        name = format!("{}::{name}", parent.spelling());
+        name = qualified_name(parent, name);
+    }
+
+    name
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -330,6 +699,16 @@ impl Display for Verbosity {
 /// assert_eq!(diff_paths(&baz, &bar.to_string()), Some("baz".into()));
 /// assert_eq!(diff_paths(Path::new(baz), Path::new(bar).to_path_buf()), Some("baz".into()));
 /// ```
+// Copy/pasted from: https://github.com/Manishearth/pathdiff
+// Copyright 2012-2015 The Rust Project Developers. See the COPYRIGHT
+// file at the top-level directory of this distribution and at
+// http://rust-lang.org/COPYRIGHT.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 pub fn diff_paths<P, B>(path: P, base: B) -> Option<PathBuf>
 where
     P: AsRef<Path>,
@@ -372,75 +751,5 @@ where
             }
         }
         Some(comps.iter().map(|c| c.as_os_str()).collect())
-    }
-}
-
-#[cfg(feature = "camino")]
-mod utf8_paths {
-    use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
-
-    /// Construct a relative UTF-8 path from a provided base directory path to the provided path.
-    ///
-    /// ```rust
-    /// # extern crate camino;
-    /// use camino::*;
-    /// use pathdiff::diff_utf8_paths;
-    ///
-    /// let baz = "/foo/bar/baz";
-    /// let bar = "/foo/bar";
-    /// let quux = "/foo/bar/quux";
-    /// assert_eq!(diff_utf8_paths(bar, baz), Some("../".into()));
-    /// assert_eq!(diff_utf8_paths(baz, bar), Some("baz".into()));
-    /// assert_eq!(diff_utf8_paths(quux, baz), Some("../quux".into()));
-    /// assert_eq!(diff_utf8_paths(baz, quux), Some("../baz".into()));
-    /// assert_eq!(diff_utf8_paths(bar, quux), Some("../".into()));
-    ///
-    /// assert_eq!(diff_utf8_paths(&baz, &bar.to_string()), Some("baz".into()));
-    /// assert_eq!(diff_utf8_paths(Utf8Path::new(baz), Utf8Path::new(bar).to_path_buf()), Some("baz".into()));
-    /// ```
-    #[cfg_attr(docsrs, doc(cfg(feature = "camino")))]
-    pub fn diff_utf8_paths<P, B>(path: P, base: B) -> Option<Utf8PathBuf>
-    where
-        P: AsRef<Utf8Path>,
-        B: AsRef<Utf8Path>,
-    {
-        let path = path.as_ref();
-        let base = base.as_ref();
-
-        if path.is_absolute() != base.is_absolute() {
-            if path.is_absolute() {
-                Some(Utf8PathBuf::from(path))
-            } else {
-                None
-            }
-        } else {
-            let mut ita = path.components();
-            let mut itb = base.components();
-            let mut comps: Vec<Utf8Component> = vec![];
-            loop {
-                match (ita.next(), itb.next()) {
-                    (None, None) => break,
-                    (Some(a), None) => {
-                        comps.push(a);
-                        comps.extend(ita.by_ref());
-                        break;
-                    }
-                    (None, _) => comps.push(Utf8Component::ParentDir),
-                    (Some(a), Some(b)) if comps.is_empty() && a == b => (),
-                    (Some(a), Some(b)) if b == Utf8Component::CurDir => comps.push(a),
-                    (Some(_), Some(b)) if b == Utf8Component::ParentDir => return None,
-                    (Some(a), Some(_)) => {
-                        comps.push(Utf8Component::ParentDir);
-                        for _ in itb {
-                            comps.push(Utf8Component::ParentDir);
-                        }
-                        comps.push(a);
-                        comps.extend(ita.by_ref());
-                        break;
-                    }
-                }
-            }
-            Some(comps.iter().map(|c| c.as_str()).collect())
-        }
     }
 }

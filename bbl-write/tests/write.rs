@@ -613,6 +613,7 @@ fn build_take_std_string() -> bbl_util::Result<()> {
             contents,
             &find_packages,
             &link_libraries,
+            &[],
             Some(&cmake_prefix_path),
             "11",
         )?;

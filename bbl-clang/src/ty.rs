@@ -49,6 +49,14 @@ impl Type {
         }
     }
 
+    pub fn fully_qualified_name(&self) -> String {
+        unsafe {
+            clang_Type_getFullyQualifiedName(self.inner)
+                .to_string()
+                .expect("null string")
+        }
+    }
+
     pub fn is_const_qualified(&self) -> bool {
         unsafe { clang_isConstQualifiedType(self.inner) != 0 }
     }

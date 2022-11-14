@@ -34,7 +34,7 @@ use std::{
     convert::TryFrom,
     fmt::{Debug, Display},
     ops::Deref,
-    os::raw::{c_int, c_longlong, c_ulonglong, c_void},
+    os::raw::{c_longlong, c_ulonglong, c_void},
 };
 
 use crate::ty::{to_type, Type};
