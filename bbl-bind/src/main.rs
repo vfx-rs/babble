@@ -2,12 +2,22 @@ use anyhow::Result;
 use bbl_clang::{
     cli_args_with, diagnostic::Severity, index::Index, virtual_file::configure_bind_project,
 };
-use bbl_extract::{ast::AST, bind::extract_ast_from_binding_tu};
+use bbl_extract::{
+    ast::AST,
+    bind::{self, extract_ast_from_binding_tu},
+};
 use bbl_translate::translate_cpp_ast_to_c;
-use bbl_write::{gen_c::gen_c, gen_rust_ffi::write_rust_ffi};
+use bbl_write::{
+    cmake::build_project,
+    gen_c::gen_c,
+    gen_rust_ffi::{write_rust_ffi, write_rust_ffi_module},
+};
 use clap::{Parser, ValueEnum};
 use log::{debug, error, info, warn};
-use std::{fmt::Display, path::Path};
+use std::{
+    fmt::Display,
+    path::{Path, PathBuf},
+};
 
 #[derive(Parser)]
 struct Args {
@@ -18,6 +28,10 @@ struct Args {
     /// Path to find cmake packages. Overrides CMAKE_PREFIX_PATH
     #[clap(long, value_parser)]
     cmake_prefix_path: Option<String>,
+
+    /// Output path to write the C and Rust projects
+    #[clap(short, long, value_parser)]
+    output_path: Option<String>,
 
     /// Verbosity of the output
     #[clap(short, long, arg_enum, value_parser)]
@@ -46,7 +60,7 @@ fn main() -> Result<()> {
         );
     }
 
-    let file_commands = configure_bind_project(&args.project_path, args.cmake_prefix_path)?;
+    let file_commands = configure_bind_project(&args.project_path, args.cmake_prefix_path.clone())?;
 
     let mut ast = AST::new();
     let mut already_visited = Vec::new();
@@ -75,19 +89,62 @@ fn main() -> Result<()> {
         extract_ast_from_binding_tu(cur, &mut already_visited, &mut ast, &tu, true)?;
     }
 
-    // println!("{ast:?}");
     let ast = ast.monomorphize()?;
-
     let c_ast = translate_cpp_ast_to_c(&ast, true)?;
-    println!("{c_ast:?}");
 
-    let (c_header, c_source) = gen_c("test", &c_ast)?;
-    println!("HEADER:\n--------\n{c_header}--------\n\nSOURCE:\n--------\n{c_source}--------");
+    let output_path = if let Some(p) = args.output_path {
+        p
+    } else {
+        args.project_path.clone()
+    };
 
-    let mut ffi = String::new();
-    write_rust_ffi(&mut ffi, &c_ast)?;
+    let project_name = Path::new(&output_path)
+        .components()
+        .last()
+        .unwrap()
+        .as_os_str()
+        .to_string_lossy();
 
-    println!("FFI:\n---------\n{ffi}");
+    let cmake_prefix_path = args.cmake_prefix_path.map(|s| PathBuf::from(&s));
+
+    build_project(
+        project_name.as_ref(),
+        &output_path,
+        &c_ast,
+        &[],                          // options.find_packages,
+        &[],                          // options.link_libraries,
+        &[],                          // options.extra_includes,
+        cmake_prefix_path.as_deref(), // options.cmake_prefix_path.as_deref(),
+        "14",                         // options.cxx_standard,
+    )?;
+
+    // now that the cmake project has built successfully let's translate the c ast to rust and write out the ffi module
+    let module_path = Path::new(&output_path)
+        .join("ffi.rs")
+        .to_string_lossy()
+        .to_string();
+    write_rust_ffi_module(&module_path, &c_ast)?;
+
+    // copy to the source tree (or somewhere else) if we asked to
+    // if let Some(copy_to) = copy_to {
+    //     std::fs::copy(module_path, copy_to).unwrap();
+    // }
+
+    let c_project_name = format!("c{}", project_name);
+
+    // link
+    println!(
+        "cargo:rustc-link-search=native={}/{}/install/lib",
+        std::env::var("OUT_DIR").unwrap(),
+        c_project_name
+    );
+    println!("cargo:rustc-link-lib=static={}", c_project_name);
+
+    #[cfg(target_os = "macos")]
+    println!("cargo:rustc-link-lib=dylib=cxx");
+
+    #[cfg(target_os = "linux")]
+    println!("cargo:rustc-link-lib=dylib=stdc++");
 
     Ok(())
 }

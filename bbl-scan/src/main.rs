@@ -11,6 +11,7 @@ use bbl_clang::{
 use clap::{Parser, ValueEnum};
 use convert_case::{Case, Casing};
 use log::{debug, error, info, warn};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Write},
@@ -315,12 +316,24 @@ target_include_directories({project_name} PUBLIC ${{CMAKE_CURRENT_LIST_DIR}})
 "#
     );
 
-    println!("{cmake_contents}");
+    // println!("{cmake_contents}");
 
     std::fs::write(project_root.join("CMakeLists.txt"), cmake_contents)?;
     std::fs::write(
         project_root.join("bbl.hpp"),
         include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../include/bbl.hpp")),
+    )?;
+
+    let build_config = BuildConfig {
+        find_packages: args.package.clone(),
+        link_libraries: args.link_library.clone(),
+        extra_includes: args.include.clone(),
+        cxx_standard,
+    };
+
+    std::fs::write(
+        project_root.join("build_config.json"),
+        serde_json::to_string_pretty(&build_config)?,
     )?;
 
     Ok(())
@@ -674,6 +687,17 @@ impl Display for Verbosity {
         }
     }
 }
+
+/// JSON struct to pass build config between bbl-scan and bbl-bind.
+/// Better solution might be to parse the CMakeLists.txt directly since the same information is in there already?
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BuildConfig {
+    find_packages: Vec<String>,
+    link_libraries: Vec<String>,
+    extra_includes: Vec<String>,
+    cxx_standard: String,
+}
+
 /// Construct a relative path from a provided base directory path to the provided path.
 ///
 /// ```rust

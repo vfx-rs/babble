@@ -49,7 +49,7 @@ struct Args {
 
     /// cmake target_compile_definitions
     #[clap(short, long, value_parser)]
-    compile_definitions: Vec<String>,
+    extra_includes: Vec<String>,
 
     /// allowed elements
     #[clap(short, long, value_parser)]
@@ -101,11 +101,7 @@ fn main() -> Result<()> {
 
     let find_packages: Vec<&str> = args.packages.iter().map(|p| p.as_str()).collect();
     let link_libraries: Vec<&str> = args.link_libraries.iter().map(|p| p.as_str()).collect();
-    let compile_definitions: Vec<&str> = args
-        .compile_definitions
-        .iter()
-        .map(|p| p.as_str())
-        .collect();
+    let extra_includes: Vec<&str> = args.extra_includes.iter().map(|p| p.as_str()).collect();
     let allow_list = AllowList::new(args.allow_list.clone());
 
     let options = BindOptions {
@@ -115,7 +111,7 @@ fn main() -> Result<()> {
         cmake_prefix_path: Some(cmake_prefix_path),
         find_packages: &find_packages,
         link_libraries: &link_libraries,
-        compile_definitions: &compile_definitions,
+        extra_includes: &extra_includes,
         allow_list,
         // We can limit our extraction to a single namespace in the target library. This is usually a good idea to
         // avoid doing extra work (bbl-extract will extract everything it finds, even if it's never used, and the less

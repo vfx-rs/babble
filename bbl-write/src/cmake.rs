@@ -14,7 +14,7 @@ pub fn build_project<P: AsRef<Path>>(
     c_ast: &CAST,
     find_packages: &[&str],
     link_libraries: &[&str],
-    compile_definitions: &[&str],
+    extra_includes: &[&str],
     cmake_prefix_path: Option<&Path>,
     cxx_standard: &str,
 ) -> Result<(), Error> {
@@ -57,15 +57,14 @@ pub fn build_project<P: AsRef<Path>>(
         writeln!(&mut link_libraries_str, ")")?;
     }
 
-    let mut compile_definitions_str = String::new();
-    if !compile_definitions.is_empty() {
-        compile_definitions_str = format!("target_compile_definitions({project_name} PUBLIC\n");
-        for lib in compile_definitions {
-            writeln!(&mut compile_definitions_str, "  {lib}")?;
-        }
-
-        writeln!(&mut compile_definitions_str, ")")?;
-    }
+    let extra_includes_str = if extra_includes.is_empty() {
+        "".to_string()
+    } else {
+        format!(
+            "target_include_directories({project_name} PUBLIC {}",
+            extra_includes.join(", ")
+        )
+    };
 
     let prefix_str = if let Some(cmake_prefix_path) = cmake_prefix_path {
         format!("set(CMAKE_PREFIX_PATH \"{}\")", cmake_prefix_path.display()).replace('\\', "/")
@@ -92,7 +91,7 @@ set(CMAKE_CXX_STANDARD {cxx_standard})
 
 add_library({project_name} STATIC {project_name}.cpp)
 {link_libraries_str}
-{compile_definitions_str}
+{extra_includes_str}
 
 install(TARGETS {project_name} EXPORT {project_name} DESTINATION lib)
 install(EXPORT {project_name} DESTINATION lib/cmake)
