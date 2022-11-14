@@ -552,27 +552,7 @@ fn get_methods(c_class: Cursor, parent_methods: &mut Vec<Method>) {
         ) {
             if let Ok(access) = c.cxx_access_specifier() {
                 if access == AccessSpecifier::Public && !c.cxx_method_is_deleted() {
-                    let result = c
-                        .result_ty()
-                        .map_or_else(|_| String::from("ERR"), get_type_name);
-
-                    let num_args = c.num_arguments().unwrap_or(0);
-                    let mut args = Vec::new();
-                    for i in 0..num_args {
-                        let a = c.argument(i).unwrap();
-                        let name = c.spelling();
-                        let ty = a.ty().map_or_else(|_| String::from("ERR"), get_type_name);
-
-                        args.push(Argument { name, ty });
-                    }
-
-                    let new_method = Method {
-                        name: c.spelling(),
-                        result,
-                        args,
-                        is_const: c.cxx_method_is_const(),
-                        overload_count: 0,
-                    };
+                    let new_method = get_method(c);
 
                     if !parent_methods.contains(&new_method) {
                         methods.push(new_method);
@@ -580,6 +560,25 @@ fn get_methods(c_class: Cursor, parent_methods: &mut Vec<Method>) {
                 }
             } else {
                 error!("Could not get access specifier for {c:?}");
+            }
+        } else if false {
+            // TODO(AL): see if we can make this prettier, but it's probably better to do by hand...
+            //c.kind() == CursorKind::UsingDeclaration {
+            if let Ok(AccessSpecifier::Public) = c.cxx_access_specifier() {
+                if let Some(odr) = c.first_child_of_kind(CursorKind::OverloadedDeclRef) {
+                    for decl in odr.overloaded_decls().unwrap() {
+                        if matches!(
+                            decl.kind(),
+                            CursorKind::CXXMethod | CursorKind::FunctionTemplate
+                        ) {
+                            let new_method = get_method(decl);
+
+                            if !parent_methods.contains(&new_method) {
+                                methods.push(new_method);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -602,6 +601,31 @@ fn get_methods(c_class: Cursor, parent_methods: &mut Vec<Method>) {
                 _ => warn!("Unhandled base {c_base_decl:?} of class {c_class:?}"),
             }
         }
+    }
+}
+
+fn get_method(c: Cursor) -> Method {
+    let result = c
+        .result_ty()
+        .map_or_else(|_| String::from("ERR"), get_type_name);
+
+    let num_args = c.num_arguments().unwrap_or(0);
+    let mut args = Vec::new();
+
+    for i in 0..num_args {
+        let a = c.argument(i).unwrap();
+        let name = c.spelling();
+        let ty = a.ty().map_or_else(|_| String::from("ERR"), get_type_name);
+
+        args.push(Argument { name, ty });
+    }
+
+    Method {
+        name: c.spelling(),
+        result,
+        args,
+        is_const: c.cxx_method_is_const(),
+        overload_count: 0,
     }
 }
 
