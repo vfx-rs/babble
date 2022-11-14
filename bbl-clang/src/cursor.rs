@@ -433,6 +433,16 @@ impl Cursor {
     pub fn get_overloaded_decl(&self, i: u32) -> Result<Cursor> {
         unsafe { cursor(clang_getOverloadedDecl(self.inner, i)) }
     }
+
+    pub fn overloaded_decls(&self) -> Result<Vec<Cursor>> {
+        let num = self.num_overloaded_decls();
+        let mut result = Vec::new();
+        for i in 0..num {
+            result.push(self.get_overloaded_decl(i)?);
+        }
+
+        Ok(result)
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
