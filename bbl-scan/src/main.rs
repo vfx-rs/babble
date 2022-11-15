@@ -493,6 +493,7 @@ struct Method {
     result: String,
     args: Vec<Argument>,
     is_const: bool,
+    is_static: bool,
     overload_count: usize,
 }
 
@@ -507,7 +508,13 @@ impl Method {
 
         let is_const = if self.is_const { " const" } else { "" };
 
-        format!("({} ({class_name}::*)({args}){is_const})", self.result())
+        let receiver = if self.is_static {
+            "*".to_string()
+        } else {
+            format!("{class_name}::*")
+        };
+
+        format!("({} ({receiver})({args}){is_const})", self.result())
     }
 
     fn rename_namespace(&mut self, original: &str, new: &str) -> bool {
@@ -666,6 +673,7 @@ fn get_method(c: Cursor) -> Method {
         result,
         args,
         is_const: c.cxx_method_is_const(),
+        is_static: c.cxx_method_is_static(),
         overload_count: 0,
     }
 }
