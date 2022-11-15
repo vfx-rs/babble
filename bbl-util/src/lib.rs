@@ -1,8 +1,9 @@
-use std::ops::Deref;
+use std::{ops::Deref, path::Path};
 
 use env_logger::fmt::Color;
 use log::Level;
 
+use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
 
 pub enum Error {
@@ -219,4 +220,49 @@ impl std::error::Error for Trace {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
+}
+
+/// JSON struct to pass build config between bbl-scan and bbl-bind.
+/// Better solution might be to parse the CMakeLists.txt directly since the same information is in there already?
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildConfig {
+    /// Currently only "cmake" is supported
+    pub build_system: String,
+    /// Name of the project. Created sub-projects will be called `project-bind`, `project-c`, `project-sys` and
+    /// `project-rs`
+    pub project_name: String,
+    pub find_packages: Vec<String>,
+    pub link_libraries: Vec<String>,
+    pub extra_includes: Vec<String>,
+    pub cxx_standard: String,
+    pub namespaces: Vec<String>,
+}
+
+impl Default for BuildConfig {
+    fn default() -> Self {
+        BuildConfig {
+            build_system: "cmake".to_string(),
+            project_name: "bind".to_string(),
+            find_packages: Vec::new(),
+            link_libraries: Vec::new(),
+            extra_includes: Vec::new(),
+            cxx_standard: "14".to_string(),
+            namespaces: Vec::new(),
+        }
+    }
+}
+
+pub fn write_build_config(
+    path: impl AsRef<Path>,
+    build_config: &BuildConfig,
+) -> Result<(), std::io::Error> {
+    std::fs::write(path.as_ref(), serde_json::to_string_pretty(&build_config)?)
+}
+
+pub fn read_build_config(
+    path: impl AsRef<Path>,
+) -> Result<BuildConfig, Box<dyn std::error::Error + 'static + Send + Sync>> {
+    let s = std::fs::read_to_string(path)?;
+    let config = serde_json::from_str::<BuildConfig>(&s)?;
+    Ok(config)
 }

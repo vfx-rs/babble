@@ -188,12 +188,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bbl-clang",
+ "bbl-util",
  "clap",
  "convert_case",
  "env_logger",
  "log",
- "serde",
- "serde_json",
  "thiserror",
  "walkdir",
 ]
@@ -229,6 +228,8 @@ dependencies = [
  "log",
  "opentelemetry",
  "opentelemetry-jaeger",
+ "serde",
+ "serde_json",
  "similar",
  "tracing",
  "tracing-opentelemetry",

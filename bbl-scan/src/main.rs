@@ -8,10 +8,10 @@ use bbl_clang::{
     ty::Type,
     virtual_file::{configure_bind_project, configure_temp_cmake_project, write_temp_file},
 };
+use bbl_util::{read_build_config, BuildConfig};
 use clap::{Parser, ValueEnum};
 use convert_case::{Case, Casing};
 use log::{debug, error, info, warn};
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Write},
@@ -28,6 +28,10 @@ struct Args {
     /// e.g. if one of your headers is at "~/mylib/include/foo/bar.h" you would pass "~/mylib/include" here
     #[clap(value_name = "HEADER_PATH")]
     header_path: String,
+
+    /// Name of the project
+    #[clap(long, value_parser)]
+    project_name: Option<String>,
 
     /// Path to find cmake packages. Overrides CMAKE_PREFIX_PATH
     #[clap(long, value_parser)]
@@ -75,14 +79,58 @@ fn main() -> Result<()> {
 
     let mut includes = String::new();
 
-    let project_name = Path::new(&args.project_path)
-        .components()
-        .last()
-        .expect("empty project path")
-        .as_os_str()
-        .to_string_lossy()
-        .to_string();
+    let project_path = Path::new(&args.project_path);
+    let build_config_path = project_path.join("build_config.json");
 
+    let mut build_config = BuildConfig::default();
+
+    // try to read the config from the project dir in case the user has created one there in advance
+    if build_config_path.is_file() {
+        build_config = match read_build_config(&build_config_path) {
+            Ok(bc) => bc,
+            Err(e) => {
+                panic!(
+                    "Failed to read build config from {}: {}",
+                    build_config_path.display(),
+                    e
+                );
+            }
+        }
+    }
+
+    // populate the build config from the arguments - overriding the json config if it was present, or just filling out
+    // the config if not
+    if let Some(project_name) = args.project_name {
+        build_config.project_name = project_name;
+    } else if build_config.project_name.is_empty() || build_config.project_name == "bind" {
+        build_config.project_name = Path::new(&args.project_path)
+            .components()
+            .last()
+            .expect("empty project path")
+            .as_os_str()
+            .to_string_lossy()
+            .to_string();
+    }
+
+    if let Some(s) = args.cxx_standard {
+        build_config.cxx_standard = s;
+    }
+
+    build_config
+        .find_packages
+        .extend(args.package.iter().cloned());
+    build_config
+        .link_libraries
+        .extend(args.link_library.iter().cloned());
+    build_config
+        .extra_includes
+        .extend(args.include.iter().cloned());
+    build_config.extra_includes.push(args.header_path.clone());
+    build_config
+        .namespaces
+        .extend(args.namespaces.iter().cloned());
+
+    // Gather all the header files under the provided header path into one big series of include directives to parse
     for entry in walkdir::WalkDir::new(&args.header_path)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -104,30 +152,20 @@ fn main() -> Result<()> {
         }
     }
 
-    let cxx_standard = if let Some(s) = &args.cxx_standard {
-        s.clone()
-    } else {
-        String::from("14")
-    };
-
-    let find_packages: Vec<&str> = args.package.iter().map(|s| s.as_str()).collect();
-    let link_libraries: Vec<&str> = args.link_library.iter().map(|s| s.as_str()).collect();
-    let mut extra_includes: Vec<&str> = args.include.iter().map(|s| s.as_str()).collect();
-    extra_includes.push(&args.header_path);
-
+    // Configure the temp cmake project for the big list of includes to get compile commands to use when parsing
     let (temp_file, temp_args) = configure_temp_cmake_project(
         &includes,
-        &find_packages,
-        &link_libraries,
-        &extra_includes,
+        &build_config.find_packages,
+        &build_config.link_libraries,
+        &build_config.extra_includes,
         args.cmake_prefix_path.as_ref(),
-        &cxx_standard,
+        &build_config.cxx_standard,
     )?;
 
     // split off the namespace renames and create clean namespaces for searching
     let mut namespace_renames = Vec::new();
     let mut namespaces = Vec::new();
-    for ns in &args.namespaces {
+    for ns in &build_config.namespaces {
         if ns.contains('=') {
             let mut toks = ns.split("=");
             let original = toks.next().unwrap().to_string();
@@ -139,14 +177,11 @@ fn main() -> Result<()> {
         }
     }
 
+    // extract everything starting at the selected namespaces
     let index = Index::new();
     let tu = index.create_translation_unit(&temp_file, &cli_args_with(&temp_args)?)?;
-
     let c_tu = tu.get_cursor()?;
-
     let mut class_decls = HashMap::new();
-
-    // extract everything starting at the selected namespaces
     c_tu.visit_children(|c, _| {
         if c.kind() == CursorKind::Namespace {
             let qname = qualified_name(c, c.display_name());
@@ -183,8 +218,8 @@ fn main() -> Result<()> {
         }
     }
 
+    // Apply namespace renames to the types
     modules.sort_by(|a, b| a.relpath.cmp(&b.relpath));
-
     for module in &mut modules {
         let mut module_namespace_renames = Vec::new();
 
@@ -200,7 +235,10 @@ fn main() -> Result<()> {
         module.namespace_renames = module_namespace_renames;
     }
 
-    let project_root = PathBuf::from(&args.project_path);
+    // Binding project will be in {project_name}-bind subdirectory
+    let project_root =
+        PathBuf::from(&args.project_path).join(format!("{}-bind", build_config.project_name));
+
     let mut cpp_files = Vec::new();
 
     for m in &modules {
@@ -257,11 +295,7 @@ fn main() -> Result<()> {
         cpp_files.push(cpp_rel_path);
     }
 
-    let cxx_standard_str = if let Some(s) = args.cxx_standard {
-        format!("set(CMAKE_CXX_STANDARD {s})")
-    } else {
-        "".to_string()
-    };
+    let cxx_standard_str = format!("set(CMAKE_CXX_STANDARD {})", build_config.cxx_standard);
 
     let find_package_str = args
         .package
@@ -280,17 +314,19 @@ fn main() -> Result<()> {
         "".to_string()
     } else {
         format!(
-            "target_link_libraries({project_name} {})",
+            "target_link_libraries({} {})",
+            build_config.project_name,
             args.link_library.join(" ")
         )
     };
 
-    let extra_includes_str = if extra_includes.is_empty() {
+    let extra_includes_str = if build_config.extra_includes.is_empty() {
         "".to_string()
     } else {
         format!(
-            "target_include_directories({project_name} PUBLIC {})",
-            extra_includes.join(" ")
+            "target_include_directories({} PUBLIC {})",
+            build_config.project_name,
+            build_config.extra_includes.join(" ")
         )
     };
 
@@ -298,7 +334,7 @@ fn main() -> Result<()> {
     let cmake_contents = format!(
         r#"cmake_minimum_required(VERSION 3.5)
 
-project({project_name})
+project({0})
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -306,14 +342,15 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 {find_package_str}
 
-add_library({project_name} STATIC 
+add_library({0} STATIC 
     {src_str}
     )
 
 {target_link_libraries_str}
 {extra_includes_str}
-target_include_directories({project_name} PUBLIC ${{CMAKE_CURRENT_LIST_DIR}})
-"#
+target_include_directories({0} PUBLIC ${{CMAKE_CURRENT_LIST_DIR}})
+"#,
+        build_config.project_name,
     );
 
     // println!("{cmake_contents}");
@@ -324,17 +361,8 @@ target_include_directories({project_name} PUBLIC ${{CMAKE_CURRENT_LIST_DIR}})
         include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../include/bbl.hpp")),
     )?;
 
-    let build_config = BuildConfig {
-        find_packages: args.package.clone(),
-        link_libraries: args.link_library.clone(),
-        extra_includes: args.include.clone(),
-        cxx_standard,
-    };
-
-    std::fs::write(
-        project_root.join("build_config.json"),
-        serde_json::to_string_pretty(&build_config)?,
-    )?;
+    // write the build config back out again to include the arguments passed on the command line (if any)
+    bbl_util::write_build_config(&build_config_path, &build_config)?;
 
     Ok(())
 }
@@ -686,16 +714,6 @@ impl Display for Verbosity {
             }
         }
     }
-}
-
-/// JSON struct to pass build config between bbl-scan and bbl-bind.
-/// Better solution might be to parse the CMakeLists.txt directly since the same information is in there already?
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct BuildConfig {
-    find_packages: Vec<String>,
-    link_libraries: Vec<String>,
-    extra_includes: Vec<String>,
-    cxx_standard: String,
 }
 
 /// Construct a relative path from a provided base directory path to the provided path.

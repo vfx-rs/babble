@@ -607,7 +607,7 @@ public:
 }
         "#;
 
-    let (filename, args) = configure_temp_cmake_project::<&Path>(
+    let (filename, args) = configure_temp_cmake_project::<&Path, &str>(
         contents,
         &["Imath 3.1 REQUIRED"],
         &["Imath::Imath"],

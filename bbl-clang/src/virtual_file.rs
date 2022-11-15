@@ -32,11 +32,11 @@ pub fn write_temp_file(file_contents: &str) -> Result<PathBuf, std::io::Error> {
 
 /// Write a temporary CMake project with a single-file executable containing the `file_contents` that we can use to
 /// get the compiler arguments from its generated compile_commands.json
-pub fn configure_temp_cmake_project<P: AsRef<Path>>(
+pub fn configure_temp_cmake_project<P: AsRef<Path>, S: AsRef<str>>(
     file_contents: &str,
-    find_packages: &[&str],
-    link_libraries: &[&str],
-    extra_includes: &[&str],
+    find_packages: &[S],
+    link_libraries: &[S],
+    extra_includes: &[S],
     cmake_prefix_path: Option<P>,
     cxx_standard: &str,
 ) -> Result<(PathBuf, Vec<String>)> {
@@ -48,8 +48,12 @@ pub fn configure_temp_cmake_project<P: AsRef<Path>>(
 
     let mut s = DefaultHasher::new();
     file_contents.hash(&mut s);
-    find_packages.hash(&mut s);
-    link_libraries.hash(&mut s);
+    for p in find_packages {
+        p.as_ref().hash(&mut s);
+    }
+    for l in link_libraries {
+        l.as_ref().hash(&mut s);
+    }
 
     let project_dir = format!("bbl-{:x}", s.finish());
     dirname.push(project_dir);
@@ -83,28 +87,36 @@ pub fn configure_temp_cmake_project<P: AsRef<Path>>(
     cmakelists.push("CMakeLists.txt");
 
     let mut find_packages_str = String::new();
-    for package in find_packages {
+    for package in find_packages.iter().map(|p| p.as_ref()) {
         find_packages_str = format!("{find_packages_str}find_package({package})\n");
     }
 
     let mut link_libraries_str = String::new();
-    for lib in link_libraries {
+    for lib in link_libraries.iter().map(|l| l.as_ref()) {
         link_libraries_str = format!("{link_libraries_str}{lib} ");
     }
 
     let link_libraries_str = if link_libraries.is_empty() {
         "".to_string()
     } else {
+        let link_libraries = link_libraries
+            .iter()
+            .map(|s| s.as_ref())
+            .collect::<Vec<_>>();
         format!(
             "target_link_libraries(babble_get_args {})",
             link_libraries.join(" ")
         )
     };
 
-    let extra_includes_str = extra_includes.join(" ");
     let include_directories_str = if extra_includes.is_empty() {
         "".to_string()
     } else {
+        let extra_includes = extra_includes
+            .iter()
+            .map(|s| s.as_ref())
+            .collect::<Vec<_>>();
+        let extra_includes_str = extra_includes.join(" ");
         format!("target_include_directories(babble_get_args PUBLIC {extra_includes_str})")
     };
 
