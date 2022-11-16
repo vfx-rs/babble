@@ -1,16 +1,20 @@
+use std::path::Path;
+
 use bbl_clang::{
     cursor::{ChildVisitResult, CurTypedef, Cursor, USR},
     cursor_kind::CursorKind,
+    diagnostic::Severity,
     exception::ExceptionSpecificationKind,
+    index::Index,
     template_argument::TemplateArgumentKind,
     translation_unit::TranslationUnit,
     ty::{Type, TypeKind},
+    virtual_file,
 };
-use log::debug;
-use tracing::error;
+use log::{debug, error, info, warn};
 
-use crate::{
-    ast::{dump_cursor, dump_cursor_until, get_namespaces_for_decl, AST},
+use bbl_extract::{
+    ast::{dump_cursor_until, get_namespaces_for_decl, AST},
     class::{ClassBindKind, ClassDecl, NeedsImplicit, OverrideList},
     error::Error,
     function::{
@@ -153,7 +157,6 @@ fn extract_class_binding(
                     }
                 // Or a C-style cast
                 } else if let Some(c_sc) = c.first_child_of_kind(CursorKind::CStyleCastExpr) {
-                    println!("GOT C STYLE CAST");
                     if let Some(c_ic) = c_sc.first_child_of_kind(CursorKind::ImplicitCastExpr) {
                         if let Some(c_pe) = c_ic.first_child_of_kind(CursorKind::ParenExpr) {
                             if let Some(c_uo) = c_pe.first_child_of_kind(CursorKind::UnaryOperator) {
@@ -260,8 +263,6 @@ fn get_underlying_type(ty: Type) -> Result<Type> {
 
 fn create_binding(c_compound: Cursor, binding: &mut Binding) {
     c_compound.visit_children(|c, _| {
-        // The main "entry point" is UnexposedExpr, which is actually ExprWithCleanups, but this isn't exposed by the C API.
-        // TODO(AL): expose this (or watch for exposition later).
         // If the user binds without any method calls on the Class object, then the entry will be CallExpr
         // This might be nested under a VarDecl if the user has done `auto v = bbl::Class<Foo>()`
         // Once we've hit this point, the full expression appears in reverse order, so given:
@@ -433,27 +434,32 @@ fn bind_class(
     let name = c_class_decl.display_name();
     let namespaces = get_namespaces_for_decl(c_class_decl, tu, ast, already_visited)?;
 
-    Ok(ClassDecl {
-        usr: cb.class_decl().usr(),
+    let mut class = ClassDecl::new(
+        cb.class_decl().usr(),
         name,
-        fields: Vec::new(),
-        methods: Vec::new(),
+        Vec::new(),
+        Vec::new(),
         namespaces,
-        template_parameters: Vec::new(),
-        specializations: Vec::new(),
-        ignore: cb.ignore(),
-        rename: cb.rename().cloned(),
-        bind_kind: cb.bind_kind(),
-        specialized_methods: Vec::new(),
-        is_pod: false,
-        needs_implicit: cb.needs_implicit.clone(),
-    })
+        Vec::new(),
+        false,
+        cb.needs_implicit.clone(),
+    );
+
+    if let Some(rename) = cb.rename() {
+        class.set_rename(rename);
+    }
+
+    class.set_ignore(cb.ignore());
+    class.set_bind_kind(cb.bind_kind());
+
+    Ok(class)
 }
 
 #[allow(clippy::too_many_arguments)]
 /// Main recursive function to walk the AST and extract the pieces we're interested in
 pub fn extract_ast_from_binding_tu(
     c: Cursor,
+    filename: &str,
     already_visited: &mut Vec<USR>,
     ast: &mut AST,
     tu: &TranslationUnit,
@@ -465,6 +471,15 @@ pub fn extract_ast_from_binding_tu(
         .expect("Could not find bbl_bind");
 
     dump_cursor_until(bind_fn, tu, 20, false);
+
+    for inc in c.children_of_kind(CursorKind::InclusionDirective, false) {
+        if let Some(s) = inc.location().spelling_location().file.file_name() {
+            if s == filename && inc.spelling() != "bbl.hpp" {
+                warn!("INC: {} - {}", inc.spelling(), s);
+                ast.append_include(&format!("#include <{}>", inc.spelling()));
+            }
+        }
+    }
 
     let body = bind_fn
         .first_child_of_kind(CursorKind::CompoundStmt)
@@ -512,7 +527,7 @@ pub fn extract_ast_from_binding_tu(
             method.set_replacement_name(rename.clone());
 
             let class = ast.get_class_mut(cb.class_decl().usr()).unwrap();
-            class.methods.push(method);
+            class.push_method(method);
         }
 
         // do the constructors
@@ -552,7 +567,7 @@ pub fn extract_ast_from_binding_tu(
             );
 
             let class = ast.get_class_mut(u_class).unwrap();
-            class.methods.push(ctor);
+            class.push_method(ctor);
         }
     }
 
@@ -589,7 +604,7 @@ pub fn extract_ast_from_binding_tu(
             &overrides,
             stop_on_error,
         )?;
-        function.replacement_name = fn_binding.rename.clone();
+        function.set_replacement_name(fn_binding.rename.clone());
 
         ast.insert_function(function);
     }
@@ -604,8 +619,9 @@ mod tests {
     use bbl_clang::cli_args;
     use indoc::indoc;
 
-    use crate::{
-        bind_string,
+    use crate::bind::bind_string;
+
+    use bbl_extract::{
         class::{ClassBindKind, OverrideList},
         error::Error,
         parse_string_and_extract_ast, AllowList,
@@ -723,4 +739,67 @@ BBL_MODULE(Test::Module)
             Ok(())
         })
     }
+}
+
+pub fn bind_file<P: AsRef<Path> + std::fmt::Debug, S: AsRef<str> + std::fmt::Debug>(
+    path: P,
+    cli_args: &[S],
+    log_diagnostics: bool,
+    namespace: Option<&str>,
+    allow_list: &AllowList,
+    class_overrides: &OverrideList,
+    header_str: &str,
+    stop_on_error: bool,
+) -> Result<AST> {
+    let index = Index::new();
+    let tu = index.create_translation_unit(&path, cli_args)?;
+
+    if log_diagnostics {
+        for d in tu.diagnostics() {
+            match d.severity() {
+                Severity::Ignored => debug!("{}", d),
+                Severity::Note => info!("{}", d),
+                Severity::Warning => warn!("{}", d),
+                Severity::Error | Severity::Fatal => error!("{}", d),
+            }
+        }
+    }
+
+    let cur = tu.get_cursor()?;
+
+    let mut already_visited = Vec::new();
+    let mut ast = AST::new();
+
+    extract_ast_from_binding_tu(
+        cur,
+        path.as_ref().as_os_str().to_str().unwrap(),
+        &mut already_visited,
+        &mut ast,
+        &tu,
+        stop_on_error,
+    )?;
+
+    Ok(ast)
+}
+
+pub fn bind_string<S1: AsRef<str> + std::fmt::Debug, S: AsRef<str> + std::fmt::Debug>(
+    contents: S1,
+    cli_args: &[S],
+    log_diagnostics: bool,
+    namespace: Option<&str>,
+    allow_list: &AllowList,
+    class_overrides: &OverrideList,
+    stop_on_error: bool,
+) -> Result<AST> {
+    let path = virtual_file::write_temp_file(contents.as_ref())?;
+    bind_file(
+        &path,
+        cli_args,
+        log_diagnostics,
+        namespace,
+        allow_list,
+        class_overrides,
+        "",
+        stop_on_error,
+    )
 }

@@ -53,8 +53,12 @@ pub enum Error {
     FailedToGenerateCMake {
         source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
-    #[error("Failed to run cmake")]
-    FailedToRunCMake(#[from] std::io::Error),
+    #[error("Failed to run cmake in {cwd} with args {args:?}")]
+    FailedToRunCMake {
+        cwd: String,
+        args: Vec<String>,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
+    },
     #[error("CMake configuration failed: \n{stdout}\n\n{stderr}")]
     FailedToConfigureCMake { stdout: String, stderr: String },
     #[error("CMake build failed: \n{stdout}\n\n{stderr}")]
@@ -67,5 +71,10 @@ pub enum Error {
     FailedToGetQualifiedName {
         name: String,
         source: bbl_extract::error::Error,
+    },
+    #[error("Failed to write rust module to path \"{module_path}")]
+    FailedToWriteRustModule {
+        module_path: String,
+        source: Box<dyn std::error::Error + 'static + Send + Sync>,
     },
 }

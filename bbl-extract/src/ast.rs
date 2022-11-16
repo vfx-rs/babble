@@ -772,6 +772,10 @@ impl AST {
     pub fn header_string(&self) -> &str {
         self.header_string.as_ref()
     }
+
+    pub fn append_include(&mut self, include: &str) {
+        self.header_string = format!("{}\n{include}", self.header_string);
+    }
 }
 
 pub fn get_qualified_name(decl: &str, namespaces: &[USR], ast: &AST) -> Result<String> {

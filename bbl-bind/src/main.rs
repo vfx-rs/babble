@@ -1,12 +1,9 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bbl_clang::{
     cli_args_with, diagnostic::Severity, index::Index, virtual_file::configure_bind_project,
 };
-use bbl_extract::{
-    ast::AST,
-    bind::{self, extract_ast_from_binding_tu},
-};
-use bbl_translate::translate_cpp_ast_to_c;
+use bbl_extract::ast::AST;
+use bbl_translate::{translate_cpp_ast_to_c, CAST};
 use bbl_write::{
     cmake::build_project,
     gen_c::gen_c,
@@ -19,19 +16,27 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod bind;
+use bind::extract_ast_from_binding_tu;
+
 #[derive(Parser)]
 struct Args {
-    /// Path to the CMake binding project (i.e. the directory containing the CMakeLists.txt)
-    #[clap(value_name = "PROJECT_PATH")]
-    project_path: String,
+    /// Path to the build_config.json file containing build settings
+    /// The structure of the JSON file should contain the following:
+    /// {
+    ///     "build_system": "cmake",        //< only option allowed for now
+    ///     "project_name": "<string>"      //< base name of project. This app will generate project-c, project-sys etc.
+    ///     "find_packages": ["<string>"]   //< list of strings to pass as cmake find_package() commands
+    ///     "link_libraries": ["<string>"]  //< list of strings to pass to the target_link_libraries() command
+    ///     "extra_includes": ["<string">]  //< list of paths to add to a target_include_directories() commands
+    ///     "cxx_standard": "<string>"      //< c++ standard to use, passed to set(CMAKE_CXX_STANDARD)
+    /// }
+    #[clap(value_name = "CONFIG_PATH")]
+    config_path: String,
 
     /// Path to find cmake packages. Overrides CMAKE_PREFIX_PATH
     #[clap(long, value_parser)]
     cmake_prefix_path: Option<String>,
-
-    /// Output path to write the C and Rust projects
-    #[clap(short, long, value_parser)]
-    output_path: Option<String>,
 
     /// Verbosity of the output
     #[clap(short, long, arg_enum, value_parser)]
@@ -46,21 +51,46 @@ fn main() -> Result<()> {
             .format_timestamp(None)
             .init();
     } else {
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug"))
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
             .format_timestamp(None)
             .init();
     }
 
-    let cmakelists = Path::new(&args.project_path).join("CMakeLists.txt");
-
-    if !cmakelists.is_file() {
+    let config_path = Path::new(&args.config_path);
+    if !config_path.is_file() {
         anyhow::bail!(
-            "Could not find CMakeLists.txt in provided path \"{}\"",
-            args.project_path
+            "Provided build_config path {} does not exist or is not a file",
+            config_path.display()
         );
     }
 
-    let file_commands = configure_bind_project(&args.project_path, args.cmake_prefix_path.clone())?;
+    let build_config = match bbl_util::read_build_config(&config_path) {
+        Ok(bc) => bc,
+        Err(e) => {
+            anyhow::bail!("Could not read build_config: {e}");
+        }
+    };
+
+    let project_root = match config_path.parent() {
+        Some(p) => p,
+        None => anyhow::bail!(
+            "Could not get parent directory of config path {}",
+            config_path.display()
+        ),
+    };
+
+    let bind_project_path = project_root.join(format!("{}-bind", build_config.project_name));
+
+    let cmakelists = Path::new(&bind_project_path).join("CMakeLists.txt");
+
+    if !cmakelists.is_file() {
+        anyhow::bail!(
+            "Could not find CMakeLists.txt in path \"{}\"",
+            bind_project_path.display(),
+        );
+    }
+
+    let file_commands = configure_bind_project(&bind_project_path, args.cmake_prefix_path.clone())?;
 
     let mut ast = AST::new();
     let mut already_visited = Vec::new();
@@ -86,56 +116,43 @@ fn main() -> Result<()> {
         }
 
         let cur = tu.get_cursor()?;
-        extract_ast_from_binding_tu(cur, &mut already_visited, &mut ast, &tu, true)?;
+        extract_ast_from_binding_tu(
+            cur,
+            fc.filename(),
+            &mut already_visited,
+            &mut ast,
+            &tu,
+            true,
+        )?;
     }
 
     let ast = ast.monomorphize()?;
     let c_ast = translate_cpp_ast_to_c(&ast, true)?;
 
-    let output_path = if let Some(p) = args.output_path {
-        p
-    } else {
-        args.project_path.clone()
-    };
-
-    let project_name = Path::new(&output_path)
-        .components()
-        .last()
-        .unwrap()
-        .as_os_str()
-        .to_string_lossy();
-
     let cmake_prefix_path = args.cmake_prefix_path.map(|s| PathBuf::from(&s));
 
     build_project(
-        project_name.as_ref(),
-        &output_path,
+        build_config.project_name.as_ref(),
+        &project_root,
         &c_ast,
-        &[],                          // options.find_packages,
-        &[],                          // options.link_libraries,
-        &[],                          // options.extra_includes,
+        &build_config.find_packages,  // options.find_packages,
+        &build_config.link_libraries, // options.link_libraries,
+        &build_config.extra_includes, // options.extra_includes,
         cmake_prefix_path.as_deref(), // options.cmake_prefix_path.as_deref(),
-        "14",                         // options.cxx_standard,
+        build_config.cxx_standard,    // options.cxx_standard,
     )?;
 
-    // now that the cmake project has built successfully let's translate the c ast to rust and write out the ffi module
-    let module_path = Path::new(&output_path)
-        .join("ffi.rs")
-        .to_string_lossy()
-        .to_string();
-    write_rust_ffi_module(&module_path, &c_ast)?;
+    let c_project_name = format!("{}-c", build_config.project_name);
+    let c_project_path = project_root.join(&c_project_name);
 
-    // copy to the source tree (or somewhere else) if we asked to
-    // if let Some(copy_to) = copy_to {
-    //     std::fs::copy(module_path, copy_to).unwrap();
-    // }
+    let ffi_project_name = format!("{}-sys", build_config.project_name);
 
-    let c_project_name = format!("c{}", project_name);
+    write_rust_ffi_project(&c_ast, project_root, &c_project_name, &ffi_project_name)?;
 
     // link
     println!(
         "cargo:rustc-link-search=native={}/{}/install/lib",
-        std::env::var("OUT_DIR").unwrap(),
+        c_project_path.display(),
         c_project_name
     );
     println!("cargo:rustc-link-lib=static={}", c_project_name);
@@ -145,6 +162,58 @@ fn main() -> Result<()> {
 
     #[cfg(target_os = "linux")]
     println!("cargo:rustc-link-lib=dylib=stdc++");
+
+    Ok(())
+}
+
+fn write_rust_ffi_project(
+    c_ast: &CAST,
+    project_root: &Path,
+    c_project_name: &str,
+    ffi_project_name: &str,
+) -> Result<()> {
+    let ffi_project_path = project_root.join(&ffi_project_name);
+    let cargo_toml_path = ffi_project_path.join("Cargo.toml");
+    let src_path = ffi_project_path.join("src");
+    let module_path = src_path.join("lib.rs");
+    let build_rs_path = ffi_project_path.join("build.rs");
+
+    std::fs::create_dir_all(&src_path)
+        .with_context(|| format!("Failed to create directory {}", src_path.display()))?;
+    write_rust_ffi_module(&module_path, c_ast)?;
+
+    // write Cargo.toml
+    std::fs::write(
+        &cargo_toml_path,
+        format!(
+            r#"[package]
+name = "{ffi_project_name}"
+version = "0.1.0"
+edition = "2021"
+
+"#
+        ),
+    )?;
+
+    // write build.rs
+    std::fs::write(
+        &build_rs_path,
+        format!(
+            r#"
+fn main() {{
+    println!("cargo:rustc-link-search=native={}/install/lib");
+    println!("cargo:rustc-link-lib=static={c_project_name}");
+
+    #[cfg(target_os = "macos")]
+    println!("cargo:rustc-link-lib=dylib=cxx");
+
+    #[cfg(target_os = "linux")]
+    println!("cargo:rustc-link-lib=dylib=stdc++");
+}}  
+"#,
+            project_root.join(&c_project_name).display()
+        ),
+    )?;
 
     Ok(())
 }

@@ -9,9 +9,11 @@ edition = "2021"
 bbl-extract = { path = "../bbl-extract", version = "0.1.0" }
 bbl-translate = { path = "../bbl-translate", version = "0.1.0" }
 bbl-clang = { path = "../bbl-clang", version = "0.1.0" }
+bbl-util = { path = "../bbl-util", version = "0.1.0" }
 bbl-write = { path = "../bbl-write", version = "0.1.0" }
 anyhow = "1.0.66"
 clap = { version = "3.2.17", features = ["derive", "unstable-doc"] }
 env_logger = "0.9.3"
 log = "0.4.17"
 thiserror = "1.0.37"
+indoc = "1.0.7"

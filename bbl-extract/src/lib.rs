@@ -6,12 +6,10 @@ use bbl_clang::{
     cursor::USR, cursor_kind::CursorKind, diagnostic::Severity, index::Index,
     translation_unit::TranslationUnit, virtual_file,
 };
-use bind::extract_ast_from_binding_tu;
 use class::OverrideList;
 use log::*;
 
 pub mod ast;
-pub mod bind;
 pub mod class;
 pub mod enm;
 pub mod function;
@@ -189,62 +187,6 @@ pub fn parse_string_and_dump_ast<
     }
 
     Ok(())
-}
-
-pub fn bind_file<P: AsRef<Path> + std::fmt::Debug, S: AsRef<str> + std::fmt::Debug>(
-    path: P,
-    cli_args: &[S],
-    log_diagnostics: bool,
-    namespace: Option<&str>,
-    allow_list: &AllowList,
-    class_overrides: &OverrideList,
-    header_str: &str,
-    stop_on_error: bool,
-) -> Result<AST> {
-    let index = Index::new();
-    let tu = index.create_translation_unit(path, cli_args)?;
-
-    if log_diagnostics {
-        for d in tu.diagnostics() {
-            match d.severity() {
-                Severity::Ignored => debug!("{}", d),
-                Severity::Note => info!("{}", d),
-                Severity::Warning => warn!("{}", d),
-                Severity::Error | Severity::Fatal => error!("{}", d),
-            }
-        }
-    }
-
-    let cur = tu.get_cursor()?;
-
-    let mut already_visited = Vec::new();
-    let mut ast = AST::new();
-
-    extract_ast_from_binding_tu(cur, &mut already_visited, &mut ast, &tu, stop_on_error)?;
-
-    Ok(ast)
-}
-
-pub fn bind_string<S1: AsRef<str> + std::fmt::Debug, S: AsRef<str> + std::fmt::Debug>(
-    contents: S1,
-    cli_args: &[S],
-    log_diagnostics: bool,
-    namespace: Option<&str>,
-    allow_list: &AllowList,
-    class_overrides: &OverrideList,
-    stop_on_error: bool,
-) -> Result<AST> {
-    let path = virtual_file::write_temp_file(contents.as_ref())?;
-    bind_file(
-        &path,
-        cli_args,
-        log_diagnostics,
-        namespace,
-        allow_list,
-        class_overrides,
-        "",
-        stop_on_error,
-    )
 }
 
 #[derive(Debug)]

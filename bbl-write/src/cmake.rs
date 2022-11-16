@@ -8,15 +8,15 @@ use crate::gen_c::gen_c;
 
 use std::fmt::Write;
 
-pub fn build_project<P: AsRef<Path>>(
+pub fn build_project<P: AsRef<Path>, S: AsRef<str>>(
     project_name: &str,
     output_directory: P,
     c_ast: &CAST,
-    find_packages: &[&str],
-    link_libraries: &[&str],
-    extra_includes: &[&str],
+    find_packages: &[S],
+    link_libraries: &[S],
+    extra_includes: &[S],
     cmake_prefix_path: Option<&Path>,
-    cxx_standard: &str,
+    cxx_standard: S,
 ) -> Result<(), Error> {
     let project_name = format!("{project_name}-c");
 
@@ -44,14 +44,14 @@ pub fn build_project<P: AsRef<Path>>(
 
     let mut find_packages_str = String::new();
     for package in find_packages {
-        writeln!(&mut find_packages_str, "find_package({package})")?;
+        writeln!(&mut find_packages_str, "find_package({})", package.as_ref())?;
     }
 
     let mut link_libraries_str = String::new();
     if !link_libraries.is_empty() {
         link_libraries_str = format!("target_link_libraries({project_name} PUBLIC\n");
         for lib in link_libraries {
-            writeln!(&mut link_libraries_str, "  {lib}")?;
+            writeln!(&mut link_libraries_str, "  {}", lib.as_ref())?;
         }
 
         writeln!(&mut link_libraries_str, ")")?;
@@ -61,8 +61,12 @@ pub fn build_project<P: AsRef<Path>>(
         "".to_string()
     } else {
         format!(
-            "target_include_directories({project_name} PUBLIC {}",
-            extra_includes.join(", ")
+            "target_include_directories({project_name} PUBLIC {})",
+            extra_includes
+                .iter()
+                .map(|s| s.as_ref())
+                .collect::<Vec<_>>()
+                .join(" ")
         )
     };
 
@@ -85,7 +89,8 @@ project({project_name})
 
 set(CMAKE_INSTALL_PREFIX {})
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_CXX_STANDARD {cxx_standard})
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_STANDARD {})
 
 {find_packages_str}
 
@@ -96,7 +101,8 @@ add_library({project_name} STATIC {project_name}.cpp)
 install(TARGETS {project_name} EXPORT {project_name} DESTINATION lib)
 install(EXPORT {project_name} DESTINATION lib/cmake)
 "#,
-            install_dir
+            install_dir,
+            cxx_standard.as_ref(),
         ),
     )
     .map_err(|e| Error::FailedToGenerateCMake {
@@ -104,13 +110,22 @@ install(EXPORT {project_name} DESTINATION lib/cmake)
     })?;
 
     // configure the project
-    let configure_output = Command::new("cmake")
-        .args(&[
-            "-B",
-            build_dir.as_os_str().to_string_lossy().as_ref(),
-            output_directory.as_os_str().to_string_lossy().as_ref(),
-        ])
-        .output()?;
+    let args = vec![
+        "-B".to_string(),
+        build_dir.as_os_str().to_string_lossy().to_string(),
+        output_directory.as_os_str().to_string_lossy().to_string(),
+    ];
+    let configure_output =
+        Command::new("cmake")
+            .args(&args)
+            .output()
+            .map_err(|e| Error::FailedToRunCMake {
+                cwd: std::env::current_dir()
+                    .map(|p| p.as_os_str().to_string_lossy().to_string())
+                    .unwrap_or_else(|_| "CWD?".to_string()),
+                args,
+                source: Box::new(e),
+            })?;
 
     if !configure_output.status.success() {
         return Err(Error::FailedToConfigureCMake {
@@ -124,14 +139,23 @@ install(EXPORT {project_name} DESTINATION lib/cmake)
     }
 
     // build the project
-    let build_output = Command::new("cmake")
-        .args(&[
-            "--build",
-            build_dir.as_os_str().to_string_lossy().as_ref(),
-            "--config",
-            "Release",
-        ])
-        .output()?;
+    let args = vec![
+        "--build".to_string(),
+        build_dir.as_os_str().to_string_lossy().to_string(),
+        "--config".to_string(),
+        "Release".to_string(),
+    ];
+    let build_output =
+        Command::new("cmake")
+            .args(&args)
+            .output()
+            .map_err(|e| Error::FailedToRunCMake {
+                cwd: std::env::current_dir()
+                    .map(|p| p.as_os_str().to_string_lossy().to_string())
+                    .unwrap_or_else(|_| "CWD?".to_string()),
+                args,
+                source: Box::new(e),
+            })?;
 
     if !build_output.status.success() {
         return Err(Error::FailedToBuildCMake {
@@ -145,12 +169,22 @@ install(EXPORT {project_name} DESTINATION lib/cmake)
     }
 
     // install the project
-    let install_output = Command::new("cmake")
-        .args(&[
-            "--install",
-            build_dir.as_os_str().to_string_lossy().as_ref(),
-        ])
-        .output()?;
+    let args = vec![
+        "--install".to_string(),
+        build_dir.as_os_str().to_string_lossy().to_string(),
+    ];
+
+    let install_output =
+        Command::new("cmake")
+            .args(&args)
+            .output()
+            .map_err(|e| Error::FailedToRunCMake {
+                cwd: std::env::current_dir()
+                    .map(|p| p.as_os_str().to_string_lossy().to_string())
+                    .unwrap_or_else(|_| "CWD?".to_string()),
+                args,
+                source: Box::new(e),
+            })?;
 
     if !install_output.status.success() {
         return Err(Error::FailedToInstallCMake {

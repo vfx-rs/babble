@@ -262,7 +262,7 @@ impl ClassDecl {
     /// is false, and this class has fields which are non-value-type classes.
     /// * [`Error::ClassHasIncompatibleFields`] if `bind_kind` is [`ClassBindKind::ValueType`], `force_members_to_match`
     /// is true, but the field classes cannot be converted to value types.
-    pub(crate) fn set_bind_kind(&mut self, bind_kind: ClassBindKind) {
+    pub fn set_bind_kind(&mut self, bind_kind: ClassBindKind) {
         self.bind_kind = bind_kind
     }
 
@@ -412,6 +412,10 @@ impl ClassDecl {
 
     pub fn ignore_method(&mut self, method_id: MethodId) {
         self.methods[method_id.get()].ignore();
+    }
+
+    pub fn push_method(&mut self, method: Method) {
+        self.methods.push(method)
     }
 
     pub fn specialize_method(

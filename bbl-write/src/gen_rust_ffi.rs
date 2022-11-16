@@ -12,17 +12,23 @@ use bbl_translate::{
 use crate::error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-use std::{borrow::Cow, fmt::Write};
+use std::{borrow::Cow, fmt::Write, path::Path};
 
 use indoc::indoc;
 
-pub fn write_rust_ffi_module(module_path: &str, c_ast: &CAST) -> Result<(), Error> {
+pub fn write_rust_ffi_module(module_path: impl AsRef<Path>, c_ast: &CAST) -> Result<()> {
     // write the rust ffi module
     let mut ffi_source = String::new();
     write_rust_ffi(&mut ffi_source, c_ast)?;
-    // println!("{}", ffi_source);
 
-    std::fs::write(module_path, &ffi_source)?;
+    std::fs::write(&module_path, &ffi_source).map_err(|e| Error::FailedToWriteRustModule {
+        module_path: module_path
+            .as_ref()
+            .as_os_str()
+            .to_string_lossy()
+            .to_string(),
+        source: Box::new(e),
+    })?;
 
     Ok(())
 }
