@@ -297,8 +297,8 @@ fn main() -> Result<()> {
 
     let cxx_standard_str = format!("set(CMAKE_CXX_STANDARD {})", build_config.cxx_standard);
 
-    let find_package_str = args
-        .package
+    let find_package_str = build_config
+        .find_packages
         .iter()
         .map(|p| format!("find_package({p} REQUIRED)"))
         .collect::<Vec<_>>()
@@ -310,13 +310,13 @@ fn main() -> Result<()> {
         .collect::<Vec<_>>()
         .join("\n    ");
 
-    let target_link_libraries_str = if args.link_library.is_empty() {
+    let target_link_libraries_str = if build_config.link_libraries.is_empty() {
         "".to_string()
     } else {
         format!(
             "target_link_libraries({} {})",
             build_config.project_name,
-            args.link_library.join(" ")
+            build_config.link_libraries.join(" ")
         )
     };
 

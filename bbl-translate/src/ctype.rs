@@ -71,6 +71,10 @@ impl CQualType {
         matches!(self.type_ref, CTypeRef::Pointer(_))
     }
 
+    pub fn is_void(&self) -> bool {
+        matches!(self.type_ref, CTypeRef::Builtin(TypeKind::Void))
+    }
+
     pub fn is_function_proto(&self, c_ast: &CAST) -> bool {
         if let CTypeRef::Ref(usr) = self.type_ref {
             c_ast.get_function_proto(usr).is_some()

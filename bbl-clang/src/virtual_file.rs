@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use log::error;
+use log::{debug, error};
 
 use crate::compilation_database::CompilationDatabase;
 
@@ -59,6 +59,7 @@ pub fn configure_temp_cmake_project<P: AsRef<Path>, S: AsRef<str>>(
     dirname.push(project_dir);
 
     let build_dir = dirname.join("build");
+    debug!("Configuring temp cmake project in {}", build_dir.display());
 
     let query_dir = build_dir
         .join(".cmake")

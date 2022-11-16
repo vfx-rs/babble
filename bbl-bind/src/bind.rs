@@ -470,7 +470,7 @@ pub fn extract_ast_from_binding_tu(
         .first_child_of_kind_with_name(CursorKind::FunctionDecl, "bbl_bind")
         .expect("Could not find bbl_bind");
 
-    dump_cursor_until(bind_fn, tu, 20, false);
+    // dump_cursor_until(bind_fn, tu, 20, false);
 
     for inc in c.children_of_kind(CursorKind::InclusionDirective, false) {
         if let Some(s) = inc.location().spelling_location().file.file_name() {

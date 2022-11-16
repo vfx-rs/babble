@@ -11,6 +11,7 @@ use bbl_extract::{
 };
 use bbl_util::Trace;
 use hashbrown::HashSet;
+use log::warn;
 use tracing::{error, instrument, trace};
 
 use crate::{
@@ -508,7 +509,7 @@ pub fn translate_function(
     //      o Add an extra pointer around it and tag as deref, insert new expression
     //
     let assign_expr_fn = if !matches!(result.type_ref, CTypeRef::Builtin(TypeKind::Void)) {
-        let result_name = get_unique_argument_name("result", &mut used_argument_names);
+        let result_name = get_unique_argument_name("_result", &mut used_argument_names);
 
         let (result_qt, result_expr) = match result.type_ref() {
             CTypeRef::Builtin(_) | CTypeRef::FunctionProto { .. } => {
@@ -946,7 +947,7 @@ pub fn translate_method(
     //      o Add an extra pointer around it and tag as deref, insert new expression
     //
     let assign_expr_fn = if !matches!(result.type_ref, CTypeRef::Builtin(TypeKind::Void)) {
-        let result_name = get_unique_argument_name("result", &mut used_argument_names);
+        let result_name = get_unique_argument_name("_result", &mut used_argument_names);
 
         let (result_qt, result_expr) = match result.type_ref() {
             CTypeRef::Builtin(_) | CTypeRef::FunctionProto { .. } => {
@@ -1491,6 +1492,8 @@ fn get_unique_argument_name(name: &str, used_argument_names: &mut HashSet<String
         result = format!("{name}{i}");
         i += 1
     }
+
+    used_argument_names.insert(result.clone());
 
     result
 }
