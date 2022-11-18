@@ -82,12 +82,18 @@ fn main() -> Result<()> {
     // Interpret the PROJECT_PATH as either a path to the build_config.json the user has already written, or a directory
     // containing it (or where we'll write one if the user has just passed command-line arguments)
     let args_project_path = Path::new(&args.project_path);
-    let build_config_path = match args_project_path.file_name() {
+    let (build_config_path, project_path) = match args_project_path.file_name() {
         Some(filename) if filename.to_string_lossy() == "build_config.json" => {
             let build_config_path = args_project_path;
-            build_config_path.to_owned()
+            (
+                build_config_path.to_owned(),
+                build_config_path.parent().unwrap(),
+            )
         }
-        Some(_) if args_project_path.is_dir() => args_project_path.join("build_config.json"),
+        Some(_) if args_project_path.is_dir() => (
+            args_project_path.join("build_config.json"),
+            args_project_path,
+        ),
         _ => {
             anyhow::bail!(
                 "Provided PROJECT_PATH was not a build_config.json or a directory: {}",
@@ -127,7 +133,7 @@ fn main() -> Result<()> {
             "build config project name is {} - overriding",
             build_config.project_name
         );
-        build_config.project_name = Path::new(&args.project_path)
+        build_config.project_name = Path::new(&project_path)
             .components()
             .last()
             .expect("empty project path")
@@ -264,7 +270,7 @@ fn main() -> Result<()> {
 
     // Binding project will be in {project_name}-bind subdirectory
     let project_root =
-        PathBuf::from(&args.project_path).join(format!("{}-bind", build_config.project_name));
+        PathBuf::from(&project_path).join(format!("{}-bind", build_config.project_name));
 
     let mut cpp_files = Vec::new();
 
