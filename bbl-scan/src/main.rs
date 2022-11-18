@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bbl_clang::{
     access_specifier::AccessSpecifier,
     cli_args_with,
@@ -21,7 +21,7 @@ use std::{
 #[derive(Parser)]
 struct Args {
     /// Path to the CMake binding project to write (i.e. the directory containing the CMakeLists.txt)
-    #[clap(value_name = "OUTPUT_PATH")]
+    #[clap(value_name = "PROJECT_PATH")]
     project_path: String,
 
     /// Path to the root include directory of the library to bind
@@ -79,13 +79,28 @@ fn main() -> Result<()> {
 
     let mut includes = String::new();
 
-    let project_path = Path::new(&args.project_path);
-    let build_config_path = project_path.join("build_config.json");
+    // Interpret the PROJECT_PATH as either a path to the build_config.json the user has already written, or a directory
+    // containing it (or where we'll write one if the user has just passed command-line arguments)
+    let args_project_path = Path::new(&args.project_path);
+    let build_config_path = match args_project_path.file_name() {
+        Some(filename) if filename.to_string_lossy() == "build_config.json" => {
+            let build_config_path = args_project_path;
+            build_config_path.to_owned()
+        }
+        Some(_) if args_project_path.is_dir() => args_project_path.join("build_config.json"),
+        _ => {
+            anyhow::bail!(
+                "Provided PROJECT_PATH was not a build_config.json or a directory: {}",
+                args_project_path.display()
+            );
+        }
+    };
 
     let mut build_config = BuildConfig::default();
 
     // try to read the config from the project dir in case the user has created one there in advance
     if build_config_path.is_file() {
+        println!("Reading build config from {}", build_config_path.display());
         build_config = match read_build_config(&build_config_path) {
             Ok(bc) => bc,
             Err(e) => {
@@ -96,6 +111,11 @@ fn main() -> Result<()> {
                 );
             }
         }
+    } else {
+        println!(
+            "No build config at {}. Creating one from arguments",
+            build_config_path.display()
+        );
     }
 
     // populate the build config from the arguments - overriding the json config if it was present, or just filling out
@@ -103,6 +123,10 @@ fn main() -> Result<()> {
     if let Some(project_name) = args.project_name {
         build_config.project_name = project_name;
     } else if build_config.project_name.is_empty() || build_config.project_name == "bind" {
+        println!(
+            "build config project name is {} - overriding",
+            build_config.project_name
+        );
         build_config.project_name = Path::new(&args.project_path)
             .components()
             .last()
@@ -129,6 +153,9 @@ fn main() -> Result<()> {
     build_config
         .namespaces
         .extend(args.namespaces.iter().cloned());
+
+    build_config.extra_includes.sort();
+    build_config.extra_includes.dedup();
 
     // Gather all the header files under the provided header path into one big series of include directives to parse
     for entry in walkdir::WalkDir::new(&args.header_path)
@@ -249,8 +276,18 @@ fn main() -> Result<()> {
 
         writeln!(&mut body, "BBL_MODULE({}) {{", m.module_name.join("::"))?;
 
+        let mut namespaces_used = Vec::new();
         for nsr in &m.namespace_renames {
-            writeln!(&mut body, "    namespace {} = {};", nsr.1, nsr.0)?;
+            if namespaces_used.contains(&nsr.1) {
+                writeln!(
+                    &mut body,
+                    "    {{\n        namespace {} = {};\n    }}",
+                    nsr.1, nsr.0
+                )?;
+            } else {
+                writeln!(&mut body, "    namespace {} = {};", nsr.1, nsr.0)?;
+                namespaces_used.push(nsr.1.clone());
+            }
         }
         writeln!(&mut body)?;
 
@@ -355,7 +392,12 @@ target_include_directories({0} PUBLIC ${{CMAKE_CURRENT_LIST_DIR}})
 
     // println!("{cmake_contents}");
 
-    std::fs::write(project_root.join("CMakeLists.txt"), cmake_contents)?;
+    std::fs::write(project_root.join("CMakeLists.txt"), cmake_contents).with_context(|| {
+        format!(
+            "Could not write {}",
+            project_root.join("CMakeLists.txt").display()
+        )
+    })?;
     std::fs::write(
         project_root.join("bbl.hpp"),
         include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../include/bbl.hpp")),
@@ -600,6 +642,10 @@ fn get_methods(c_class: Cursor, parent_methods: &mut Vec<Method>) {
         ) {
             if let Ok(access) = c.cxx_access_specifier() {
                 if access == AccessSpecifier::Public && !c.cxx_method_is_deleted() {
+                    if c.display_name().contains("read_from") {
+                        println!("{}::read_from: {:?}", c_class.display_name(), access);
+                    }
+
                     let new_method = get_method(c);
 
                     if !parent_methods.contains(&new_method) {

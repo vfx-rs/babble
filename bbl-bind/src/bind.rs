@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use bbl_clang::{
+    cli_args_with,
     cursor::{ChildVisitResult, CurTypedef, Cursor, USR},
     cursor_kind::CursorKind,
     diagnostic::Severity,
@@ -9,14 +10,13 @@ use bbl_clang::{
     template_argument::TemplateArgumentKind,
     translation_unit::TranslationUnit,
     ty::{Type, TypeKind},
-    virtual_file,
+    virtual_file::{self, FileCommands},
 };
 use log::{debug, error, info, warn};
 
 use bbl_extract::{
     ast::{dump_cursor_until, get_namespaces_for_decl, AST},
     class::{ClassBindKind, ClassDecl, NeedsImplicit, OverrideList},
-    error::Error,
     function::{
         extract_function, extract_method, Argument, Const, Deleted, Method, MethodKind,
         PureVirtual, Virtual,
@@ -26,6 +26,18 @@ use bbl_extract::{
     AllowList,
 };
 type Result<T, E = Error> = std::result::Result<T, E>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Extraction error")]
+    Extraction(#[from] bbl_extract::error::Error),
+    #[error("Clang error")]
+    Clang(#[from] bbl_clang::error::Error),
+    #[error("I/O Error")]
+    Io(#[from] std::io::Error),
+    #[error("Error parsing C++")]
+    CompilationError,
+}
 
 #[derive(Debug, Default, Clone)]
 struct Binding {
@@ -49,10 +61,11 @@ struct ClassBinding {
     bind_kind: ClassBindKind,
     needs_implicit: NeedsImplicit,
     ctors: Vec<(Vec<Type>, Option<String>)>,
+    tu: TranslationUnit,
 }
 
 impl ClassBinding {
-    pub fn new(class_decl: Cursor, rename: Option<String>) -> ClassBinding {
+    pub fn new(class_decl: Cursor, tu: TranslationUnit, rename: Option<String>) -> ClassBinding {
         ClassBinding {
             class_decl,
             methods: Vec::new(),
@@ -61,6 +74,7 @@ impl ClassBinding {
             bind_kind: ClassBindKind::OpaquePtr,
             needs_implicit: NeedsImplicit::default(),
             ctors: Vec::new(),
+            tu,
         }
     }
 
@@ -261,7 +275,7 @@ fn get_underlying_type(ty: Type) -> Result<Type> {
     }
 }
 
-fn create_binding(c_compound: Cursor, binding: &mut Binding) {
+fn create_binding(c_compound: Cursor, tu: &TranslationUnit, binding: &mut Binding) {
     c_compound.visit_children(|c, _| {
         // If the user binds without any method calls on the Class object, then the entry will be CallExpr
         // This might be nested under a VarDecl if the user has done `auto v = bbl::Class<Foo>()`
@@ -305,7 +319,8 @@ fn create_binding(c_compound: Cursor, binding: &mut Binding) {
                                         _ => unreachable!(),
                                     };
 
-                                    let mut class_binding = ClassBinding::new(class_decl, rename);
+                                    let mut class_binding =
+                                        ClassBinding::new(class_decl, tu.clone(), rename);
                                     extract_class_binding(c, &mut class_binding).unwrap();
                                     binding.classes.push(class_binding);
 
@@ -335,7 +350,7 @@ fn create_binding(c_compound: Cursor, binding: &mut Binding) {
             }
             // allow inner blocks
             CursorKind::CompoundStmt => {
-                create_binding(c, binding);
+                create_binding(c, tu, binding);
                 return ChildVisitResult::Continue;
             }
             _ => (),
@@ -455,6 +470,204 @@ fn bind_class(
     Ok(class)
 }
 
+fn create_root_bindings_from_binding_tu(
+    c: Cursor,
+    filename: &str,
+    tu: &TranslationUnit,
+    ast: &mut AST,
+    binding: &mut Binding,
+) -> Result<()> {
+    let bind_fn = c
+        .first_child_of_kind_with_name(CursorKind::FunctionDecl, "bbl_bind")
+        .expect("Could not find bbl_bind");
+
+    for inc in c.children_of_kind(CursorKind::InclusionDirective, false) {
+        if let Some(s) = inc.location().spelling_location().file.file_name() {
+            if s == filename && inc.spelling() != "bbl.hpp" {
+                ast.append_include(&format!("#include <{}>", inc.spelling()));
+            }
+        }
+    }
+
+    let body = bind_fn
+        .first_child_of_kind(CursorKind::CompoundStmt)
+        .expect("Could not find body for bbl_bind");
+
+    create_binding(body, tu, binding);
+
+    Ok(())
+}
+
+pub fn extract_ast_from_binding(file_commands: &[FileCommands]) -> Result<AST> {
+    let mut ast = AST::new();
+    let mut already_visited = Vec::new();
+    let mut binding = Binding::default();
+
+    let mut tus = Vec::new();
+
+    let allow_list = AllowList::default();
+    let overrides = OverrideList::default();
+
+    let mut has_error = false;
+    for fc in file_commands {
+        let index = Index::new();
+        let tu = index.create_translation_unit(fc.filename(), &cli_args_with(fc.args())?)?;
+        for d in tu.diagnostics() {
+            match d.severity() {
+                Severity::Ignored => debug!("{}", d),
+                Severity::Note => info!("{}", d),
+                Severity::Warning => warn!("{}", d),
+                Severity::Error | Severity::Fatal => {
+                    has_error = true;
+                    error!("{}", d)
+                }
+            }
+        }
+
+        let cur = tu.get_cursor()?;
+        create_root_bindings_from_binding_tu(cur, fc.filename(), &tu, &mut ast, &mut binding)?;
+
+        tus.push((fc.filename().to_string(), tu));
+    }
+
+    if has_error {
+        return Err(Error::CompilationError);
+    }
+
+    // first extract the classes to fill the AST with types so we favour the users extractions
+    for cb in &binding.classes {
+        let class = bind_class(cb, &cb.tu, &mut ast, &mut already_visited)?;
+        already_visited.push(class.usr());
+        ast.insert_class(class);
+    }
+
+    // now extract their methods
+    for cb in &binding.classes {
+        let u_class = cb.class_decl().usr();
+        let mut namespaces = ast.get_class(u_class).unwrap().namespaces().to_vec();
+        namespaces.push(u_class);
+
+        for FunctionBinding {
+            decl: c_method,
+            rename,
+        } in cb.methods()
+        {
+            let mut method = match extract_method(
+                *c_method,
+                &[],
+                &mut already_visited,
+                &cb.tu,
+                &mut ast,
+                &allow_list,
+                &overrides,
+                &cb.class_decl().display_name(),
+                false,
+            ) {
+                Ok(m) => m,
+                Err(e) => {
+                    warn!(
+                        "Failed to extract method {} from class {}: {e}",
+                        c_method.display_name(),
+                        cb.class_decl().display_name()
+                    );
+                    continue;
+                }
+            };
+
+            method.set_replacement_name(rename.clone());
+
+            let class = ast.get_class_mut(cb.class_decl().usr()).unwrap();
+            class.push_method(method);
+        }
+
+        // do the constructors
+        for (index, (ctor_args, rename)) in cb.ctors().iter().enumerate() {
+            let args = ctor_args
+                .iter()
+                .enumerate()
+                .map(|(pi, t)| {
+                    extract_type(
+                        *t,
+                        &[],
+                        &mut already_visited,
+                        &mut ast,
+                        &cb.tu,
+                        &AllowList::default(),
+                        &OverrideList::default(),
+                        true,
+                    )
+                    .map(|ty| Argument::new(&format!("parm{pi}"), ty))
+                })
+                .collect::<Result<Vec<Argument>, bbl_extract::error::Error>>()?;
+
+            let ctor = Method::new(
+                USR::new(&format!("{u_class}#ctor:{index}")),
+                "ctor".to_string(),
+                MethodKind::Constructor,
+                QualType::void(),
+                args,
+                rename.clone(),
+                namespaces.clone(),
+                Vec::new(),
+                ExceptionSpecificationKind::None,
+                Const(false),
+                Virtual(false),
+                PureVirtual(false),
+                Deleted(false),
+            );
+
+            let class = ast.get_class_mut(u_class).unwrap();
+            class.push_method(ctor);
+        }
+    }
+
+    // process any namespace renames
+    for (c_namespace, name) in &binding.namespace_aliases {
+        let u_ns = extract_namespace(
+            *c_namespace,
+            &c_namespace.translation_unit(),
+            &mut ast,
+            &mut already_visited,
+        )
+        .unwrap();
+        let ns = ast.get_namespace(u_ns).unwrap();
+        let parent_namespaces = ns.namespaces().to_vec();
+
+        if parent_namespaces.is_empty() {
+            // is a top-level namespace, rename directly
+            ast.set_namespace_rename(u_ns, name).unwrap();
+        } else {
+            // is an inner namespace. rename the highest-level parent and set all others, including this one, to empty
+            ast.set_namespace_rename(parent_namespaces[0], name)
+                .unwrap();
+
+            for u_p_ns in parent_namespaces.iter().skip(1) {
+                ast.set_namespace_rename(*u_p_ns, "").unwrap();
+            }
+            ast.set_namespace_rename(u_ns, "").unwrap();
+        }
+    }
+
+    // extract functions
+    for fn_binding in binding.functions() {
+        let mut function = extract_function(
+            fn_binding.decl,
+            &[],
+            &mut already_visited,
+            &fn_binding.decl.translation_unit(),
+            &mut ast,
+            &allow_list,
+            &overrides,
+            true,
+        )?;
+        function.set_replacement_name(fn_binding.rename.clone());
+
+        ast.insert_function(function);
+    }
+
+    Ok(ast)
+}
+
 #[allow(clippy::too_many_arguments)]
 /// Main recursive function to walk the AST and extract the pieces we're interested in
 pub fn extract_ast_from_binding_tu(
@@ -475,7 +688,6 @@ pub fn extract_ast_from_binding_tu(
     for inc in c.children_of_kind(CursorKind::InclusionDirective, false) {
         if let Some(s) = inc.location().spelling_location().file.file_name() {
             if s == filename && inc.spelling() != "bbl.hpp" {
-                warn!("INC: {} - {}", inc.spelling(), s);
                 ast.append_include(&format!("#include <{}>", inc.spelling()));
             }
         }
@@ -486,9 +698,9 @@ pub fn extract_ast_from_binding_tu(
         .expect("Could not find body for bbl_bind");
 
     let mut binding = Binding::default();
-    create_binding(body, &mut binding);
+    create_binding(body, tu, &mut binding);
 
-    println!("Got binding: {binding:?}");
+    // println!("Got binding: {binding:?}");
 
     let allow_list = AllowList::default();
     let overrides = OverrideList::default();
@@ -522,7 +734,11 @@ pub fn extract_ast_from_binding_tu(
                 &cb.class_decl().display_name(),
                 stop_on_error,
             )
-            .expect("Failed to extract method");
+            .expect(&format!(
+                "Failed to extract method {} from class {}",
+                c_method.display_name(),
+                cb.class_decl().display_name()
+            ));
 
             method.set_replacement_name(rename.clone());
 
@@ -548,7 +764,7 @@ pub fn extract_ast_from_binding_tu(
                     )
                     .map(|ty| Argument::new(&format!("parm{pi}"), ty))
                 })
-                .collect::<Result<Vec<Argument>>>()?;
+                .collect::<Result<Vec<Argument>, bbl_extract::error::Error>>()?;
 
             let ctor = Method::new(
                 USR::new(&format!("{u_class}#ctor:{index}")),
@@ -609,7 +825,7 @@ pub fn extract_ast_from_binding_tu(
         ast.insert_function(function);
     }
 
-    println!("{ast:?}");
+    // println!("{ast:?}");
 
     Ok(())
 }

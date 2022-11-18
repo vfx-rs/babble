@@ -11,7 +11,7 @@ use tracing::{debug, error, instrument, trace, warn};
 
 use crate::{
     ast::{dump_cursor, dump_cursor_until, AST},
-    class::{extract_class_decl, specialize_template_parameter, ClassBindKind, OverrideList},
+    class::{self, extract_class_decl, specialize_template_parameter, ClassBindKind, OverrideList},
     enm::extract_enum,
     error::Error,
     templates::{TemplateArgument, TemplateParameterDecl},
@@ -890,9 +890,22 @@ pub fn extract_type(
                 println!("elaborated");
                 let named = ty.named_type()?;
                 println!("named: {named:?}");
-                let decl = named.type_declaration()?;
-                println!("decl: {decl:?}");
-                panic!();
+                if let Ok(uty) = named.underlying_type() {
+                    extract_type(
+                        uty,
+                        template_parameters,
+                        already_visited,
+                        ast,
+                        tu,
+                        allow_list,
+                        class_overrides,
+                        stop_on_error,
+                    )
+                } else {
+                    let decl = named.type_declaration()?;
+                    println!("decl: {decl:?}");
+                    panic!();
+                }
             }
             TypeKind::SubstTemplateTypeParm => extract_type(
                 ty.replacement_type()?,

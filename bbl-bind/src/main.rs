@@ -19,6 +19,8 @@ use std::{
 mod bind;
 use bind::extract_ast_from_binding_tu;
 
+use crate::bind::extract_ast_from_binding;
+
 #[derive(Parser)]
 struct Args {
     /// Path to the build_config.json file containing build settings
@@ -92,39 +94,7 @@ fn main() -> Result<()> {
 
     let file_commands = configure_bind_project(&bind_project_path, args.cmake_prefix_path.clone())?;
 
-    let mut ast = AST::new();
-    let mut already_visited = Vec::new();
-
-    for fc in &file_commands {
-        let index = Index::new();
-        let tu = index.create_translation_unit(fc.filename(), &cli_args_with(fc.args())?)?;
-        let mut has_error = false;
-        for d in tu.diagnostics() {
-            match d.severity() {
-                Severity::Ignored => debug!("{}", d),
-                Severity::Note => info!("{}", d),
-                Severity::Warning => warn!("{}", d),
-                Severity::Error | Severity::Fatal => {
-                    has_error = true;
-                    error!("{}", d)
-                }
-            }
-        }
-
-        if has_error {
-            anyhow::bail!("C++ errors detected. Cannot continue.");
-        }
-
-        let cur = tu.get_cursor()?;
-        extract_ast_from_binding_tu(
-            cur,
-            fc.filename(),
-            &mut already_visited,
-            &mut ast,
-            &tu,
-            true,
-        )?;
-    }
+    let ast = extract_ast_from_binding(&file_commands)?;
 
     let ast = ast.monomorphize()?;
     let c_ast = translate_cpp_ast_to_c(&ast, true)?;
@@ -148,20 +118,6 @@ fn main() -> Result<()> {
     let ffi_project_name = format!("{}-sys", build_config.project_name);
 
     write_rust_ffi_project(&c_ast, project_root, &c_project_name, &ffi_project_name)?;
-
-    // link
-    println!(
-        "cargo:rustc-link-search=native={}/{}/install/lib",
-        c_project_path.display(),
-        c_project_name
-    );
-    println!("cargo:rustc-link-lib=static={}", c_project_name);
-
-    #[cfg(target_os = "macos")]
-    println!("cargo:rustc-link-lib=dylib=cxx");
-
-    #[cfg(target_os = "linux")]
-    println!("cargo:rustc-link-lib=dylib=stdc++");
 
     Ok(())
 }

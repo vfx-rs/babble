@@ -12,6 +12,7 @@ use clang_sys::*;
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+#[derive(Clone)]
 pub struct TranslationUnit {
     pub(crate) inner: CXTranslationUnit,
 }

@@ -1,7 +1,7 @@
 use crate::{
     access_specifier::AccessSpecifier, exception::ExceptionSpecificationKind,
     printing_policy::PrintingPolicy, template_argument::TemplateArgumentKind,
-    token::SourceLocation,
+    token::SourceLocation, translation_unit::TranslationUnit,
 };
 
 use super::cursor_kind::CursorKind;
@@ -17,9 +17,10 @@ use clang_sys::{
     clang_Cursor_getTemplateArgumentPackKind, clang_Cursor_getTemplateArgumentPackSize,
     clang_Cursor_getTemplateArgumentPackType, clang_Cursor_getTemplateArgumentType,
     clang_Cursor_getTemplateArgumentUnsignedValue, clang_Cursor_getTemplateArgumentValue,
-    clang_Cursor_getVarDeclInitializer, clang_Cursor_hasVarDeclExternalStorage,
-    clang_Cursor_hasVarDeclGlobalStorage, clang_equalCursors, clang_getCXXAccessSpecifier,
-    clang_getCanonicalCursor, clang_getCursorDefinition, clang_getCursorDisplayName,
+    clang_Cursor_getTranslationUnit, clang_Cursor_getVarDeclInitializer,
+    clang_Cursor_hasVarDeclExternalStorage, clang_Cursor_hasVarDeclGlobalStorage,
+    clang_equalCursors, clang_getCXXAccessSpecifier, clang_getCanonicalCursor,
+    clang_getCursorDefinition, clang_getCursorDisplayName,
     clang_getCursorExceptionSpecificationType, clang_getCursorKind, clang_getCursorLocation,
     clang_getCursorPrettyPrinted, clang_getCursorPrintingPolicy, clang_getCursorReferenced,
     clang_getCursorResultType, clang_getCursorSemanticParent, clang_getCursorSpelling,
@@ -442,6 +443,11 @@ impl Cursor {
         }
 
         Ok(result)
+    }
+
+    pub fn translation_unit(&self) -> TranslationUnit {
+        let inner = unsafe { clang_Cursor_getTranslationUnit(self.inner) };
+        TranslationUnit { inner }
     }
 }
 
