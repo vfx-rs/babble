@@ -8,6 +8,7 @@ use crate::gen_c::gen_c;
 
 use std::fmt::Write;
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_project<P: AsRef<Path>, S: AsRef<str>>(
     project_name: &str,
     output_directory: P,

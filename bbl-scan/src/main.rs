@@ -6,14 +6,14 @@ use bbl_clang::{
     cursor_kind::CursorKind,
     index::Index,
     ty::Type,
-    virtual_file::{configure_bind_project, configure_temp_cmake_project, write_temp_file},
+    virtual_file::configure_temp_cmake_project,
 };
 use bbl_util::{read_build_config, BuildConfig};
 use clap::{Parser, ValueEnum};
 use convert_case::{Case, Casing};
-use log::{debug, error, info, warn};
+use log::{error, warn};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::{Display, Write},
     path::{Component, Path, PathBuf},
 };
@@ -200,7 +200,7 @@ fn main() -> Result<()> {
     let mut namespaces = Vec::new();
     for ns in &build_config.namespaces {
         if ns.contains('=') {
-            let mut toks = ns.split("=");
+            let mut toks = ns.split('=');
             let original = toks.next().unwrap().to_string();
             let rename = toks.next().unwrap().to_string();
             namespaces.push(original.clone());
@@ -523,10 +523,6 @@ impl Class {
         }
     }
 
-    fn name(&self) -> &str {
-        self.name.as_ref()
-    }
-
     fn qname(&self) -> &str {
         self.qname.as_ref()
     }
@@ -658,14 +654,6 @@ impl Method {
 
     fn result(&self) -> &str {
         self.result.as_ref()
-    }
-
-    fn is_const(&self) -> bool {
-        self.is_const
-    }
-
-    fn args(&self) -> &[Argument] {
-        self.args.as_ref()
     }
 }
 

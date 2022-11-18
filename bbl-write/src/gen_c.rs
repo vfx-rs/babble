@@ -12,12 +12,7 @@ use bbl_util::Trace;
 
 use crate::error::Error;
 use petgraph::{
-    algo::{min_spanning_tree, tarjan_scc, toposort},
-    data::Element,
-    data::FromElements,
-    dot::Dot,
     graphmap::DiGraphMap,
-    prelude::DiGraph,
     visit::{depth_first_search, Control, DfsEvent},
 };
 use tracing::instrument;

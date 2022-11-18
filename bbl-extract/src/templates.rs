@@ -80,8 +80,6 @@ pub fn extract_class_template_specialization(
         })?;
     debug!("extract_class_template_specialization: got specialized decl {specialized_decl:?}");
 
-    let name = c_class_decl.display_name();
-
     let u_specialized = extract_class_decl(
         specialized_decl.as_class_decl(),
         tu,
@@ -469,7 +467,7 @@ impl Debug for TemplateParameterDecl {
 
 #[cfg(test)]
 mod tests {
-    use bbl_clang::{cli_args, cli_args_with};
+    use bbl_clang::cli_args;
     use indoc::indoc;
 
     use crate::{class::OverrideList, parse_string_and_extract_ast, AllowList};

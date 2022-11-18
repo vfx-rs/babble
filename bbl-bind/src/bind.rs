@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use bbl_clang::{
     cli_args_with,
     cursor::{ChildVisitResult, CurTypedef, Cursor, USR},
@@ -10,12 +8,12 @@ use bbl_clang::{
     template_argument::TemplateArgumentKind,
     translation_unit::TranslationUnit,
     ty::{Type, TypeKind},
-    virtual_file::{self, FileCommands},
+    virtual_file::FileCommands,
 };
 use log::{debug, error, info, warn};
 
 use bbl_extract::{
-    ast::{dump_cursor_until, get_namespaces_for_decl, AST},
+    ast::{get_namespaces_for_decl, AST},
     class::{ClassBindKind, ClassDecl, NeedsImplicit, OverrideList},
     function::{
         extract_function, extract_method, Argument, Const, Deleted, Method, MethodKind,
@@ -78,10 +76,6 @@ impl ClassBinding {
         }
     }
 
-    fn needs_implicit(&self) -> &NeedsImplicit {
-        &self.needs_implicit
-    }
-
     fn ctors(&self) -> &[(Vec<Type>, Option<String>)] {
         self.ctors.as_ref()
     }
@@ -113,16 +107,6 @@ impl ClassBinding {
 struct FunctionBinding {
     decl: Cursor,
     rename: Option<String>,
-}
-
-impl FunctionBinding {
-    fn decl(&self) -> Cursor {
-        self.decl
-    }
-
-    fn rename(&self) -> Option<&String> {
-        self.rename.as_ref()
-    }
 }
 
 fn extract_class_binding(
@@ -668,7 +652,7 @@ pub fn extract_ast_from_binding(file_commands: &[FileCommands]) -> Result<AST> {
     Ok(ast)
 }
 
-#[allow(clippy::too_many_arguments)]
+/*
 /// Main recursive function to walk the AST and extract the pieces we're interested in
 pub fn extract_ast_from_binding_tu(
     c: Cursor,
@@ -734,11 +718,13 @@ pub fn extract_ast_from_binding_tu(
                 &cb.class_decl().display_name(),
                 stop_on_error,
             )
-            .expect(&format!(
-                "Failed to extract method {} from class {}",
-                c_method.display_name(),
-                cb.class_decl().display_name()
-            ));
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Failed to extract method {} from class {}",
+                    c_method.display_name(),
+                    cb.class_decl().display_name()
+                )
+            });
 
             method.set_replacement_name(rename.clone());
 
@@ -830,141 +816,10 @@ pub fn extract_ast_from_binding_tu(
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use bbl_clang::cli_args;
-    use indoc::indoc;
-
-    use crate::bind::bind_string;
-
-    use bbl_extract::{
-        class::{ClassBindKind, OverrideList},
-        error::Error,
-        parse_string_and_extract_ast, AllowList,
-    };
-
-    #[test]
-    fn bind_pod() -> bbl_util::Result<()> {
-        bbl_util::run_test(|| {
-            // test that a POD extracts as a valuetype
-            let ast = bind_string(
-                indoc!(
-                    r#"
-#ifndef BBL_HPP
-#define BBL_HPP
-
-#define BBL_MODULE(name) \
-    static void bbl_bind(const char *modname = #name)
-
-namespace bbl
-{
-    template <typename C>
-    class Class
-    {
-    public:
-        Class()
-        {
-        }
-
-        Class(const char* name)
-        {
-        }
-
-        template <typename Func>
-        Class m(Func fn)
-        {
-            return *this;
-        }
-
-        template <typename Func>
-        Class m(Func fn, const char *rename)
-        {
-            return *this;
-        }
-    };
-}
-
-#endif
-
-namespace NS {
-struct Foo
-{
-    int a;
-};
-
-template <typename T>
-struct Bar
-{
-    T t;
-};
-
-typedef Bar<int> IntBar;
-typedef Bar<Foo> FooBar;
-
-class Base
-{
-public:
-    void do_inherited_thing();
-};
-
-class Test : public Base
-{
-    int _a;
-
-public:
-    float b;
-    void do_thing();
-
-    template <typename T>
-    T do_templated_thing(T *);
-};
-}
-
-BBL_MODULE(Test::Module)
-{
-    // bbl::Class<NS::Foo>();
-    bbl::Class<NS::Bar<NS::Foo>>("FooBar").rename("FooBar");
-
-    // bbl::Class<NS::Test>()
-    //     .m(&Test::do_thing)
-    //     .m(&Test::do_inherited_thing)
-    //     .m(&Test::do_templated_thing<Foo>, "do_templated_thing_foo")
-    //     .m(&Test::do_templated_thing<FooBar>, "do_templated_thing_foobar")
-    //     .m(&Test::do_templated_thing<int>, "do_templated_thing_int");
-}
-        "#
-                ),
-                &cli_args()?,
-                true,
-                None,
-                &AllowList::default(),
-                &OverrideList::default(),
-                true,
-            )?;
-
-            println!("{ast:?}");
-            assert_eq!(
-                format!("{ast:?}"),
-                indoc!(
-                    r#"
-
-    "#
-                )
-            );
-
-            Ok(())
-        })
-    }
-}
-
 pub fn bind_file<P: AsRef<Path> + std::fmt::Debug, S: AsRef<str> + std::fmt::Debug>(
     path: P,
     cli_args: &[S],
     log_diagnostics: bool,
-    namespace: Option<&str>,
-    allow_list: &AllowList,
-    class_overrides: &OverrideList,
-    header_str: &str,
     stop_on_error: bool,
 ) -> Result<AST> {
     let index = Index::new();
@@ -1002,20 +857,9 @@ pub fn bind_string<S1: AsRef<str> + std::fmt::Debug, S: AsRef<str> + std::fmt::D
     contents: S1,
     cli_args: &[S],
     log_diagnostics: bool,
-    namespace: Option<&str>,
-    allow_list: &AllowList,
-    class_overrides: &OverrideList,
     stop_on_error: bool,
 ) -> Result<AST> {
     let path = virtual_file::write_temp_file(contents.as_ref())?;
-    bind_file(
-        &path,
-        cli_args,
-        log_diagnostics,
-        namespace,
-        allow_list,
-        class_overrides,
-        "",
-        stop_on_error,
-    )
+    bind_file(&path, cli_args, log_diagnostics, stop_on_error)
 }
+*/

@@ -1,23 +1,14 @@
 use anyhow::{Context, Result};
-use bbl_clang::{
-    cli_args_with, diagnostic::Severity, index::Index, virtual_file::configure_bind_project,
-};
-use bbl_extract::ast::AST;
+use bbl_clang::virtual_file::configure_bind_project;
 use bbl_translate::{translate_cpp_ast_to_c, CAST};
-use bbl_write::{
-    cmake::build_project,
-    gen_c::gen_c,
-    gen_rust_ffi::{write_rust_ffi, write_rust_ffi_module},
-};
+use bbl_write::{cmake::build_project, gen_rust_ffi::write_rust_ffi_module};
 use clap::{Parser, ValueEnum};
-use log::{debug, error, info, warn};
 use std::{
     fmt::Display,
     path::{Path, PathBuf},
 };
 
 mod bind;
-use bind::extract_ast_from_binding_tu;
 
 use crate::bind::extract_ast_from_binding;
 
@@ -113,7 +104,6 @@ fn main() -> Result<()> {
     )?;
 
     let c_project_name = format!("{}-c", build_config.project_name);
-    let c_project_path = project_root.join(&c_project_name);
 
     let ffi_project_name = format!("{}-sys", build_config.project_name);
 

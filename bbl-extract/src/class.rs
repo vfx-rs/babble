@@ -10,9 +10,7 @@ use regex::Regex;
 use std::fmt::{Debug, Display};
 use tracing::instrument;
 
-use crate::ast::{
-    dump_cursor, dump_cursor_until, get_namespaces_for_decl, get_qualified_name, MethodId, AST,
-};
+use crate::ast::{get_namespaces_for_decl, get_qualified_name, MethodId, AST};
 use crate::function::{extract_method, MethodTemplateSpecialization};
 use crate::index_map::IndexMapKey;
 use crate::qualtype::extract_type;

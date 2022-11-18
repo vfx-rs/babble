@@ -3,8 +3,8 @@
 use std::path::Path;
 
 use bbl_clang::{
-    cursor::USR, cursor_kind::CursorKind, diagnostic::Severity, index::Index,
-    translation_unit::TranslationUnit, virtual_file,
+    cursor_kind::CursorKind, diagnostic::Severity, index::Index, translation_unit::TranslationUnit,
+    virtual_file,
 };
 use class::OverrideList;
 use log::*;

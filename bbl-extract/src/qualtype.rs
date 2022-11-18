@@ -1,5 +1,5 @@
 use bbl_clang::{
-    cursor::{CurTypedef, Cursor, USR},
+    cursor::{CurTypedef, USR},
     cursor_kind::CursorKind,
     translation_unit::TranslationUnit,
     ty::{Type, TypeKind},
@@ -10,12 +10,11 @@ use std::{convert::TryInto, fmt::Display};
 use tracing::{debug, error, instrument, trace, warn};
 
 use crate::{
-    ast::{dump_cursor, dump_cursor_until, AST},
-    class::{self, extract_class_decl, specialize_template_parameter, ClassBindKind, OverrideList},
+    ast::{dump_cursor_until, AST},
+    class::{extract_class_decl, specialize_template_parameter, ClassBindKind, OverrideList},
     enm::extract_enum,
     error::Error,
     templates::{TemplateArgument, TemplateParameterDecl},
-    typedef::extract_typedef_decl,
     AllowList,
 };
 type Result<T, E = Error> = std::result::Result<T, E>;

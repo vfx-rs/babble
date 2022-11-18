@@ -1307,7 +1307,7 @@ pub fn dump_type(
     };
 
     if let Ok(rty) = ty.replacement_type() {
-        print!("{}", format!("𝜏 Subst: ",).italic().color(color_s));
+        print!("{}", "𝜏 Subst: ".italic().color(color_s));
         dump_type(
             rty,
             depth,
