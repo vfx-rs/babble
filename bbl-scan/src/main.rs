@@ -295,15 +295,25 @@ fn main() -> Result<()> {
             writeln!(&mut body, "    bbl::Class<{}>()", c.qname())?;
 
             for method in c.methods() {
+                if method.access != AccessSpecifier::Public {
+                    continue;
+                }
+
                 let cast = if method.overload_count > 1 {
                     format!("{}\n            ", method.cast(c.qname()))
                 } else {
                     String::new()
                 };
 
+                let template_msg = if method.is_template {
+                    "        // template method - explicitly instantiate it with desired types\n"
+                } else {
+                    ""
+                };
+
                 writeln!(
                     &mut body,
-                    "        .m({cast}&{}::{})",
+                    "{template_msg}        .m({cast}&{}::{})",
                     c.qname(),
                     method.name()
                 )?;
@@ -414,6 +424,15 @@ fn walk_ast(c: Cursor, namespace: String, class_decls: &mut HashMap<USR, Class>)
         match child.kind() {
             CursorKind::ClassDecl | CursorKind::ClassTemplate | CursorKind::StructDecl => {
                 let qname = format!("{namespace}::{}", child.display_name());
+
+                // Don't extract anything we know is not public
+                let access = child.cxx_access_specifier();
+                if matches!(
+                    access,
+                    Ok(AccessSpecifier::Private) | Ok(AccessSpecifier::Protected)
+                ) {
+                    continue;
+                }
 
                 #[allow(clippy::map_entry)]
                 if !class_decls.contains_key(&child.usr()) {
@@ -529,7 +548,7 @@ impl Class {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialOrd, Ord)]
 struct Method {
     name: String,
     result: String,
@@ -537,6 +556,18 @@ struct Method {
     is_const: bool,
     is_static: bool,
     overload_count: usize,
+    access: AccessSpecifier,
+    is_template: bool,
+}
+
+impl PartialEq for Method {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.result == other.result
+            && self.args == other.args
+            && self.is_const == other.is_const
+            && self.is_static == other.is_static
+    }
 }
 
 impl Method {
@@ -641,12 +672,8 @@ fn get_methods(c_class: Cursor, parent_methods: &mut Vec<Method>) {
             CursorKind::CXXMethod | CursorKind::FunctionTemplate
         ) {
             if let Ok(access) = c.cxx_access_specifier() {
-                if access == AccessSpecifier::Public && !c.cxx_method_is_deleted() {
-                    if c.display_name().contains("read_from") {
-                        println!("{}::read_from: {:?}", c_class.display_name(), access);
-                    }
-
-                    let new_method = get_method(c);
+                if !c.cxx_method_is_deleted() {
+                    let new_method = get_method(c, access);
 
                     if !parent_methods.contains(&new_method) {
                         methods.push(new_method);
@@ -655,25 +682,26 @@ fn get_methods(c_class: Cursor, parent_methods: &mut Vec<Method>) {
             } else {
                 error!("Could not get access specifier for {c:?}");
             }
-        } else if false {
+        } else if c.kind() == CursorKind::UsingDeclaration {
             // TODO(AL): see if we can make this prettier, but it's probably better to do by hand...
-            //c.kind() == CursorKind::UsingDeclaration {
-            if let Ok(AccessSpecifier::Public) = c.cxx_access_specifier() {
-                if let Some(odr) = c.first_child_of_kind(CursorKind::OverloadedDeclRef) {
-                    for decl in odr.overloaded_decls().unwrap() {
-                        if matches!(
-                            decl.kind(),
-                            CursorKind::CXXMethod | CursorKind::FunctionTemplate
-                        ) {
-                            let new_method = get_method(decl);
+            // if let Ok(access) = c.cxx_access_specifier() {
+            //     if access == AccessSpecifier::Public {
+            //         if let Some(odr) = c.first_child_of_kind(CursorKind::OverloadedDeclRef) {
+            //             for decl in odr.overloaded_decls().unwrap() {
+            //                 if matches!(
+            //                     decl.kind(),
+            //                     CursorKind::CXXMethod | CursorKind::FunctionTemplate
+            //                 ) {
+            //                     let new_method = get_method(decl, access);
 
-                            if !parent_methods.contains(&new_method) {
-                                methods.push(new_method);
-                            }
-                        }
-                    }
-                }
-            }
+            //                     if !parent_methods.contains(&new_method) {
+            //                         methods.push(new_method);
+            //                     }
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
         }
     }
 
@@ -698,7 +726,7 @@ fn get_methods(c_class: Cursor, parent_methods: &mut Vec<Method>) {
     }
 }
 
-fn get_method(c: Cursor) -> Method {
+fn get_method(c: Cursor, access: AccessSpecifier) -> Method {
     let result = c
         .result_ty()
         .map_or_else(|_| String::from("ERR"), get_type_name);
@@ -721,6 +749,9 @@ fn get_method(c: Cursor) -> Method {
         is_const: c.cxx_method_is_const(),
         is_static: c.cxx_method_is_static(),
         overload_count: 0,
+        access,
+        // TODO(AL): This doesn't work - why? None of the methods say they've got template args
+        is_template: c.num_template_arguments() > 0,
     }
 }
 
