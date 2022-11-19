@@ -254,8 +254,6 @@ fn get_class_from_typedef(c_td: Cursor) -> Option<Cursor> {
 fn get_underlying_type(ty: Type) -> Result<Type> {
     match ty.kind() {
         TypeKind::Elaborated => get_underlying_type(ty.named_type()?),
-        // TypeKind::Using => get_underlying_type(ty.underlying_type()?),
-        TypeKind::Using => panic!("GOT USING on {ty:?}"),
         _ => Ok(ty),
     }
 }

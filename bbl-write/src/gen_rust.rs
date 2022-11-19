@@ -163,16 +163,12 @@ fn write_expr(body: &mut String, e: &Expr, depth: usize) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use bbl_clang::cli_args;
-    use bbl_extract::qualtype::QualType;
-    use bbl_extract::templates::TemplateArgument;
     use bbl_extract::{class::OverrideList, parse_string_and_extract_ast, AllowList};
 
     use bbl_translate::to_rust::translate_cpp_ast_to_rust;
     use bbl_translate::translate_cpp_ast_to_c;
 
     use crate::gen_rust::write_rust;
-
-    use indoc::indoc;
 
     #[test]
     fn write_rust_pass_class() -> bbl_util::Result<()> {

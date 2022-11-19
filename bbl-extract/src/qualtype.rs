@@ -891,10 +891,8 @@ pub fn extract_type(
                 println!("named: {named:?}");
                 if let Ok(cty) = named.canonical_type() {
                     println!("CANONICAL: {cty:?}");
-                }
-                if let Ok(uty) = named.underlying_type() {
                     extract_type(
-                        uty,
+                        cty,
                         template_parameters,
                         already_visited,
                         ast,
