@@ -142,9 +142,9 @@ mod tests {
                     Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get# get rename=None ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
 
-                    ClassDecl c:@S@A A rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@A A rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[]
 
-                    ClassDecl c:@S@B B rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@B B rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[]
 
                     ClassDecl c:@S@shared_ptr>#$@S@A#VI4 shared_ptr<A, 4> rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[]
                     Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function c:@ST>2#T#NI@shared_ptr@F@get#1 get rename=None ignore=false return=A* args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@ST>2#T#NI@shared_ptr]
@@ -156,8 +156,8 @@ mod tests {
 
                     TypeAlias APtr = shared_ptr<A>
                     TypeAlias BPtr = shared_ptr<B>
-                    TypeAlias APtr2 = APtr
-                    TypeAlias BPtr2 = BPtr
+                    TypeAlias APtr2 = shared_ptr<A>
+                    TypeAlias BPtr2 = shared_ptr<B>
                     ClassTemplateSpecialization c:@S@shared_ptr>#$@S@A#VI4 shared_ptr<A, 4> specialized_decl=c:@ST>2#T#NI@shared_ptr template_arguments=[A, 4] namespaces=[]
                     ClassTemplateSpecialization c:@S@shared_ptr>#$@S@B#VI4 shared_ptr<B, 4> specialized_decl=c:@ST>2#T#NI@shared_ptr template_arguments=[B, 4] namespaces=[]
                 "#
@@ -194,7 +194,7 @@ mod tests {
                 &format!("{ast:?}"),
                 indoc!(
                     r#"
-                    ClassDecl c:@S@Class_ Class_ rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@Class_ Class_ rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[]
 
                     Function c:@F@take_class#&1$@S@Class_# take_class rename=None ignore=false return=void args=[c: Class &] noexcept=None template_parameters=[] specializations=[] namespaces=[]
                     TypeAlias Class = Class_ const

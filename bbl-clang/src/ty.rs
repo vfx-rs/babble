@@ -124,8 +124,13 @@ impl Type {
     pub fn result_type(&self) -> Result<Type> {
         unsafe { to_type(clang_getResultType(self.inner)) }
     }
+
     pub fn replacement_type(&self) -> Result<Type> {
         unsafe { to_type(clang_Type_getReplacementType(self.inner)) }
+    }
+
+    pub fn canonical_type(&self) -> Result<Type> {
+        unsafe { to_type(clang_getCanonicalType(self.inner)) }
     }
 }
 

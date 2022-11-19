@@ -1771,7 +1771,7 @@ mod tests {
             indoc!(
                 r#"
 Namespace c:@N@Test Test None
-ClassDecl c:@N@detail@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@Test]
+ClassDecl c:@N@detail@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[c:@N@Test]
 Field a: int
 
 

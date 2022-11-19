@@ -977,7 +977,7 @@ mod tests {
                     Include { name: "vector", bracket: "<" }
                     Namespace c:@N@Test_1_0 Test_1_0 Some("Test")
                     Namespace c:@N@std std None
-                    ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
+                    ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
 
                     ClassDecl c:@N@std@ST>2#T#T@vector vector rename=None OpaquePtr is_pod=false ignore=false needs=[cctor mctor dtor ] template_parameters=[Type(T)] specializations=[([Test_1_0::Class], c:@N@std@S@vector>#$@N@Test_1_0@S@Class#$@N@std@S@allocator>#S0_)] namespaces=[c:@N@std]
                     Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:vector_ctor_default vector rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@vector]
@@ -1040,7 +1040,7 @@ mod tests {
                     Include { name: "memory", bracket: "<" }
                     Namespace c:@N@Test_1_0 Test_1_0 Some("Test")
                     Namespace c:@N@std std None
-                    ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
+                    ClassDecl c:@N@Test_1_0@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
 
                     ClassDecl c:@N@std@ST>2#T#T@unique_ptr unique_ptr rename=None OpaquePtr is_pod=false ignore=false needs=[dtor ] template_parameters=[Type(T)] specializations=[([Test_1_0::Class], c:@N@std@S@unique_ptr>#$@N@Test_1_0@S@Class#$@N@std@S@default_delete>#S0_)] namespaces=[c:@N@std]
                     Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_ctor_default unique_ptr rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
@@ -1095,7 +1095,7 @@ mod tests {
                     r#"
                     Include { name: "functional", bracket: "<" }
                     Namespace c:@N@Test_1_0 Test_1_0 Some("Test")
-                    Function c:@N@Test_1_0@F@take_function#&1$@N@std@S@function>#Fb(#*1C)# take_function rename=None ignore=false return=void args=[predicate: PropertyPredicateFunc const] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
+                    Function c:@N@Test_1_0@F@take_function#&1$@N@std@S@function>#Fb(#*1C)# take_function rename=None ignore=false return=void args=[predicate: bool (const char *) const] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@Test_1_0]
                     TypeAlias PropertyPredicateFunc = bool (const char *)
                 "#
                 ),

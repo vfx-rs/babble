@@ -889,6 +889,9 @@ pub fn extract_type(
                 println!("elaborated");
                 let named = ty.named_type()?;
                 println!("named: {named:?}");
+                if let Ok(cty) = named.canonical_type() {
+                    println!("CANONICAL: {cty:?}");
+                }
                 if let Ok(uty) = named.underlying_type() {
                     extract_type(
                         uty,

@@ -1141,7 +1141,7 @@ mod tests {
             format!("{ast:?}"),
             indoc!(
                 r#"
-        ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+        ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[]
         Field a: int
         Field b: float
 
@@ -1183,7 +1183,7 @@ mod tests {
                 &format!("{ast:?}"),
                 indoc!(
                     r#"
-                    ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[]
                     Field b: float
     
         "#
@@ -1226,7 +1226,7 @@ mod tests {
                 indoc!(
                     r#"
                     Namespace c:@S@Class Class None
-                    ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[]
                     Field b: float
                     Method DefaultConstructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@Class# Class rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
 
@@ -1294,7 +1294,7 @@ mod tests {
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@N@detail@S@Base@F@base_do_thing# base_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@detail, c:@N@detail@S@Base]
                     Method Method deleted=false const=false virtual=true pure_virtual=false specializations=[] Function c:@N@detail@S@Base@F@do_thing# do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@detail, c:@N@detail@S@Base]
 
-                    ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[]
                     Field c: float
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@derived_do_thing# derived_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
                     Method Method deleted=false const=false virtual=true pure_virtual=false specializations=[] Function c:@S@Class@F@do_thing# do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
@@ -1351,11 +1351,11 @@ mod tests {
                     r#"
                     Namespace c:@S@Base Base None
                     Namespace c:@S@Class Class None
-                    ClassDecl c:@S@Base Base rename=None OpaquePtr is_pod=false ignore=false needs=[dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@Base Base rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[]
                     Field b: float
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@base_do_thing# base_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
 
-                    ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[ctor cctor mctor dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@Class Class rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[]
                     Field c: float
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@derived_do_thing# derived_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Base@F@base_do_thing# base_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Base]
@@ -1406,11 +1406,11 @@ mod tests {
                     r#"
                     Namespace c:@S@Class Class None
                     Namespace c:@S@Class@S@Inner Inner None
-                    ClassDecl c:@S@Class@S@Inner Inner rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@S@Class]
+                    ClassDecl c:@S@Class@S@Inner Inner rename=None ValueType is_pod=true ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[c:@S@Class]
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@S@Inner@F@inner_int# inner_int rename=None ignore=false return=int args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class, c:@S@Class@S@Inner]
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@S@Inner@F@inner_do_thing# inner_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class, c:@S@Class@S@Inner]
 
-                    ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[]
                     Field class_float: float
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@F@class_do_thing# class_do_thing rename=None ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@S@Class]
 

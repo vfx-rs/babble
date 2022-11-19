@@ -677,25 +677,25 @@ fn get_methods(c_class: Cursor, parent_methods: &mut Vec<Method>) {
                 error!("Could not get access specifier for {c:?}");
             }
         } else if c.kind() == CursorKind::UsingDeclaration {
-            // TODO(AL): see if we can make this prettier, but it's probably better to do by hand...
-            // if let Ok(access) = c.cxx_access_specifier() {
-            //     if access == AccessSpecifier::Public {
-            //         if let Some(odr) = c.first_child_of_kind(CursorKind::OverloadedDeclRef) {
-            //             for decl in odr.overloaded_decls().unwrap() {
-            //                 if matches!(
-            //                     decl.kind(),
-            //                     CursorKind::CXXMethod | CursorKind::FunctionTemplate
-            //                 ) {
-            //                     let new_method = get_method(decl, access);
+            // TODO(AL): see if we can make this prettier
+            if let Ok(access) = c.cxx_access_specifier() {
+                if access == AccessSpecifier::Public {
+                    if let Some(odr) = c.first_child_of_kind(CursorKind::OverloadedDeclRef) {
+                        for decl in odr.overloaded_decls().unwrap() {
+                            if matches!(
+                                decl.kind(),
+                                CursorKind::CXXMethod | CursorKind::FunctionTemplate
+                            ) {
+                                let new_method = get_method(decl, access);
 
-            //                     if !parent_methods.contains(&new_method) {
-            //                         methods.push(new_method);
-            //                     }
-            //                 }
-            //             }
-            //         }
-            //     }
-            // }
+                                if !parent_methods.contains(&new_method) {
+                                    methods.push(new_method);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

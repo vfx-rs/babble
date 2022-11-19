@@ -538,8 +538,6 @@ mod tests {
 
                     Function c:@F@take_vec#&1$@N@detail@S@Vec>#f# take_vec rename=None ignore=false return=void args=[: const detail::V2f &] noexcept=None template_parameters=[] specializations=[] namespaces=[]
                     Function c:@F@take_box#&1$@N@detail@S@Box>#$@N@detail@S@Vec>#f# take_box rename=None ignore=false return=void args=[: const detail::Box2f &] noexcept=None template_parameters=[] specializations=[] namespaces=[]
-                    TypeAlias V2f = Vec<float>
-                    TypeAlias Box2f = Box<V2f>
                     ClassTemplateSpecialization c:@N@detail@S@Vec>#f Vec<float> specialized_decl=c:@N@detail@ST>1#T@Vec template_arguments=[float] namespaces=[c:@N@detail]
                     ClassTemplateSpecialization c:@N@detail@S@Box>#$@N@detail@S@Vec>#f Box<detail::Vec<float>> specialized_decl=c:@N@detail@ST>1#T@Box template_arguments=[detail::Vec<float>] namespaces=[c:@N@detail]
                     "#
@@ -591,7 +589,7 @@ mod tests {
                     Field x: T
                     Field y: T
 
-                    ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[]
+                    ClassDecl c:@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[]
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@S@Class@FT@>1#Ttake_vec#&1>@N@detail@ST>1#T@Vec1t0.0#f# take_vec rename=None ignore=false return=float args=[: const detail::Vec<T> &] noexcept=None template_parameters=[Type(T)] specializations=[] namespaces=[c:@S@Class]
 
                     "#
@@ -642,7 +640,6 @@ mod tests {
                     r#"
                     Include { name: "memory", bracket: "<" }
                     Namespace c:@N@Test Test None
-                    Namespace c:@N@Test@S@HandleTo>#$@N@Test@S@Class HandleTo<Test::Class> None
                     Namespace c:@N@std std None
                     Namespace c:@N@Test@S@Class Class None
                     ClassDecl c:@N@Test@ST>1#T@HandleTo HandleTo rename=None OpaquePtr is_pod=false ignore=false needs=[] template_parameters=[Type(T)] specializations=[] namespaces=[c:@N@Test]
@@ -652,16 +649,15 @@ mod tests {
                     Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_const get rename=Some("get") ignore=false return=const T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_mut get rename=Some("get_mut") ignore=false return=T * args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
 
-                    ClassDecl c:@N@Test@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[ctor cctor mctor cass mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@Test]
-                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@N@Test@S@Class@F@create# create rename=None ignore=false return=ClassHandle args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@Test, c:@N@Test@S@Class]
+                    ClassDecl c:@N@Test@S@Class Class rename=None ValueType is_pod=true ignore=false needs=[] template_parameters=[] specializations=[] namespaces=[c:@N@Test]
+                    Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function c:@N@Test@S@Class@F@create# create rename=None ignore=false return=std::unique_ptr<Class> args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@Test, c:@N@Test@S@Class]
 
                     ClassDecl c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_ unique_ptr<Test::Class> rename=None OpaquePtr is_pod=false ignore=false needs=[mctor mass dtor ] template_parameters=[] specializations=[] namespaces=[c:@N@std]
                     Method Constructor deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_ctor_default unique_ptr rename=Some("ctor") ignore=false return=void args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
                     Method Method deleted=false const=true virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_const get rename=Some("get") ignore=false return=Test::Class* args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
                     Method Method deleted=false const=false virtual=false pure_virtual=false specializations=[] Function BBL:unique_ptr_get_mut get rename=Some("get_mut") ignore=false return=Test::Class* args=[] noexcept=None template_parameters=[] specializations=[] namespaces=[c:@N@std, c:@N@std@ST>2#T#T@unique_ptr]
 
-                    TypeAlias Handle = std::unique_ptr<Class>
-                    TypeAlias ClassHandle = HandleTo<Class>::Handle
+                    TypeAlias ClassHandle = std::unique_ptr<Class>
                     ClassTemplateSpecialization c:@N@std@S@unique_ptr>#$@N@Test@S@Class#$@N@std@S@default_delete>#S0_ unique_ptr<Test::Class> specialized_decl=c:@N@std@ST>2#T#T@unique_ptr template_arguments=[Test::Class] namespaces=[c:@N@std]
                     "#
                 ),

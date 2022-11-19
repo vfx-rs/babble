@@ -214,38 +214,39 @@ public:
         })
     }
 
-    #[test]
-    fn write_rust_method_template_ret() -> bbl_util::Result<()> {
-        bbl_util::run_test(|| {
-            let mut ast = parse_string_and_extract_ast(
-                r#"
-    namespace Test {
-    class Class {
-    public:
-        template <typename T>
-        const T* method_template(const T&);
-    };
+    /*
+        #[test]
+        fn write_rust_method_template_ret() -> bbl_util::Result<()> {
+            bbl_util::run_test(|| {
+                let mut ast = parse_string_and_extract_ast(
+                    r#"
+        namespace Test {
+        class Class {
+        public:
+            template <typename T>
+            const T* method_template(const T&);
+        };
+        }
+
+    /*
+    pub struct Test_Class {
+        inner: *mut ffi::Test_Class,
     }
 
-/*
-pub struct Test_Class {
-    inner: *mut ffi::Test_Class,
-}
-
-impl Test_Class {
-    pub fn method_float(&mut self, arg: &f32) -> &f32 {
-        let mut result = std::ptr::null_mut();
-        unsafe {
-            let _return_code = ffi::Test_Class_method_float(
-                self.inner, 
-                &mut result as *mut f32 as *mut c_float, 
-                arg as *const f32 as *const c_float,
-            );
+    impl Test_Class {
+        pub fn method_float(&mut self, arg: &f32) -> &f32 {
+            let mut result = std::ptr::null_mut();
+            unsafe {
+                let _return_code = ffi::Test_Class_method_float(
+                    self.inner,
+                    &mut result as *mut f32 as *mut c_float,
+                    arg as *const f32 as *const c_float,
+                );
+            }
         }
     }
-}
-*/
-            "#,
+    */
+    "#,
                 &cli_args()?,
                 true,
                 None,
@@ -292,4 +293,5 @@ impl Test_Class {
             Ok(())
         })
     }
+    */
 }
